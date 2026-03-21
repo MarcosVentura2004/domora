@@ -1,33 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import './ProfileMenu.css';
 
-function getProfile(email) {
-  const profiles = JSON.parse(localStorage.getItem('user_profiles') || '{}');
-  return profiles[email?.toLowerCase()] || {};
-}
-
-function saveProfile(email, data) {
-  const profiles = JSON.parse(localStorage.getItem('user_profiles') || '{}');
-  profiles[email.toLowerCase()] = { ...profiles[email.toLowerCase()], ...data };
-  localStorage.setItem('user_profiles', JSON.stringify(profiles));
-}
-
 export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, onClose }) {
-  const profile = getProfile(userEmail);
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(profile.name || '');
-  const [phone, setPhone] = useState(profile.phone || '');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
 
-  const initials = (profile.name || userEmail || '?')
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.user_metadata) {
+        setName(user.user_metadata.name || '');
+        setPhone(user.user_metadata.phone || '');
+      }
+    });
+  }, []);
+
+  const initials = (name || userEmail || '?')
     .split(' ')
     .map(w => w[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    saveProfile(userEmail, { name: name.trim(), phone: phone.trim() });
+    await supabase.auth.updateUser({
+      data: { name: name.trim(), phone: phone.trim() },
+    });
     setEditing(false);
   };
 
@@ -41,10 +41,10 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
         <div className="profile-panel-header">
           <div className="profile-avatar">{initials}</div>
           <div className="profile-panel-info">
-            <span className="profile-panel-name">{profile.name || 'Mi cuenta'}</span>
+            <span className="profile-panel-name">{name || 'Mi cuenta'}</span>
             <span className="profile-panel-email">{userEmail}</span>
-            {profile.phone && (
-              <span className="profile-panel-phone">{profile.phone}</span>
+            {phone && (
+              <span className="profile-panel-phone">{phone}</span>
             )}
           </div>
         </div>

@@ -1,37 +1,31 @@
 import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
 import './Auth.css';
 
+const COUNTRY_CODES = [
+  { code: '+34', flag: '🇪🇸', name: 'España' },
+  { code: '+1',  flag: '🇺🇸', name: 'EE.UU.' },
+  { code: '+44', flag: '🇬🇧', name: 'Reino Unido' },
+  { code: '+33', flag: '🇫🇷', name: 'Francia' },
+  { code: '+49', flag: '🇩🇪', name: 'Alemania' },
+  { code: '+39', flag: '🇮🇹', name: 'Italia' },
+  { code: '+351', flag: '🇵🇹', name: 'Portugal' },
+  { code: '+52', flag: '🇲🇽', name: 'México' },
+  { code: '+54', flag: '🇦🇷', name: 'Argentina' },
+  { code: '+57', flag: '🇨🇴', name: 'Colombia' },
+  { code: '+56', flag: '🇨🇱', name: 'Chile' },
+  { code: '+1',  flag: '🇨🇦', name: 'Canadá' },
+  { code: '+55', flag: '🇧🇷', name: 'Brasil' },
+  { code: '+31', flag: '🇳🇱', name: 'Países Bajos' },
+  { code: '+32', flag: '🇧🇪', name: 'Bélgica' },
+  { code: '+41', flag: '🇨🇭', name: 'Suiza' },
+  { code: '+971', flag: '🇦🇪', name: 'Emiratos' },
+  { code: '+81', flag: '🇯🇵', name: 'Japón' },
+  { code: '+86', flag: '🇨🇳', name: 'China' },
+];
+
+// steps: 'email' | 'password' | 'create-password' | 'verify'
 function Auth({ onLogin, onBack }) {
-
-  const [registeredEmails] = useState(() => {
-    const saved = localStorage.getItem('registeredEmails');
-    return saved ? JSON.parse(saved) : ['test@test.com'];
-  });
-
-  const COUNTRY_CODES = [
-    { code: '+34', flag: '🇪🇸', name: 'España' },
-    { code: '+1',  flag: '🇺🇸', name: 'EE.UU.' },
-    { code: '+44', flag: '🇬🇧', name: 'Reino Unido' },
-    { code: '+33', flag: '🇫🇷', name: 'Francia' },
-    { code: '+49', flag: '🇩🇪', name: 'Alemania' },
-    { code: '+39', flag: '🇮🇹', name: 'Italia' },
-    { code: '+351', flag: '🇵🇹', name: 'Portugal' },
-    { code: '+52', flag: '🇲🇽', name: 'México' },
-    { code: '+54', flag: '🇦🇷', name: 'Argentina' },
-    { code: '+57', flag: '🇨🇴', name: 'Colombia' },
-    { code: '+56', flag: '🇨🇱', name: 'Chile' },
-    { code: '+34', flag: '🇨🇦', name: 'Canadá' },
-    { code: '+55', flag: '🇧🇷', name: 'Brasil' },
-    { code: '+31', flag: '🇳🇱', name: 'Países Bajos' },
-    { code: '+32', flag: '🇧🇪', name: 'Bélgica' },
-    { code: '+41', flag: '🇨🇭', name: 'Suiza' },
-    { code: '+34', flag: '🇦🇱', name: 'Albania' },
-    { code: '+971', flag: '🇦🇪', name: 'Emiratos' },
-    { code: '+81', flag: '🇯🇵', name: 'Japón' },
-    { code: '+86', flag: '🇨🇳', name: 'China' },
-  ];
-
-  // steps: 'email' | 'password' | 'choose-channel' | 'verify' | 'create-password'
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+34');
@@ -39,75 +33,10 @@ function Auth({ onLogin, onBack }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  const [isExistingUser, setIsExistingUser] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState('');
-  const [channel, setChannel] = useState(null); // 'email' | 'sms'
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const fullPhone = phone.trim() ? `${countryCode} ${phone.trim()}` : '';
-
-  const sendCode = (ch) => {
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    setGeneratedCode(code);
-    if (ch === 'sms') {
-      alert(`Código enviado por SMS a ${fullPhone}: ${code}`);
-    } else {
-      alert(`Código enviado por correo a ${email}: ${code}`);
-    }
-  };
-
-  const handleEmailSubmit = (e) => {
-    e.preventDefault();
-    const emailExists = registeredEmails.includes(email.toLowerCase());
-    setIsExistingUser(emailExists);
-    if (emailExists) {
-      setStep('password');
-    } else {
-      setStep('choose-channel');
-    }
-  };
-
-  const handleChooseChannel = (ch) => {
-    setChannel(ch);
-    sendCode(ch);
-    setStep('verify');
-  };
-
-  const handlePasswordSubmit = (e) => {
-    e.preventDefault();
-    onLogin({ email, password });
-  };
-
-  const handleVerificationSubmit = (e) => {
-    e.preventDefault();
-    if (verificationCode === generatedCode) {
-      setStep('create-password');
-    } else {
-      alert('Código incorrecto. Inténtalo de nuevo.');
-    }
-  };
-
-  const handleCreatePasswordSubmit = (e) => {
-    e.preventDefault();
-    if (password !== confirmPassword) {
-      alert('Las contraseñas no coinciden');
-      return;
-    }
-    if (password.length < 8) {
-      alert('La contraseña debe tener al menos 8 caracteres');
-      return;
-    }
-    const updatedEmails = [...registeredEmails, email.toLowerCase()];
-    localStorage.setItem('registeredEmails', JSON.stringify(updatedEmails));
-    if (phone.trim()) {
-      const phones = JSON.parse(localStorage.getItem('user_phones') || '{}');
-      phones[email.toLowerCase()] = fullPhone;
-      localStorage.setItem('user_phones', JSON.stringify(phones));
-    }
-    onLogin({ email, password, isNewUser: true });
-  };
-
-  const handleGoogleLogin = () => alert('Google login - Por implementar');
-  const handleAppleLogin = () => alert('Apple login - Por implementar');
 
   const resetToEmail = () => {
     setStep('email');
@@ -117,8 +46,96 @@ function Auth({ onLogin, onBack }) {
     setPassword('');
     setConfirmPassword('');
     setVerificationCode('');
-    setChannel(null);
+    setError('');
   };
+
+  const handleEmailSubmit = (e) => {
+    e.preventDefault();
+    setError('');
+    setStep('password');
+  };
+
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (authError) {
+      if (authError.message.includes('Email not confirmed')) {
+        setError('Confirma tu correo antes de iniciar sesión. Revisa tu bandeja de entrada.');
+      } else {
+        setError('Correo o contraseña incorrectos.');
+      }
+      return;
+    }
+    onLogin(data.user);
+  };
+
+  const handleCreatePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    setLoading(true);
+    const { error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { phone: fullPhone || null },
+      },
+    });
+    setLoading(false);
+    if (authError) {
+      if (authError.message.includes('already registered') || authError.message.includes('User already registered')) {
+        setError('Este correo ya está registrado. Inicia sesión.');
+        setStep('password');
+        setPassword('');
+        setConfirmPassword('');
+      } else {
+        setError(authError.message);
+      }
+      return;
+    }
+    setStep('verify');
+  };
+
+  const handleVerificationSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { data, error: authError } = await supabase.auth.verifyOtp({
+      email,
+      token: verificationCode,
+      type: 'signup',
+    });
+    setLoading(false);
+    if (authError) {
+      setError('Código incorrecto o expirado. Inténtalo de nuevo.');
+      return;
+    }
+    onLogin(data.user);
+  };
+
+  const handleResendOtp = async () => {
+    setError('');
+    const { error: authError } = await supabase.auth.resend({ type: 'signup', email });
+    if (authError) {
+      setError('No se pudo reenviar el código. Inténtalo más tarde.');
+    } else {
+      setError('');
+      alert(`Código reenviado a ${email}`);
+    }
+  };
+
+  const handleGoogleLogin = () => alert('Google login - Por implementar');
+  const handleAppleLogin = () => alert('Apple login - Por implementar');
 
   return (
     <div className="auth-container">
@@ -129,6 +146,8 @@ function Auth({ onLogin, onBack }) {
         <h1 className="auth-logo">Domora</h1>
 
         <div className="auth-form">
+
+          {error && <p className="auth-error">{error}</p>}
 
           {/* PASO 1: Email + teléfono opcional */}
           {step === 'email' && (
@@ -197,8 +216,8 @@ function Auth({ onLogin, onBack }) {
             </>
           )}
 
-          {/* PASO 2a: Iniciar sesión (usuario existente) */}
-          {step === 'password' && isExistingUser && (
+          {/* PASO 2a: Iniciar sesión */}
+          {step === 'password' && (
             <>
               <h2>Iniciar sesión</h2>
               <p className="auth-subtitle">Bienvenido de nuevo a <strong>{email}</strong></p>
@@ -212,95 +231,27 @@ function Auth({ onLogin, onBack }) {
                   required
                   autoFocus
                 />
-                <button type="submit" className="continue-button">
-                  Iniciar sesión
+                <button type="submit" className="continue-button" disabled={loading}>
+                  {loading ? 'Entrando…' : 'Iniciar sesión'}
                 </button>
               </form>
-            </>
-          )}
-
-          {/* PASO 2b: Elegir canal de verificación (usuario nuevo) */}
-          {step === 'choose-channel' && (
-            <>
-              <h2>Verificar identidad</h2>
-              <p className="auth-subtitle">¿Cómo quieres recibir el código?</p>
-
-              <button className="channel-option" onClick={() => handleChooseChannel('email')}>
-                <div className="channel-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <polyline points="22,6 12,13 2,6" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div className="channel-info">
-                  <span className="channel-label">Por correo</span>
-                  <span className="channel-value">{email}</span>
-                </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-
-              <button
-                className={`channel-option${!fullPhone ? ' channel-option-disabled' : ''}`}
-                onClick={() => fullPhone && handleChooseChannel('sms')}
-                disabled={!fullPhone}
-              >
-                <div className="channel-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2" stroke={fullPhone ? '#333' : '#ccc'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <line x1="12" y1="18" x2="12.01" y2="18" stroke={fullPhone ? '#333' : '#ccc'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div className="channel-info">
-                  <span className="channel-label" style={{ color: fullPhone ? '#111' : '#bbb' }}>Por SMS</span>
-                  <span className="channel-value" style={{ color: phone.trim() ? '#666' : '#ccc' }}>
-                    {fullPhone || 'Introduce un teléfono para usar esta opción'}
-                  </span>
-                </div>
-                {fullPhone && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </button>
-            </>
-          )}
-
-          {/* PASO 3: Introducir código */}
-          {step === 'verify' && (
-            <>
-              <h2>Introduce el código</h2>
-              <p className="auth-subtitle">
-                Hemos enviado un código de 4 dígitos{' '}
-                {channel === 'sms' ? <>por SMS a <strong>{phone}</strong></> : <>a <strong>{email}</strong></>}
+              <p className="auth-switch">
+                ¿No tienes cuenta?{' '}
+                <button
+                  className="auth-link-btn"
+                  onClick={() => { setPassword(''); setError(''); setStep('create-password'); }}
+                >
+                  Crear cuenta
+                </button>
               </p>
-              <form onSubmit={handleVerificationSubmit}>
-                <input
-                  type="text"
-                  className="auth-input verification-input"
-                  placeholder="1234"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  maxLength="4"
-                  required
-                  autoFocus
-                />
-                <button type="submit" className="continue-button">
-                  Verificar
-                </button>
-              </form>
-              <button className="resend-button" onClick={() => sendCode(channel)}>
-                Reenviar código
-              </button>
             </>
           )}
 
-          {/* PASO 4: Crear contraseña */}
+          {/* PASO 2b: Crear contraseña (registro) */}
           {step === 'create-password' && (
             <>
-              <h2>Crear contraseña</h2>
-              <p className="auth-subtitle">Elige una contraseña segura para tu cuenta</p>
+              <h2>Crear cuenta</h2>
+              <p className="auth-subtitle">Elige una contraseña segura para <strong>{email}</strong></p>
               <form onSubmit={handleCreatePasswordSubmit}>
                 <input
                   type="password"
@@ -321,10 +272,47 @@ function Auth({ onLogin, onBack }) {
                   minLength="8"
                   required
                 />
-                <button type="submit" className="continue-button">
-                  Crear cuenta
+                <button type="submit" className="continue-button" disabled={loading}>
+                  {loading ? 'Creando cuenta…' : 'Crear cuenta'}
                 </button>
               </form>
+              <p className="auth-switch">
+                ¿Ya tienes cuenta?{' '}
+                <button
+                  className="auth-link-btn"
+                  onClick={() => { setPassword(''); setConfirmPassword(''); setError(''); setStep('password'); }}
+                >
+                  Iniciar sesión
+                </button>
+              </p>
+            </>
+          )}
+
+          {/* PASO 3: Verificar código OTP */}
+          {step === 'verify' && (
+            <>
+              <h2>Verifica tu correo</h2>
+              <p className="auth-subtitle">
+                Hemos enviado un código de 6 dígitos a <strong>{email}</strong>
+              </p>
+              <form onSubmit={handleVerificationSubmit}>
+                <input
+                  type="text"
+                  className="auth-input verification-input"
+                  placeholder="123456"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength="6"
+                  required
+                  autoFocus
+                />
+                <button type="submit" className="continue-button" disabled={loading}>
+                  {loading ? 'Verificando…' : 'Verificar'}
+                </button>
+              </form>
+              <button className="resend-button" onClick={handleResendOtp}>
+                Reenviar código
+              </button>
             </>
           )}
 

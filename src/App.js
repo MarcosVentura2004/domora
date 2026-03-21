@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
 import Welcome from './pages/Welcome';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -12,15 +13,49 @@ function App() {
   const [userEmail, setUserEmail] = useState(null);
   const [tenantCodes, setTenantCodes] = useState([]);
 
+  // Restore session on mount
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const savedType = localStorage.getItem('userType');
+        if (savedType) {
+          const email = session.user.email;
+          setUserEmail(email);
+          setUserType(savedType);
+          if (savedType === 'inquilino') {
+            const saved = JSON.parse(localStorage.getItem(`inquilino_codes_${email}`) || '[]');
+            setTenantCodes(saved);
+            setCurrentPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
+          } else {
+            setCurrentPage('dashboard');
+          }
+        }
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setCurrentPage('welcome');
+        setUserType(null);
+        setUserEmail(null);
+        setTenantCodes([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const handleSelectUserType = (type) => {
     setUserType(type);
     setCurrentPage('auth');
   };
 
-  const handleLogin = (userData) => {
-    setUserEmail(userData.email);
+  const handleLogin = (user) => {
+    const email = user.email;
+    setUserEmail(email);
+    localStorage.setItem('userType', userType);
     if (userType === 'inquilino') {
-      const saved = JSON.parse(localStorage.getItem(`inquilino_codes_${userData.email}`) || '[]');
+      const saved = JSON.parse(localStorage.getItem(`inquilino_codes_${email}`) || '[]');
       setTenantCodes(saved);
       setCurrentPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
     } else {
@@ -40,7 +75,9 @@ function App() {
     localStorage.setItem(`inquilino_codes_${userEmail}`, JSON.stringify(codes));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('userType');
     setCurrentPage('welcome');
     setUserType(null);
     setUserEmail(null);
@@ -50,6 +87,7 @@ function App() {
   const handleSwitchRole = () => {
     const newType = userType === 'propietario' ? 'inquilino' : 'propietario';
     setUserType(newType);
+    localStorage.setItem('userType', newType);
     if (newType === 'inquilino') {
       const saved = JSON.parse(localStorage.getItem(`inquilino_codes_${userEmail}`) || '[]');
       setTenantCodes(saved);
