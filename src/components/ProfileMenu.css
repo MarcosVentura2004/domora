@@ -1,0 +1,178 @@
+.profile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+.profile-panel {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0,0,0,0.08);
+  padding: 6px 0;
+  min-width: 260px;
+  z-index: 1000;
+}
+
+/* Cabecera */
+.profile-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 14px;
+}
+
+.profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #111;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+.profile-panel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-panel-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-panel-email {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-panel-phone {
+  font-size: 12px;
+  color: #aaa;
+}
+
+/* Divisor */
+.profile-panel-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 0;
+}
+
+/* Items */
+.profile-panel-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #222;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.profile-panel-item:hover {
+  background: #f7f7f7;
+}
+
+.profile-panel-item-danger {
+  color: #d32f2f;
+}
+
+.profile-panel-item-disabled {
+  cursor: default;
+}
+
+.profile-panel-item-disabled:hover {
+  background: none;
+}
+
+.profile-panel-badge {
+  margin-left: auto;
+  font-size: 10px;
+  background: #f0f0f0;
+  color: #aaa;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+/* Formulario edición */
+.profile-edit-form {
+  padding: 8px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+}
+
+.profile-edit-input {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.profile-edit-input:focus {
+  border-color: #111;
+}
+
+.profile-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.profile-edit-cancel {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+}
+
+.profile-edit-save {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: #111;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}

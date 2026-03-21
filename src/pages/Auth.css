@@ -1,0 +1,275 @@
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  padding: 20px;
+}
+
+.auth-content {
+  max-width: 400px;
+  width: 100%;
+}
+
+.auth-logo {
+  font-size: 36px;
+  font-weight: 600;
+  text-align: center;
+  color: #000;
+  margin-bottom: 60px;
+}
+
+.auth-form {
+  width: 100%;
+}
+
+.auth-form h2 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #000;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.auth-subtitle {
+  font-size: 15px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.auth-input:focus {
+  outline: none;
+  border-color: #000;
+}
+
+.continue-button {
+  width: 100%;
+  padding: 16px;
+  background: #000;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 20px;
+}
+
+.continue-button:hover {
+  background: #333;
+}
+
+.back-button {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 16px;
+  padding: 8px 0;
+}
+
+.back-button:hover {
+  color: #000;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #ddd;
+}
+
+.divider span {
+  padding: 0 16px;
+}
+
+.social-button {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #ddd;
+  background: #f5f5f5;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.social-button:hover {
+  background: #ebebeb;
+}
+
+.social-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+}
+
+.terms {
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+  margin-top: 24px;
+  line-height: 1.5;
+}
+
+.terms a {
+  color: #000;
+  text-decoration: underline;
+}
+
+.back-arrow {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-bottom: 20px;
+  text-align: left;
+  width: 100%;
+}
+
+.back-arrow:hover {
+  color: #000;
+}
+
+.verification-input {
+  text-align: center;
+  font-size: 24px;
+  letter-spacing: 8px;
+  font-weight: 600;
+}
+
+.resend-button {
+  background: none;
+  border: none;
+  color: #007AFF;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 16px;
+  padding: 8px 0;
+}
+
+.resend-button:hover {
+  text-decoration: underline;
+}
+
+.auth-subtitle strong {
+  color: #000;
+  font-weight: 600;
+}
+
+.phone-input-wrapper {
+  display: flex;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.phone-input-wrapper:focus-within {
+  border-color: #000;
+}
+
+.phone-prefix-select {
+  border: none;
+  border-right: 1px solid #ddd;
+  background: #f9f9f9;
+  padding: 16px 10px;
+  font-size: 15px;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  color: #111;
+}
+
+.phone-number-input {
+  flex: 1;
+  border: none;
+  padding: 16px;
+  font-size: 16px;
+  outline: none;
+  background: white;
+  min-width: 0;
+}
+
+.channel-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  margin-bottom: 12px;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.channel-option:hover:not(.channel-option-disabled) {
+  border-color: #000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.channel-option-disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.channel-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.channel-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.channel-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111;
+}
+
+.channel-value {
+  font-size: 13px;
+  color: #666;
+}
