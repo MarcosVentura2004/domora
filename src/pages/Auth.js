@@ -40,26 +40,17 @@ function Auth({ onLogin, onBack }) {
 
   const goTo = (s) => { setError(''); setStep(s); };
 
-  // PASO 1: detecta si el usuario existe y actúa en consecuencia
-  const handleEmailSubmit = async (e) => {
+  // PASO 1: el email siempre lleva al login con contraseña
+  const handleEmailSubmit = (e) => {
     e.preventDefault();
+    setPassword('');
+    goTo('login');
+  };
+
+  // Envía OTP solo cuando el usuario elige crear cuenta nueva
+  const handleSendOtp = async () => {
     setLoading(true);
     setError('');
-
-    // Intenta sin crear usuario: si no hay error, el correo ya existe → login con contraseña
-    const { error: checkError } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
-    });
-
-    if (!checkError) {
-      // Usuario existente: va directo al login con contraseña
-      setLoading(false);
-      goTo('login');
-      return;
-    }
-
-    // Usuario nuevo: envía OTP de registro
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -234,12 +225,6 @@ function Auth({ onLogin, onBack }) {
                 <a href="#terms">Términos de servicio</a> y{' '}
                 <a href="#privacy">Política de privacidad</a>
               </p>
-              <p className="auth-switch">
-                ¿Ya tienes cuenta?{' '}
-                <button className="auth-link-btn" onClick={() => { setPassword(''); goTo('login'); }}>
-                  Iniciar sesión
-                </button>
-              </p>
             </>
           )}
 
@@ -333,8 +318,8 @@ function Auth({ onLogin, onBack }) {
               </form>
               <p className="auth-switch">
                 ¿No tienes cuenta?{' '}
-                <button className="auth-link-btn" onClick={() => { setPassword(''); goTo('email'); }}>
-                  Crear cuenta
+                <button className="auth-link-btn" disabled={loading} onClick={handleSendOtp}>
+                  {loading ? 'Enviando código…' : 'Crear cuenta'}
                 </button>
               </p>
             </>
