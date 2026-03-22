@@ -40,11 +40,26 @@ function Auth({ onLogin, onBack }) {
 
   const goTo = (s) => { setError(''); setStep(s); };
 
-  // PASO 1: envía OTP numérico al email
+  // PASO 1: detecta si el usuario existe y actúa en consecuencia
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Intenta sin crear usuario: si no hay error, el correo ya existe → login con contraseña
+    const { error: checkError } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+
+    if (!checkError) {
+      // Usuario existente: va directo al login con contraseña
+      setLoading(false);
+      goTo('login');
+      return;
+    }
+
+    // Usuario nuevo: envía OTP de registro
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: {
