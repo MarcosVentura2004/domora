@@ -24,17 +24,21 @@ const COUNTRY_CODES = [
   { code: '+86', flag: '🇨🇳', name: 'China' },
 ];
 
-// steps: 'email' | 'verify'
+// steps: 'email' | 'verify' | 'create-password' | 'login'
 function Auth({ onLogin, onBack }) {
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+34');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const fullPhone = phone.trim() ? `${countryCode} ${phone.trim()}` : '';
+
+  const goTo = (s) => { setError(''); setStep(s); };
 
   // PASO 1: envía OTP numérico al email
   const handleEmailSubmit = async (e) => {
@@ -53,15 +57,15 @@ function Auth({ onLogin, onBack }) {
       setError('No se pudo enviar el código. Inténtalo de nuevo.');
       return;
     }
-    setStep('verify');
+    goTo('verify');
   };
 
-  // PASO 2: verifica el código de 6 dígitos
+  // PASO 2: verifica el código de 6 dígitos → va a crear contraseña
   const handleVerifySubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+    const { error: verifyError } = await supabase.auth.verifyOtp({
       email,
       token: otp,
       type: 'email',
@@ -69,6 +73,45 @@ function Auth({ onLogin, onBack }) {
     setLoading(false);
     if (verifyError) {
       setError('Código incorrecto o expirado. Inténtalo de nuevo.');
+      return;
+    }
+    setOtp('');
+    goTo('create-password');
+  };
+
+  // PASO 3: crea contraseña (usuario ya autenticado vía OTP) → Dashboard
+  const handleCreatePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    setLoading(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    if (updateError) {
+      setLoading(false);
+      setError(updateError.message);
+      return;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    setLoading(false);
+    onLogin(user);
+  };
+
+  // LOGIN EXISTENTE: email + contraseña
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (authError) {
+      setError('Correo o contraseña incorrectos.');
       return;
     }
     onLogin(data.user);
@@ -96,7 +139,12 @@ function Auth({ onLogin, onBack }) {
       <div className="auth-content">
         <button
           className="back-arrow"
-          onClick={step === 'email' ? onBack : () => { setStep('email'); setOtp(''); setError(''); }}
+          onClick={
+            step === 'email' || step === 'login' ? onBack
+            : step === 'verify' ? () => goTo('email')
+            : null  // create-password: no volver (sesión activa)
+          }
+          style={step === 'create-password' ? { visibility: 'hidden' } : {}}
         >
           ← Volver
         </button>
@@ -171,6 +219,12 @@ function Auth({ onLogin, onBack }) {
                 <a href="#terms">Términos de servicio</a> y{' '}
                 <a href="#privacy">Política de privacidad</a>
               </p>
+              <p className="auth-switch">
+                ¿Ya tienes cuenta?{' '}
+                <button className="auth-link-btn" onClick={() => { setPassword(''); goTo('login'); }}>
+                  Iniciar sesión
+                </button>
+              </p>
             </>
           )}
 
@@ -200,6 +254,74 @@ function Auth({ onLogin, onBack }) {
               <button className="resend-button" onClick={handleResend}>
                 Reenviar código
               </button>
+            </>
+          )}
+
+          {/* PASO 3: Crear contraseña */}
+          {step === 'create-password' && (
+            <>
+              <h2>Crea tu contraseña</h2>
+              <p className="auth-subtitle">Ya casi está. Elige una contraseña para tu cuenta</p>
+              <form onSubmit={handleCreatePasswordSubmit}>
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Contraseña (mínimo 8 caracteres)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength="8"
+                  required
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Repetir contraseña"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  minLength="8"
+                  required
+                />
+                <button type="submit" className="continue-button" disabled={loading}>
+                  {loading ? 'Guardando…' : 'Crear cuenta'}
+                </button>
+              </form>
+            </>
+          )}
+
+          {/* LOGIN: email + contraseña */}
+          {step === 'login' && (
+            <>
+              <h2>Iniciar sesión</h2>
+              <p className="auth-subtitle">Introduce tu correo y contraseña</p>
+              <form onSubmit={handleLoginSubmit}>
+                <input
+                  type="email"
+                  className="auth-input"
+                  placeholder="correo@ejemplo.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Contraseña"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button type="submit" className="continue-button" disabled={loading}>
+                  {loading ? 'Entrando…' : 'Iniciar sesión'}
+                </button>
+              </form>
+              <p className="auth-switch">
+                ¿No tienes cuenta?{' '}
+                <button className="auth-link-btn" onClick={() => { setPassword(''); goTo('email'); }}>
+                  Crear cuenta
+                </button>
+              </p>
             </>
           )}
 
