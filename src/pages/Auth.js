@@ -24,32 +24,19 @@ const COUNTRY_CODES = [
   { code: '+86', flag: '🇨🇳', name: 'China' },
 ];
 
-// steps: 'email' | 'verify' | 'create-password' | 'password'
+// steps: 'email' | 'verify'
 function Auth({ onLogin, onBack }) {
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+34');
   const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
+  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const fullPhone = phone.trim() ? `${countryCode} ${phone.trim()}` : '';
 
-  const resetToEmail = () => {
-    setStep('email');
-    setEmail('');
-    setCountryCode('+34');
-    setPhone('');
-    setPassword('');
-    setConfirmPassword('');
-    setVerificationCode('');
-    setError('');
-  };
-
-  // PASO 1 → envía OTP por email y va a verify
+  // PASO 1: envía OTP numérico al email
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -69,14 +56,14 @@ function Auth({ onLogin, onBack }) {
     setStep('verify');
   };
 
-  // PASO 2 → verifica OTP; si es correcto el usuario queda autenticado → va a create-password
-  const handleVerificationSubmit = async (e) => {
+  // PASO 2: verifica el código de 6 dígitos
+  const handleVerifySubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const { error: verifyError } = await supabase.auth.verifyOtp({
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
       email,
-      token: verificationCode,
+      token: otp,
       type: 'email',
     });
     setLoading(false);
@@ -84,13 +71,11 @@ function Auth({ onLogin, onBack }) {
       setError('Código incorrecto o expirado. Inténtalo de nuevo.');
       return;
     }
-    // El usuario ya tiene sesión activa tras verifyOtp
-    setVerificationCode('');
-    setStep('create-password');
+    onLogin(data.user);
   };
 
-  // Reenvía OTP llamando de nuevo a signInWithOtp
-  const handleResendOtp = async () => {
+  // Reenvía OTP
+  const handleResend = async () => {
     setError('');
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
@@ -103,51 +88,16 @@ function Auth({ onLogin, onBack }) {
     }
   };
 
-  // PASO 3 → fija la contraseña en el usuario ya autenticado y hace login
-  const handleCreatePasswordSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
-      return;
-    }
-    if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-    setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    if (updateError) {
-      setLoading(false);
-      setError(updateError.message);
-      return;
-    }
-    const { data: { user } } = await supabase.auth.getUser();
-    setLoading(false);
-    onLogin(user);
-  };
-
-  // LOGIN EXISTENTE → email + contraseña
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (authError) {
-      setError('Correo o contraseña incorrectos.');
-      return;
-    }
-    onLogin(data.user);
-  };
-
   const handleGoogleLogin = () => alert('Google login - Por implementar');
   const handleAppleLogin = () => alert('Apple login - Por implementar');
 
   return (
     <div className="auth-container">
       <div className="auth-content">
-        <button className="back-arrow" onClick={step === 'email' ? onBack : resetToEmail}>
+        <button
+          className="back-arrow"
+          onClick={step === 'email' ? onBack : () => { setStep('email'); setOtp(''); setError(''); }}
+        >
           ← Volver
         </button>
         <h1 className="auth-logo">Domora</h1>
@@ -156,11 +106,11 @@ function Auth({ onLogin, onBack }) {
 
           {error && <p className="auth-error">{error}</p>}
 
-          {/* PASO 1: Email + teléfono opcional → envía OTP */}
+          {/* PASO 1: Email */}
           {step === 'email' && (
             <>
-              <h2>Crear cuenta</h2>
-              <p className="auth-subtitle">Introduce tu correo para continuar</p>
+              <h2>Acceder a Domora</h2>
+              <p className="auth-subtitle">Introduce tu correo y te enviamos un código</p>
 
               <form onSubmit={handleEmailSubmit}>
                 <input
@@ -170,6 +120,7 @@ function Auth({ onLogin, onBack }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  autoFocus
                 />
                 <div className="phone-input-wrapper">
                   <select
@@ -195,16 +146,6 @@ function Auth({ onLogin, onBack }) {
                   {loading ? 'Enviando código…' : 'Continuar'}
                 </button>
               </form>
-
-              <p className="auth-switch">
-                ¿Ya tienes cuenta?{' '}
-                <button
-                  className="auth-link-btn"
-                  onClick={() => { setError(''); setStep('password'); }}
-                >
-                  Iniciar sesión
-                </button>
-              </p>
 
               <div className="divider"><span>o</span></div>
 
@@ -233,103 +174,32 @@ function Auth({ onLogin, onBack }) {
             </>
           )}
 
-          {/* PASO 2: Verificar código OTP */}
+          {/* PASO 2: Código OTP */}
           {step === 'verify' && (
             <>
-              <h2>Verifica tu correo</h2>
+              <h2>Introduce el código</h2>
               <p className="auth-subtitle">
                 Hemos enviado un código de 6 dígitos a <strong>{email}</strong>
               </p>
-              <form onSubmit={handleVerificationSubmit}>
+              <form onSubmit={handleVerifySubmit}>
                 <input
                   type="text"
                   inputMode="numeric"
                   className="auth-input verification-input"
                   placeholder="123456"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   maxLength="6"
                   required
                   autoFocus
                 />
-                <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Verificando…' : 'Verificar código'}
+                <button type="submit" className="continue-button" disabled={loading || otp.length < 6}>
+                  {loading ? 'Verificando…' : 'Verificar'}
                 </button>
               </form>
-              <button className="resend-button" onClick={handleResendOtp}>
+              <button className="resend-button" onClick={handleResend}>
                 Reenviar código
               </button>
-            </>
-          )}
-
-          {/* PASO 3: Crear contraseña (usuario ya autenticado vía OTP) */}
-          {step === 'create-password' && (
-            <>
-              <h2>Crea tu contraseña</h2>
-              <p className="auth-subtitle">Ya casi está. Elige una contraseña para <strong>{email}</strong></p>
-              <form onSubmit={handleCreatePasswordSubmit}>
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Contraseña (mínimo 8 caracteres)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength="8"
-                  required
-                  autoFocus
-                />
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Repetir contraseña"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  minLength="8"
-                  required
-                />
-                <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Guardando…' : 'Crear cuenta'}
-                </button>
-              </form>
-            </>
-          )}
-
-          {/* LOGIN EXISTENTE: email + contraseña */}
-          {step === 'password' && (
-            <>
-              <h2>Iniciar sesión</h2>
-              <p className="auth-subtitle">Introduce tu correo y contraseña</p>
-              <form onSubmit={handlePasswordSubmit}>
-                <input
-                  type="email"
-                  className="auth-input"
-                  placeholder="correo@ejemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Contraseña"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoFocus
-                />
-                <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Entrando…' : 'Iniciar sesión'}
-                </button>
-              </form>
-              <p className="auth-switch">
-                ¿No tienes cuenta?{' '}
-                <button
-                  className="auth-link-btn"
-                  onClick={() => { setPassword(''); setError(''); setStep('email'); }}
-                >
-                  Crear cuenta
-                </button>
-              </p>
             </>
           )}
 
