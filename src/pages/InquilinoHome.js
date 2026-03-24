@@ -1,82 +1,53 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import './InquilinoHome.css';
 import CodeEntry from './CodeEntry';
 import InquilinoDetail from './InquilinoDetail';
 import ChatConversation, { getUnreadCount } from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
 
-function getRentalData(code) {
-  const codes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
-  const entry = codes[code];
-  if (!entry) return null;
-
-  const { landlordEmail, propertyId, tenantId, roomId } = entry;
-  const properties = JSON.parse(localStorage.getItem(`properties_${landlordEmail}`) || '[]');
-  const property = properties.find(p => p.id === propertyId);
-  if (!property) return null;
-
-  if (roomId) {
-    const room = (property.rooms || []).find(r => r.id === roomId);
-    if (!room) return null;
-    const expired = !room.tenant || room.tenant.id !== tenantId;
-    return {
-      code,
-      type: 'room',
-      address: property.name,
-      rent: room.price,
-      tenantName: room.tenant?.name || '',
-      paymentConfig: room.paymentConfig || { startDay: 1, endDay: 5 },
-      landlordEmail,
-      propertyId,
-      roomId,
-      tenantId,
-      expired,
-    };
-  }
-
-  const tenant = (property.tenants || []).find(t => t.id === tenantId);
-  const expired = !tenant;
+// Convierte una fila de Supabase al formato que usa el resto de la app
+function rowToRental(row) {
   return {
-    code,
-    type: 'alquilado',
-    address: property.name,
-    rent: tenant?.amount || property.price,
-    tenantName: tenant?.name || '',
-    paymentConfig: property.paymentConfig || { startDay: 1, endDay: 5 },
-    landlordEmail,
-    propertyId,
-    roomId: null,
-    tenantId,
-    expired,
+    code: row.tenant_code,
+    type: row.room_id ? 'room' : 'alquilado',
+    address: row.property_name,
+    rent: row.rent,
+    tenantName: row.tenant_name,
+    paymentConfig: row.payment_config || { startDay: 1, endDay: 5 },
+    landlordEmail: row.landlord_email,
+    propertyId: row.property_id,
+    roomId: row.room_id || null,
+    tenantId: row.tenant_id,
+    expired: false,
   };
 }
 
-function getPaymentStatus(rental) {
-  const { landlordEmail, propertyId, roomId, tenantId } = rental;
-  const properties = JSON.parse(localStorage.getItem(`properties_${landlordEmail}`) || '[]');
-  const property = properties.find(p => p.id === propertyId);
-  if (!property) return null;
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const payments = property.payments || [];
-
-  const payment = roomId
-    ? payments.find(p => p.year === year && p.month === month && p.roomId === roomId)
-    : payments.find(p => p.year === year && p.month === month && p.tenantId === tenantId);
-
-  if (!payment) return 'pending';
-  if (payment.status === 'confirmed') return 'paid';
-  if (payment.status === 'pending') return 'sent';
-  return 'pending';
-}
-
 export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCodesUpdate, onSwitchRole }) {
+  const [rentals, setRentals] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAddCode, setShowAddCode] = useState(false);
-  const [viewingCode, setViewingCode] = useState(null);
+  const [viewingRental, setViewingRental] = useState(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [chatForRental, setChatForRental] = useState(null);
+
+  // Carga los alquileres desde Supabase cada vez que cambian los códigos
+  useEffect(() => {
+    if (!tenantCodes.length) {
+      setRentals([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    supabase
+      .from('inquilinos')
+      .select('*')
+      .in('tenant_code', tenantCodes)
+      .then(({ data }) => {
+        setRentals(data ? data.map(rowToRental) : []);
+        setLoading(false);
+      });
+  }, [tenantCodes]);
 
   const handleCodeValid = (code) => {
     if (!tenantCodes.includes(code)) {
@@ -104,21 +75,17 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
     );
   }
 
-  if (viewingCode) {
-    const rental = getRentalData(viewingCode);
-    if (rental && !rental.expired) {
-      return (
-        <InquilinoDetail
-          rental={rental}
-          userEmail={userEmail}
-          onBack={() => setViewingCode(null)}
-        />
-      );
-    }
+  if (viewingRental) {
+    return (
+      <InquilinoDetail
+        rental={viewingRental}
+        userEmail={userEmail}
+        onBack={() => setViewingRental(null)}
+      />
+    );
   }
 
-  const rentals = tenantCodes.map(c => ({ code: c, data: getRentalData(c) })).filter(r => r.data).sort((a, b) => (a.data.expired ? 1 : 0) - (b.data.expired ? 1 : 0));
-  const tenantName = rentals[0]?.data?.tenantName || '';
+  const tenantName = rentals[0]?.tenantName || '';
 
   return (
     <div className="inquilino-home">
@@ -149,16 +116,23 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
 
       {/* Rental cards */}
       <div className="inquilino-cards">
-        {rentals.length === 0 && (
+        {loading && (
+          <div className="inquilino-empty">
+            <p>Cargando tus alquileres…</p>
+          </div>
+        )}
+
+        {!loading && rentals.length === 0 && (
           <div className="inquilino-empty">
             <p>Todavía no tienes ningún alquiler vinculado.</p>
             <p>Pulsa el botón para añadir tu código.</p>
           </div>
         )}
-        {rentals.map(({ code, data }) => {
+
+        {!loading && rentals.map((data) => {
           if (data.expired) {
             return (
-              <div key={code} className="rental-card rental-card-expired">
+              <div key={data.code} className="rental-card rental-card-expired">
                 <div className="rental-card-main">
                   <div className="rental-address" style={{ color: '#bbb' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
@@ -176,12 +150,11 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
             );
           }
 
-          const status = getPaymentStatus(data);
           const unread = getUnreadCount(data.landlordEmail, data.propertyId, data.roomId, data.tenantId, 'tenant');
           return (
-            <div key={code} className="rental-card" style={{ cursor: 'default' }}>
+            <div key={data.code} className="rental-card" style={{ cursor: 'default' }}>
               <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewingCode(code)}>
+                <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewingRental(data)}>
                   <div className="rental-card-main">
                     <div className="rental-address">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
@@ -193,13 +166,9 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
                     <p className="rental-price">{data.rent} €/mes</p>
                   </div>
                   <div className="rental-card-footer">
-                    {status === 'paid' && <span className="payment-badge paid">Pago confirmado</span>}
-                    {status === 'sent' && <span className="payment-badge sent">Pago enviado</span>}
-                    {status === 'pending' && (
-                      <span className="payment-badge pending">
-                        Pago pendiente ({data.paymentConfig.startDay}–{data.paymentConfig.endDay})
-                      </span>
-                    )}
+                    <span className="payment-badge pending">
+                      Pago pendiente ({data.paymentConfig.startDay}–{data.paymentConfig.endDay})
+                    </span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                       <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
