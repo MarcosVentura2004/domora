@@ -1,20 +1,41 @@
 import { useState } from 'react';
+import { supabase } from '../supabaseClient';
 import './CodeEntry.css';
 
 function CodeEntry({ onCodeValid, onBack }) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const normalized = code.trim().toUpperCase();
-    const codes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
-    const entry = codes[normalized];
-    if (!entry) {
+    setLoading(true);
+    setError('');
+
+    const { data, error: dbError } = await supabase
+      .from('inquilinos')
+      .select('landlord_email, property_id, tenant_id, tenant_code')
+      .eq('tenant_code', normalized)
+      .single();
+
+    setLoading(false);
+
+    if (dbError || !data) {
       setError('Código no válido. Comprueba que lo has introducido correctamente.');
       return;
     }
-    onCodeValid(normalized, entry);
+
+    // Guardar también en localStorage para compatibilidad con el resto de la app
+    const codes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
+    codes[normalized] = {
+      landlordEmail: data.landlord_email,
+      propertyId: data.property_id,
+      tenantId: data.tenant_id,
+    };
+    localStorage.setItem('tenant_codes', JSON.stringify(codes));
+
+    onCodeValid(normalized, codes[normalized]);
   };
 
   return (
@@ -44,8 +65,8 @@ function CodeEntry({ onCodeValid, onBack }) {
             autoFocus
           />
           {error && <p className="code-error">{error}</p>}
-          <button type="submit" className="code-submit-btn" disabled={code.trim().length < 4}>
-            Acceder
+          <button type="submit" className="code-submit-btn" disabled={loading || code.trim().length < 4}>
+            {loading ? 'Verificando…' : 'Acceder'}
           </button>
         </form>
       </div>
