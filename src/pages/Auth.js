@@ -40,14 +40,33 @@ function Auth({ onLogin, onBack }) {
 
   const goTo = (s) => { setError(''); setStep(s); };
 
-  // PASO 1: el email siempre lleva al login con contraseña
-  const handleEmailSubmit = (e) => {
+  // PASO 1: comprueba si el usuario existe y enruta en consecuencia
+  const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    setPassword('');
-    goTo('login');
+    setLoading(true);
+    setError('');
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password: '' });
+    setLoading(false);
+
+    if (error?.code === 'invalid_credentials') {
+      // Usuario existe y tiene contraseña → mostrar campo de contraseña
+      setPassword('');
+      goTo('login');
+      return;
+    }
+
+    if (error?.code === 'user_not_found') {
+      // Usuario nuevo → enviar OTP de registro
+      await handleSendOtp();
+      return;
+    }
+
+    // Error inesperado
+    setError('No se pudo verificar el correo. Inténtalo de nuevo.');
   };
 
-  // Envía OTP solo cuando el usuario elige crear cuenta nueva
+  // Envía OTP para registro nuevo
   const handleSendOtp = async () => {
     setLoading(true);
     setError('');
