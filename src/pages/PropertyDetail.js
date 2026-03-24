@@ -441,6 +441,10 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
         tenant_id: newTenant.id,
         tenant_code: code,
         tenant_name: tenantData.name,
+        property_name: property.name,
+        rent: newTenant.amount || property.price,
+        payment_config: property.paymentConfig || { startDay: 1, endDay: 5 },
+        room_id: null,
       });
     }
 

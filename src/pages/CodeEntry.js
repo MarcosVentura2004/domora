@@ -26,16 +26,39 @@ function CodeEntry({ onCodeValid, onBack }) {
       return;
     }
 
-    // Guardar también en localStorage para compatibilidad con el resto de la app
-    const codes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
-    codes[normalized] = {
+    // Guardar entrada de código en localStorage
+    const tenantCodes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
+    tenantCodes[normalized] = {
       landlordEmail: data.landlord_email,
       propertyId: data.property_id,
       tenantId: data.tenant_id,
+      roomId: data.room_id || null,
     };
-    localStorage.setItem('tenant_codes', JSON.stringify(codes));
+    localStorage.setItem('tenant_codes', JSON.stringify(tenantCodes));
 
-    onCodeValid(normalized, codes[normalized]);
+    // Reconstruir los datos de la propiedad en el localStorage del inquilino
+    // para que InquilinoHome pueda mostrarla sin acceso al dispositivo del propietario
+    const propKey = `properties_${data.landlord_email}`;
+    const existingProps = JSON.parse(localStorage.getItem(propKey) || '[]');
+    const syntheticProp = {
+      id: data.property_id,
+      name: data.property_name,
+      price: data.rent,
+      paymentConfig: data.payment_config || { startDay: 1, endDay: 5 },
+      status: 'alquilado',
+      tenants: [{ id: data.tenant_id, name: data.tenant_name, amount: data.rent }],
+      payments: [],
+      rooms: [],
+    };
+    const idx = existingProps.findIndex(p => p.id === data.property_id);
+    if (idx >= 0) {
+      existingProps[idx] = syntheticProp;
+    } else {
+      existingProps.push(syntheticProp);
+    }
+    localStorage.setItem(propKey, JSON.stringify(existingProps));
+
+    onCodeValid(normalized, tenantCodes[normalized]);
   };
 
   return (
