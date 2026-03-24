@@ -15,7 +15,7 @@ function App() {
 
   // Restore session on mount
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const savedType = localStorage.getItem('userType');
         if (savedType) {
@@ -23,9 +23,17 @@ function App() {
           setUserEmail(email);
           setUserType(savedType);
           if (savedType === 'inquilino') {
-            const saved = JSON.parse(localStorage.getItem(`inquilino_codes_${email}`) || '[]');
-            setTenantCodes(saved);
-            setCurrentPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
+            const { data } = await supabase
+              .from('inquilinos')
+              .select('tenant_code')
+              .eq('email', email.toLowerCase());
+            if (data && data.length > 0) {
+              const codes = data.map(r => r.tenant_code);
+              setTenantCodes(codes);
+              setCurrentPage('inquilino-home');
+            } else {
+              setCurrentPage('not-a-tenant');
+            }
           } else {
             setCurrentPage('dashboard');
           }
@@ -50,14 +58,26 @@ function App() {
     setCurrentPage('auth');
   };
 
-  const handleLogin = (user) => {
+  const handleLogin = async (user) => {
     const email = user.email;
     setUserEmail(email);
     localStorage.setItem('userType', userType);
+
     if (userType === 'inquilino') {
-      const saved = JSON.parse(localStorage.getItem(`inquilino_codes_${email}`) || '[]');
-      setTenantCodes(saved);
-      setCurrentPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
+      const { data, error } = await supabase
+        .from('inquilinos')
+        .select('tenant_code')
+        .eq('email', email.toLowerCase());
+
+      if (error || !data || data.length === 0) {
+        setCurrentPage('not-a-tenant');
+        return;
+      }
+
+      const codes = data.map(r => r.tenant_code);
+      setTenantCodes(codes);
+      localStorage.setItem(`inquilino_codes_${email}`, JSON.stringify(codes));
+      setCurrentPage('inquilino-home');
     } else {
       setCurrentPage('dashboard');
     }
@@ -133,6 +153,15 @@ function App() {
           onCodesUpdate={handleCodesUpdate}
           onSwitchRole={handleSwitchRole}
         />
+      )}
+
+      {currentPage === 'not-a-tenant' && (
+        <div className="not-tenant-screen">
+          <h2>Acceso no permitido</h2>
+          <p>Tu email no está registrado como inquilino en ninguna propiedad.</p>
+          <p>Pide a tu propietario que te añada con tu email.</p>
+          <button onClick={handleLogout}>Volver al inicio</button>
+        </div>
       )}
     </div>
   );

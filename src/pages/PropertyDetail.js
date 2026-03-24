@@ -3,6 +3,7 @@ import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import RoomDetail from './RoomDetail';
 import ChatConversation, { getUnreadCount } from './ChatConversation';
+import { supabase } from '../supabaseClient';
 
 function isFutureMonth(year, month) {
   const now = new Date();
@@ -417,7 +418,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     onUpdate({ ...property, expenses: updatedExpenses });
   };
 
-  const handleAddTenant = (tenantData) => {
+  const handleAddTenant = async (tenantData) => {
     const code = generateTenantCode();
     const newTenant = {
       ...tenantData,
@@ -429,6 +430,18 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
 
     if (landlordEmail) {
       saveTenantCode(code, landlordEmail, property.id, newTenant.id);
+    }
+
+    // Guardar en Supabase si se proporcionó email
+    if (tenantData.email && landlordEmail) {
+      await supabase.from('inquilinos').insert({
+        email: tenantData.email.toLowerCase().trim(),
+        landlord_email: landlordEmail,
+        property_id: property.id,
+        tenant_id: newTenant.id,
+        tenant_code: code,
+        tenant_name: tenantData.name,
+      });
     }
 
     const propertyUpdate = {
@@ -1240,19 +1253,20 @@ function AddExpenseModal({ onClose, onAdd, ownershipPercentage }) {
 
 function AddTenantModal({ onClose, onAdd, isFirstTenant }) {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [amount, setAmount] = useState('');
   const [isShared, setIsShared] = useState(false);
-  
-  const handleSubmit = (e) => { 
-    e.preventDefault(); 
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
     if (isFirstTenant && !isShared) {
-      onAdd({ name, phone, isShared: false });
+      onAdd({ name, email, phone, isShared: false });
     } else {
-      onAdd({ name, phone, amount: parseFloat(amount), isShared: isFirstTenant ? true : undefined });
+      onAdd({ name, email, phone, amount: parseFloat(amount), isShared: isFirstTenant ? true : undefined });
     }
   };
-  
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1261,6 +1275,10 @@ function AddTenantModal({ onClose, onAdd, isFirstTenant }) {
           <div className="form-group">
             <label>Nombre completo</label>
             <input type="text" placeholder="Ej: Laura Martínez" value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Email del inquilino</label>
+            <input type="email" placeholder="laura@ejemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="form-group">
             <label>Teléfono</label>
