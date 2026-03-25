@@ -432,20 +432,28 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
       saveTenantCode(code, landlordEmail, property.id, newTenant.id);
     }
 
-    // Guardar en Supabase si se proporcionó email
-    if (tenantData.email && landlordEmail) {
-      await supabase.from('inquilinos').insert({
-        email: tenantData.email.toLowerCase().trim(),
+    // Guardar en Supabase
+    if (landlordEmail) {
+      const { data: insertedTenant, error: supabaseError } = await supabase.from('inquilinos').insert({
+        email: tenantData.email ? tenantData.email.toLowerCase().trim() : null,
         landlord_email: landlordEmail,
         property_id: property.id,
         tenant_id: newTenant.id,
         tenant_code: code,
         tenant_name: tenantData.name,
         property_name: property.name,
-        rent: newTenant.amount || property.price,
+        monthly_rent: newTenant.amount || property.price,
         payment_config: property.paymentConfig || { startDay: 1, endDay: 5 },
         room_id: null,
       });
+      console.log('INSERT INQUILINO:', insertedTenant, supabaseError);
+      if (supabaseError) {
+        console.error('Error al guardar inquilino en Supabase:', supabaseError);
+      } else {
+        console.log('Inquilino guardado en Supabase correctamente:', code);
+      }
+    } else {
+      console.warn('No se guardó en Supabase: landlordEmail no disponible');
     }
 
     const propertyUpdate = {
