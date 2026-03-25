@@ -5,6 +5,7 @@ import VacationalDetail from './VacationalDetail';
 import GeneralPanel from './GeneralPanel';
 import ChatConversation, { getMessages, getUnreadCount } from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
+import { supabase } from '../supabaseClient';
 
 function getAllTenants(properties, landlordEmail) {
   const list = [];
@@ -41,9 +42,10 @@ function getAllTenants(properties, landlordEmail) {
 
 function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   const [properties, setProperties] = useState(() => {
-    const savedProperties = localStorage.getItem(`properties_${userEmail}`);
-    return savedProperties ? JSON.parse(savedProperties) : [];
+    const saved = localStorage.getItem(`properties_${userEmail}`);
+    return saved ? JSON.parse(saved) : [];
   });
+  const [loadingProperties, setLoadingProperties] = useState(true);
   const [activeTab, setActiveTab] = useState('general');
 
   const switchTab = (tab) => {
@@ -63,9 +65,27 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   const [viewingProperty, setViewingProperty] = useState(null);
   const [chatWith, setChatWith] = useState(null);
 
+  // Carga propiedades desde Supabase al iniciar sesión
   useEffect(() => {
-    localStorage.setItem(`properties_${userEmail}`, JSON.stringify(properties));
-  }, [properties, userEmail]);
+    setLoadingProperties(true);
+    supabase
+      .from('properties')
+      .select('id, data')
+      .eq('landlord_email', userEmail)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Error cargando propiedades desde Supabase:', error);
+          // Fallback a localStorage si Supabase falla
+          const saved = localStorage.getItem(`properties_${userEmail}`);
+          if (saved) setProperties(JSON.parse(saved));
+        } else {
+          const props = (data || []).map(row => row.data);
+          setProperties(props);
+          localStorage.setItem(`properties_${userEmail}`, JSON.stringify(props));
+        }
+        setLoadingProperties(false);
+      });
+  }, [userEmail]);
 
   const handleAddProperty = () => {
     setEditingProperty(null);
@@ -82,21 +102,40 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
     setShowAddModal(true);
   };
 
-  const handleUpdateProperty = (updatedProperty) => {
+  const syncToLocalStorage = (props) => {
+    localStorage.setItem(`properties_${userEmail}`, JSON.stringify(props));
+  };
+
+  const handleUpdateProperty = async (updatedProperty) => {
     if (updatedProperty.deleted) {
-      setProperties(properties.filter(p => p.id !== updatedProperty.id));
+      const { error } = await supabase.from('properties').delete().eq('id', updatedProperty.id);
+      if (error) console.error('Error eliminando propiedad en Supabase:', error);
+      const updated = properties.filter(p => p.id !== updatedProperty.id);
+      setProperties(updated);
+      syncToLocalStorage(updated);
       setViewingProperty(null);
     } else {
-      setProperties(properties.map(p =>
-        p.id === updatedProperty.id ? updatedProperty : p
-      ));
+      const { error } = await supabase.from('properties').upsert({
+        id: updatedProperty.id,
+        landlord_email: userEmail,
+        data: updatedProperty,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) console.error('Error guardando propiedad en Supabase:', error);
+      const updated = properties.map(p => p.id === updatedProperty.id ? updatedProperty : p);
+      setProperties(updated);
+      syncToLocalStorage(updated);
       setViewingProperty(updatedProperty);
     }
   };
 
-  const handleDeleteProperty = (propertyId) => {
+  const handleDeleteProperty = async (propertyId) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta propiedad?')) {
-      setProperties(properties.filter(p => p.id !== propertyId));
+      const { error } = await supabase.from('properties').delete().eq('id', propertyId);
+      if (error) console.error('Error eliminando propiedad en Supabase:', error);
+      const updated = properties.filter(p => p.id !== propertyId);
+      setProperties(updated);
+      syncToLocalStorage(updated);
     }
   };
 
@@ -211,7 +250,11 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
 
           {/* Lista de propiedades */}
           <div className="properties-list">
-            {properties.length === 0 ? (
+            {loadingProperties ? (
+              <div className="empty-state">
+                <p>Cargando propiedades…</p>
+              </div>
+            ) : properties.length === 0 ? (
               <div className="empty-state">
                 <p>Aún no hay inmuebles añadidos</p>
                 <button className="add-first-property" onClick={handleAddProperty}>
@@ -256,11 +299,35 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
             <AddPropertyModal
               property={editingProperty}
               onClose={() => { setShowAddModal(false); setEditingProperty(null); }}
-              onSave={(propertyData) => {
+              onSave={async (propertyData) => {
                 if (editingProperty) {
-                  setProperties(properties.map(p => p.id === editingProperty.id ? { ...propertyData, id: p.id } : p));
+                  const updated = { ...propertyData, id: editingProperty.id };
+                  const { error } = await supabase.from('properties').upsert({
+                    id: updated.id,
+                    landlord_email: userEmail,
+                    data: updated,
+                    updated_at: new Date().toISOString(),
+                  });
+                  if (error) console.error('Error actualizando propiedad en Supabase:', error);
+                  const newProps = properties.map(p => p.id === editingProperty.id ? updated : p);
+                  setProperties(newProps);
+                  syncToLocalStorage(newProps);
                 } else {
-                  setProperties([...properties, { ...propertyData, id: Date.now() }]);
+                  const { data: inserted, error } = await supabase.from('properties').insert({
+                    landlord_email: userEmail,
+                    data: propertyData,
+                    updated_at: new Date().toISOString(),
+                  }).select('id').single();
+                  console.log('INSERT RESULT:', inserted, error);
+                  if (error) {
+                    console.error('Error creando propiedad en Supabase:', error);
+                  } else {
+                    const newProp = { ...propertyData, id: inserted.id };
+                    await supabase.from('properties').update({ data: newProp }).eq('id', inserted.id);
+                    const newProps = [...properties, newProp];
+                    setProperties(newProps);
+                    syncToLocalStorage(newProps);
+                  }
                 }
                 setShowAddModal(false);
                 setEditingProperty(null);
