@@ -14,10 +14,7 @@ function CodeEntry({ onCodeValid, onBack }) {
     setError('');
 
     const { data, error: dbError } = await supabase
-      .from('inquilinos')
-      .select('landlord_email, property_id, tenant_id, tenant_code')
-      .eq('tenant_code', normalized)
-      .single();
+      .rpc('find_property_by_tenant_code', { p_code: normalized });
 
     setLoading(false);
 
@@ -43,10 +40,10 @@ function CodeEntry({ onCodeValid, onBack }) {
     const syntheticProp = {
       id: data.property_id,
       name: data.property_name,
-      price: data.rent,
+      price: data.monthly_rent,
       paymentConfig: data.payment_config || { startDay: 1, endDay: 5 },
       status: 'alquilado',
-      tenants: [{ id: data.tenant_id, name: data.tenant_name, amount: data.rent }],
+      tenants: [{ id: data.tenant_id, name: data.tenant_name, amount: data.monthly_rent }],
       payments: [],
       rooms: [],
     };
