@@ -318,7 +318,6 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                     data: propertyData,
                     updated_at: new Date().toISOString(),
                   }).select('id').single();
-                  console.log('INSERT RESULT:', inserted, error);
                   if (error) {
                     console.error('Error creando propiedad en Supabase:', error);
                   } else {
