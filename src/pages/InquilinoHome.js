@@ -1,27 +1,9 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
 import './InquilinoHome.css';
 import CodeEntry from './CodeEntry';
 import InquilinoDetail from './InquilinoDetail';
 import ChatConversation, { getUnreadCount } from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
-
-// Convierte una fila de Supabase al formato que usa el resto de la app
-function rowToRental(row) {
-  return {
-    code: row.tenant_code,
-    type: row.room_id ? 'room' : 'alquilado',
-    address: row.property_name,
-    rent: row.rent,
-    tenantName: row.tenant_name,
-    paymentConfig: row.payment_config || { startDay: 1, endDay: 5 },
-    landlordEmail: row.landlord_email,
-    propertyId: row.property_id,
-    roomId: row.room_id || null,
-    tenantId: row.tenant_id,
-    expired: false,
-  };
-}
 
 export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCodesUpdate, onSwitchRole }) {
   const [rentals, setRentals] = useState([]);
@@ -31,22 +13,54 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [chatForRental, setChatForRental] = useState(null);
 
-  // Carga los alquileres desde Supabase cada vez que cambian los códigos
+  // Construye los alquileres desde localStorage (guardado por CodeEntry)
   useEffect(() => {
     if (!tenantCodes.length) {
       setRentals([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
-    supabase
-      .from('inquilinos')
-      .select('*')
-      .in('tenant_code', tenantCodes)
-      .then(({ data }) => {
-        setRentals(data ? data.map(rowToRental) : []);
-        setLoading(false);
-      });
+
+    const allCodes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
+
+    const built = tenantCodes.map(code => {
+      const meta = allCodes[code];
+      if (!meta) return null;
+
+      const props = JSON.parse(localStorage.getItem(`properties_${meta.landlordEmail}`) || '[]');
+      const prop = props.find(p => String(p.id) === String(meta.propertyId));
+      if (!prop) return null;
+
+      let tenantName = '';
+      let rent = prop.price;
+
+      if (meta.roomId) {
+        const room = (prop.rooms || []).find(r => String(r.id) === String(meta.roomId));
+        rent = room?.price || prop.price;
+        tenantName = room?.tenant?.name || '';
+      } else {
+        const tenant = (prop.tenants || []).find(t => String(t.id) === String(meta.tenantId));
+        rent = tenant?.amount || prop.price;
+        tenantName = tenant?.name || '';
+      }
+
+      return {
+        code,
+        type: meta.roomId ? 'room' : 'alquilado',
+        address: prop.name,
+        rent,
+        tenantName,
+        paymentConfig: prop.paymentConfig || { startDay: 1, endDay: 5 },
+        landlordEmail: meta.landlordEmail,
+        propertyId: meta.propertyId,
+        roomId: meta.roomId || null,
+        tenantId: meta.tenantId,
+        expired: false,
+      };
+    }).filter(Boolean);
+
+    setRentals(built);
+    setLoading(false);
   }, [tenantCodes]);
 
   const handleCodeValid = (code) => {
