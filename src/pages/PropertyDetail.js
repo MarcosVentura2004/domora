@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import RoomDetail from './RoomDetail';
@@ -172,6 +172,18 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     limitDay: 5
   });
   const [payments, setPayments] = useState(property.payments || []);
+  const [pendingSupabasePayments, setPendingSupabasePayments] = useState([]);
+
+  useEffect(() => {
+    const nowDate = new Date();
+    supabase
+      .from('payments')
+      .select('tenant_id, room_id, status, amount')
+      .eq('property_id', String(property.id))
+      .eq('year', nowDate.getFullYear())
+      .eq('month', nowDate.getMonth())
+      .then(({ data }) => { if (data) setPendingSupabasePayments(data); });
+  }, [property.id]);
 
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -201,10 +213,14 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
 
   const getTenantPaymentStatus = (tenantId) => {
     if (tenants.length === 0 || property.status !== 'alquilado') return null;
-    
-    const currentPayment = payments.find(p => 
-      p.year === currentYear && 
-      p.month === currentMonth && 
+
+    const supabasePayment = pendingSupabasePayments.find(p => p.tenant_id === tenantId);
+    if (supabasePayment?.status === 'confirmed') return 'paid';
+    if (supabasePayment?.status === 'pending') return 'pending_confirmation';
+
+    const currentPayment = payments.find(p =>
+      p.year === currentYear &&
+      p.month === currentMonth &&
       p.tenantId === tenantId
     );
 
@@ -232,16 +248,26 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     return 'pending';
   };
 
-  const handleConfirmPayment = (tenantId, customAmount) => {
+  const handleConfirmPayment = async (tenantId, customAmount) => {
     const tenant = tenants.find(t => t.id === tenantId);
     const amount = customAmount !== undefined ? customAmount : tenant?.amount;
-    const updatedPayments = payments.map(p => 
+    const updatedPayments = payments.map(p =>
       p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
         ? { ...p, status: 'confirmed', confirmedAt: new Date().toISOString(), amount, tenantName: tenant?.name }
         : p
     );
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
+    await supabase
+      .from('payments')
+      .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), amount })
+      .eq('property_id', String(property.id))
+      .eq('tenant_id', tenantId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
+    setPendingSupabasePayments(prev =>
+      prev.map(p => p.tenant_id === tenantId ? { ...p, status: 'confirmed' } : p)
+    );
   };
 
   const handleConfirmWithAmount = (tenantId, amount) => {
@@ -275,12 +301,20 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     setConfirmingTenant(null);
   };
 
-  const handleRejectPayment = (tenantId) => {
-    const updatedPayments = payments.filter(p => 
+  const handleRejectPayment = async (tenantId) => {
+    const updatedPayments = payments.filter(p =>
       !(p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId)
     );
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
+    await supabase
+      .from('payments')
+      .delete()
+      .eq('property_id', String(property.id))
+      .eq('tenant_id', tenantId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
+    setPendingSupabasePayments(prev => prev.filter(p => p.tenant_id !== tenantId));
   };
 
   const handleCancelPayment = (tenantId) => {

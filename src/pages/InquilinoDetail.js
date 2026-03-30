@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './InquilinoDetail.css';
 import { saveFile, getFile } from '../utils/fileStorage';
 import ChatConversation from './ChatConversation';
+import { supabase } from '../supabaseClient';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -156,11 +157,23 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [, setDocsVersion] = useState(0);
   const [, setPaymentVersion] = useState(0);
+  const [supabasePayment, setSupabasePayment] = useState(null);
+
+  useEffect(() => {
+    const now = new Date();
+    supabase
+      .rpc('get_payment_by_code', {
+        p_code: rental.code,
+        p_year: now.getFullYear(),
+        p_month: now.getMonth(),
+      })
+      .then(({ data }) => setSupabasePayment(data));
+  }, [rental.code]);
 
   // Re-read from localStorage on each render bump
   const currentPayment = getCurrentPayment(rental); // eslint-disable-line react-hooks/exhaustive-deps
-  const isPaid = currentPayment?.status === 'confirmed';
-  const isSent = currentPayment?.status === 'pending';
+  const isPaid = supabasePayment?.status === 'confirmed' || currentPayment?.status === 'confirmed';
+  const isSent = !isPaid && (supabasePayment?.status === 'pending' || currentPayment?.status === 'pending');
   const canConfirm = !isPaid && !isSent;
 
   const allPayments = getPayments(rental);
@@ -173,10 +186,25 @@ export default function InquilinoDetail({ rental, onBack }) {
   const landlordDocs = allDocs.filter(d => d.sharedWithTenant && !d.sharedByTenant && !d.uploadedByTenant);
   const myDocs = allDocs.filter(d => d.uploadedByTenant || d.sharedByTenant);
 
-  const handleConfirmPayment = () => {
-    const ok = markPaymentAsPending(rental);
-    if (ok) setPaymentVersion(v => v + 1);
-    else alert('Ya has enviado el pago este mes.');
+  const handleConfirmPayment = async () => {
+    if (supabasePayment) {
+      alert('Ya has enviado el pago este mes.');
+      return;
+    }
+    const now = new Date();
+    const { data, error } = await supabase.rpc('mark_payment_pending', {
+      p_code: rental.code,
+      p_year: now.getFullYear(),
+      p_month: now.getMonth(),
+      p_amount: rental.rent,
+    });
+    if (error || data?.error) {
+      alert('Ya has enviado el pago este mes.');
+      return;
+    }
+    markPaymentAsPending(rental);
+    setSupabasePayment({ status: 'pending' });
+    setPaymentVersion(v => v + 1);
   };
 
   const handleSendIncident = async () => {
