@@ -131,7 +131,11 @@ export default function InquilinoDetail({ rental, onBack }) {
         .eq('year', now.getFullYear())
         .eq('month', now.getMonth())
         .maybeSingle()
-        .then(({ data }) => setSupabasePayment(data ?? null));
+        .then(({ data }) => {
+          // Solo sobreescribir si el servidor devuelve datos reales;
+          // no resetear a null si ya tenemos un estado local (evita parpadeo por RLS/red)
+          if (data) setSupabasePayment(data);
+        });
     };
 
     fetchCurrentPayment();
