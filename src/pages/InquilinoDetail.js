@@ -72,6 +72,7 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [incidentText, setIncidentText] = useState('');
   const [incidentFile, setIncidentFile] = useState(null); // { id, dataUrl, fileName, fileType, fileSize }
   const [showChat, setShowChat] = useState(false);
+  const [showGroupChat, setShowGroupChat] = useState(false);
   const incidentFileRef = useRef(null);
   const [showDocs, setShowDocs] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
@@ -206,6 +207,22 @@ export default function InquilinoDetail({ rental, onBack }) {
     );
   }
 
+  if (showGroupChat) {
+    return (
+      <ChatConversation
+        landlordEmail={rental.landlordEmail}
+        propertyId={rental.propertyId}
+        roomId={null}
+        tenantId={rental.tenantId}
+        tenantName={rental.tenantName}
+        propertyName={rental.address}
+        currentRole="tenant"
+        isGroup={true}
+        onBack={() => setShowGroupChat(false)}
+      />
+    );
+  }
+
   const handleAddDoc = async ({ name, file, shareWithLandlord }) => {
     const storagePath = file
       ? `${rental.propertyId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
@@ -323,6 +340,16 @@ export default function InquilinoDetail({ rental, onBack }) {
             </svg>
             <span>Chat con el propietario</span>
           </button>
+          {rental.hasGroupChat && (
+            <button className="inquilino-action-box" onClick={() => setShowGroupChat(true)}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="9" cy="7" r="4" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Chat del bloque</span>
+            </button>
+          )}
         </div>
 
         {showIncident && (

@@ -10,6 +10,20 @@ import { supabase } from '../supabaseClient';
 function getAllTenants(properties, landlordEmail) {
   const list = [];
   properties.forEach(prop => {
+    // Entrada de grupo para propiedades multi-inquilino o por habitaciones
+    const isGroupEligible = prop.status === 'por_habitaciones' || prop.isSharedProperty;
+    if (isGroupEligible) {
+      list.push({
+        key: `${prop.id}_group`,
+        landlordEmail,
+        propertyId: prop.id,
+        propertyName: prop.name,
+        tenantName: 'Todos los inquilinos',
+        tenantId: null,
+        roomId: null,
+        isGroup: true,
+      });
+    }
     if (prop.status === 'alquilado') {
       (prop.tenants || []).forEach(t => {
         list.push({
@@ -73,16 +87,18 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
     if (!userEmail) return;
     supabase
       .from('messages')
-      .select('property_id, room_id, tenant_id, sender, read_by_landlord, content, created_at')
+      .select('property_id, room_id, tenant_id, sender, read_by_landlord, content, created_at, is_group_message')
       .eq('landlord_email', userEmail)
       .then(({ data }) => {
         if (!data) return;
         const meta = {};
         getAllTenants(properties, userEmail).forEach(t => {
           const convMsgs = data.filter(m =>
-            t.roomId
-              ? m.property_id === t.propertyId && m.room_id === t.roomId
-              : m.property_id === t.propertyId && !m.room_id && m.tenant_id === t.tenantId
+            t.isGroup
+              ? m.property_id === t.propertyId && m.is_group_message
+              : t.roomId
+                ? m.property_id === t.propertyId && m.room_id === t.roomId && !m.is_group_message
+                : m.property_id === t.propertyId && !m.room_id && m.tenant_id === t.tenantId && !m.is_group_message
           );
           const unread = convMsgs.filter(m => m.sender === 'tenant' && !m.read_by_landlord).length;
           const last = convMsgs[convMsgs.length - 1];
@@ -455,14 +471,27 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                         key={t.key}
                         onClick={() => setChatWith(t)}
                         style={{
-                          width: '100%', background: 'white',
-                          border: 'none', borderRadius: '16px',
+                          width: '100%', background: t.isGroup ? '#f9f9f9' : 'white',
+                          border: t.isGroup ? '1px solid #e5e5e5' : 'none', borderRadius: '16px',
                           padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
                           cursor: 'pointer', textAlign: 'left',
                           boxShadow: t.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
                         }}
                       >
                         <div style={{ position: 'relative', flexShrink: 0 }}>
+                          {t.isGroup ? (
+                            <div style={{
+                              width: '48px', height: '48px', borderRadius: '50%',
+                              background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </div>
+                          ) : (
                           <div style={{
                             width: '48px', height: '48px', borderRadius: '50%',
                             background: avatarColors[colorIdx],
@@ -471,6 +500,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                           }}>
                             {initials}
                           </div>
+                          )}
                           {t.unread > 0 && (
                             <span style={{
                               position: 'absolute', top: 0, right: 0,
@@ -519,6 +549,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
           tenantName={chatWith.tenantName}
           propertyName={chatWith.propertyName}
           currentRole="landlord"
+          isGroup={chatWith.isGroup || false}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
         />
       )}

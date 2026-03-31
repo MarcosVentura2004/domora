@@ -18,23 +18,41 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   useEffect(() => {
     const active = rentals.filter(r => !r.expired);
     if (!active.length) return;
-    Promise.all(
-      active.map(r => {
-        let q = supabase
-          .from('messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('landlord_email', r.landlordEmail)
-          .eq('property_id', r.propertyId)
-          .eq('sender', 'landlord')
-          .eq('read_by_tenant', false);
-        if (r.roomId) {
-          q = q.eq('room_id', r.roomId);
-        } else {
-          q = q.is('room_id', null).eq('tenant_id', r.tenantId);
-        }
-        return q.then(({ count }) => [r.code, count || 0]);
-      })
-    ).then(results => setUnreadCounts(Object.fromEntries(results)));
+
+    const queries = active.flatMap(r => {
+      // Query para mensajes privados no leídos
+      let q = supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('landlord_email', r.landlordEmail)
+        .eq('property_id', r.propertyId)
+        .eq('sender', 'landlord')
+        .eq('read_by_tenant', false)
+        .eq('is_group_message', false);
+      if (r.roomId) {
+        q = q.eq('room_id', r.roomId);
+      } else {
+        q = q.is('room_id', null).eq('tenant_id', r.tenantId);
+      }
+      const privateQ = q.then(({ count }) => [r.code, count || 0]);
+
+      // Query para mensajes de grupo no leídos (solo si aplica)
+      const groupQ = r.hasGroupChat
+        ? supabase
+            .from('messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('landlord_email', r.landlordEmail)
+            .eq('property_id', r.propertyId)
+            .eq('is_group_message', true)
+            .eq('sender', 'landlord')
+            .eq('read_by_tenant', false)
+            .then(({ count }) => [`${r.code}_group`, count || 0])
+        : Promise.resolve([`${r.code}_group`, 0]);
+
+      return [privateQ, groupQ];
+    });
+
+    Promise.all(queries).then(results => setUnreadCounts(Object.fromEntries(results)));
   }, [rentals]); // eslint-disable-line
 
   // Construye los alquileres desde localStorage y verifica en Supabase si siguen activos
@@ -82,6 +100,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
         propertyId: meta.propertyId,
         roomId: meta.roomId || null,
         tenantId: meta.tenantId,
+        hasGroupChat: !!(prop?.isSharedProperty || prop?.status === 'por_habitaciones'),
         expired: false, // se actualiza tras verificar en Supabase
       };
     }).filter(Boolean);
@@ -219,7 +238,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
             );
           }
 
-          const unread = unreadCounts[data.code] || 0;
+          const unread = (unreadCounts[data.code] || 0) + (unreadCounts[`${data.code}_group`] || 0);
           return (
             <div key={data.code} className="rental-card" style={{ cursor: 'default' }}>
               <div style={{ display: 'flex', alignItems: 'stretch' }}>

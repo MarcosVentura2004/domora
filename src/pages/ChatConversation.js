@@ -87,7 +87,7 @@ function AttachmentView({ msg, isMe }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, onBack }) {
+export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -116,6 +116,13 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         table: 'messages',
         filter: `property_id=eq.${propertyId}`,
       }, (payload) => {
+        const m = payload.new;
+        if (isGroup && !m.is_group_message) return;
+        if (!isGroup && m.is_group_message) return;
+        if (!isGroup) {
+          if (roomId && m.room_id !== roomId) return;
+          if (!roomId && (m.tenant_id !== tenantId || m.room_id)) return;
+        }
         setMessages(prev => [...prev, payload.new]);
         markAsRead();
       })
@@ -136,10 +143,12 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       .eq('landlord_email', landlordEmail)
       .eq('property_id', propertyId)
       .order('created_at', { ascending: true });
-    if (roomId) {
-      q = q.eq('room_id', roomId);
+    if (isGroup) {
+      q = q.eq('is_group_message', true);
+    } else if (roomId) {
+      q = q.eq('room_id', roomId).eq('is_group_message', false);
     } else {
-      q = q.is('room_id', null).eq('tenant_id', tenantId);
+      q = q.is('room_id', null).eq('tenant_id', tenantId).eq('is_group_message', false);
     }
     const { data } = await q;
     setMessages(data || []);
@@ -155,10 +164,12 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       .eq('property_id', propertyId)
       .eq(col, false)
       .neq('sender', currentRole);
-    if (roomId) {
-      q = q.eq('room_id', roomId);
+    if (isGroup) {
+      q = q.eq('is_group_message', true);
+    } else if (roomId) {
+      q = q.eq('room_id', roomId).eq('is_group_message', false);
     } else {
-      q = q.is('room_id', null).eq('tenant_id', tenantId);
+      q = q.is('room_id', null).eq('tenant_id', tenantId).eq('is_group_message', false);
     }
     await q;
   }
@@ -193,8 +204,8 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
 
       const { error } = await supabase.from('messages').insert({
         property_id: propertyId,
-        room_id: roomId || null,
-        tenant_id: roomId ? null : tenantId,
+        room_id: isGroup ? null : (roomId || null),
+        tenant_id: isGroup ? null : (roomId ? null : tenantId),
         landlord_email: landlordEmail,
         sender: currentRole,
         sender_id: currentRole === 'landlord' ? landlordEmail : tenantId,
@@ -203,6 +214,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         attachment_name,
         attachment_type,
         attachment_size,
+        is_group_message: isGroup || false,
         read_by_landlord: currentRole === 'landlord',
         read_by_tenant: currentRole === 'tenant',
       });
@@ -218,7 +230,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   };
 
   const isMe = (sender) => sender === currentRole;
-  const otherName = currentRole === 'tenant' ? 'Propietario' : tenantName;
+  const otherName = isGroup
+    ? (currentRole === 'tenant' ? 'Chat del bloque' : 'Todos los inquilinos')
+    : (currentRole === 'tenant' ? 'Propietario' : tenantName);
   const canSend = (text.trim() || pendingFile) && !sending;
 
   return (
@@ -232,7 +246,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>←</button>
         <div>
           <p style={{ margin: 0, fontWeight: 600, fontSize: '15px', color: '#111' }}>{otherName}</p>
-          <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{propertyName}</p>
+          <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{isGroup ? `${propertyName} · Grupo` : propertyName}</p>
         </div>
       </div>
 
