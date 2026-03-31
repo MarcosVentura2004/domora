@@ -270,9 +270,23 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     );
   };
 
-  const handleConfirmWithAmount = (tenantId, amount) => {
+  const handleConfirmWithAmount = async (tenantId, amount) => {
     const tenant = tenants.find(t => t.id === tenantId);
-    // Si ya existe un pago pendiente, confirmarlo; si no, crear uno nuevo
+    const confirmedAt = new Date().toISOString();
+
+    // Actualizar estado local de Supabase (fuente de verdad para el UI)
+    setPendingSupabasePayments(prev => {
+      const exists = prev.find(p => p.tenant_id === tenantId);
+      if (exists) {
+        return prev.map(p => p.tenant_id === tenantId
+          ? { ...p, status: 'confirmed', confirmed_at: confirmedAt, amount }
+          : p
+        );
+      }
+      return [...prev, { tenant_id: tenantId, room_id: null, status: 'confirmed', confirmed_at: confirmedAt, amount }];
+    });
+
+    // Actualizar localStorage
     const existingPayment = payments.find(p =>
       p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
     );
@@ -280,25 +294,35 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     if (existingPayment) {
       updatedPayments = payments.map(p =>
         p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
-          ? { ...p, status: 'confirmed', confirmedAt: new Date().toISOString(), amount, tenantName: tenant?.name }
+          ? { ...p, status: 'confirmed', confirmedAt, amount, tenantName: tenant?.name }
           : p
       );
     } else {
-      const newPayment = {
-        year: currentYear,
-        month: currentMonth,
-        tenantId,
-        status: 'confirmed',
-        markedAt: new Date().toISOString(),
-        confirmedAt: new Date().toISOString(),
-        amount,
-        tenantName: tenant?.name
-      };
-      updatedPayments = [...payments, newPayment];
+      updatedPayments = [...payments, {
+        year: currentYear, month: currentMonth, tenantId,
+        status: 'confirmed', confirmedAt, amount, tenantName: tenant?.name,
+      }];
     }
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
     setConfirmingTenant(null);
+
+    // Persistir en Supabase (upsert: update si existe, insert si no)
+    const { count } = await supabase
+      .from('payments')
+      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
+      .eq('property_id', String(property.id))
+      .eq('tenant_id', tenantId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .select('id', { count: 'exact', head: true });
+    if (!count) {
+      await supabase.from('payments').insert({
+        property_id: String(property.id), tenant_id: tenantId,
+        year: currentYear, month: currentMonth,
+        status: 'confirmed', confirmed_at: confirmedAt, amount,
+      });
+    }
   };
 
   const handleRejectPayment = async (tenantId) => {

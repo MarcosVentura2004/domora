@@ -120,14 +120,26 @@ export default function InquilinoDetail({ rental, onBack }) {
 
   useEffect(() => {
     const now = new Date();
-    // Pago del mes actual
-    supabase
-      .rpc('get_payment_by_code', {
-        p_code: rental.code,
-        p_year: now.getFullYear(),
-        p_month: now.getMonth(),
-      })
-      .then(({ data }) => setSupabasePayment(Array.isArray(data) ? (data[0] ?? null) : data));
+
+    const fetchCurrentPayment = () => {
+      const col = rental.roomId ? 'room_id' : 'tenant_id';
+      const val = rental.roomId || rental.tenantId;
+      supabase
+        .from('payments')
+        .select('status, amount')
+        .eq(col, val)
+        .eq('year', now.getFullYear())
+        .eq('month', now.getMonth())
+        .maybeSingle()
+        .then(({ data }) => setSupabasePayment(data ?? null));
+    };
+
+    fetchCurrentPayment();
+
+    // Refetch al volver a la pestaña (el propietario puede haber confirmado mientras tanto)
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchCurrentPayment(); };
+    document.addEventListener('visibilitychange', onVisibility);
+
     // Historial completo
     const query = supabase
       .from('payments')
@@ -140,6 +152,8 @@ export default function InquilinoDetail({ rental, onBack }) {
       query.eq('tenant_id', rental.tenantId);
     }
     query.then(({ data }) => { if (data) setPaymentHistory(data); });
+
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [rental.code, rental.roomId, rental.tenantId]);
 
   const isPaid = supabasePayment?.status === 'confirmed';
