@@ -246,24 +246,51 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             Sin mensajes todavía. ¡Inicia la conversación!
           </p>
         )}
-        {messages.map(msg => (
-          <div key={msg.id} style={{ alignSelf: isMe(msg.sender) ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
-            <div style={{
-              background: isMe(msg.sender) ? '#111' : 'white',
-              color: isMe(msg.sender) ? 'white' : '#111',
-              borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-              padding: msg.attachment_url && !msg.content ? '8px' : '10px 14px',
-              fontSize: '14px', lineHeight: '1.4',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-            }}>
-              {msg.content && <span>{msg.content}</span>}
-              {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
+        {messages.map((msg, i) => {
+          const msgDate = new Date(msg.created_at);
+          const prevDate = i > 0 ? new Date(messages[i - 1].created_at) : null;
+          const isNewDay = !prevDate || msgDate.toDateString() !== prevDate.toDateString();
+
+          let dateLabel = '';
+          if (isNewDay) {
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+            if (msgDate.toDateString() === today.toDateString()) dateLabel = 'Hoy';
+            else if (msgDate.toDateString() === yesterday.toDateString()) dateLabel = 'Ayer';
+            else dateLabel = msgDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+          }
+
+          return (
+            <div key={msg.id}>
+              {isNewDay && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '8px 0' }}>
+                  <div style={{ flex: 1, height: '1px', background: '#e5e5e5' }} />
+                  <span style={{ fontSize: '11px', color: '#bbb', fontWeight: 500, whiteSpace: 'nowrap' }}>{dateLabel}</span>
+                  <div style={{ flex: 1, height: '1px', background: '#e5e5e5' }} />
+                </div>
+              )}
+              <div style={{ alignSelf: isMe(msg.sender) ? 'flex-end' : 'flex-start', maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: isMe(msg.sender) ? 'flex-end' : 'flex-start', marginLeft: isMe(msg.sender) ? 'auto' : 0 }}>
+                <div style={{
+                  background: isMe(msg.sender) ? '#111' : 'white',
+                  color: isMe(msg.sender) ? 'white' : '#111',
+                  borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                  padding: msg.attachment_url && !msg.content ? '8px' : '10px 14px',
+                  fontSize: '14px', lineHeight: '1.4',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
+                }}>
+                  {msg.content && <span>{msg.content}</span>}
+                  {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
+                </div>
+                <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
+                  {msgDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
             </div>
-            <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
-              {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
 
