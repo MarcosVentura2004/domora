@@ -1,43 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
-import { saveFile, getFile } from '../utils/fileStorage';
+import { supabase } from '../supabaseClient';
 
-function getChatKey(landlordEmail, propertyId, roomId, tenantId) {
-  return `chat_${landlordEmail}_${propertyId}_${roomId || tenantId}`;
+// ─── Exported async helper — used by other pages for unread badges ───────────
+export async function getUnreadCount(landlordEmail, propertyId, roomId, tenantId, role) {
+  const readCol = role === 'landlord' ? 'read_by_landlord' : 'read_by_tenant';
+  const senderVal = role === 'landlord' ? 'tenant' : 'landlord';
+
+  let q = supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('landlord_email', landlordEmail)
+    .eq('property_id', propertyId)
+    .eq('sender', senderVal)
+    .eq(readCol, false);
+
+  if (roomId) {
+    q = q.eq('room_id', roomId);
+  } else {
+    q = q.is('room_id', null).eq('tenant_id', tenantId);
+  }
+
+  const { count } = await q;
+  return count || 0;
 }
 
-function getReadKey(landlordEmail, propertyId, roomId, tenantId, role) {
-  return `chat_read_${role}_${getChatKey(landlordEmail, propertyId, roomId, tenantId)}`;
-}
-
-export function getMessages(landlordEmail, propertyId, roomId, tenantId) {
-  return JSON.parse(localStorage.getItem(getChatKey(landlordEmail, propertyId, roomId, tenantId)) || '[]');
-}
-
-export function getUnreadCount(landlordEmail, propertyId, roomId, tenantId, role) {
-  const msgs = getMessages(landlordEmail, propertyId, roomId, tenantId);
-  const otherRole = role === 'landlord' ? 'tenant' : 'landlord';
-  const lastRead = localStorage.getItem(getReadKey(landlordEmail, propertyId, roomId, tenantId, role));
-  if (!lastRead) return msgs.filter(m => m.sender === otherRole).length;
-  return msgs.filter(m => m.sender === otherRole && m.timestamp > lastRead).length;
-}
-
-function markAsRead(landlordEmail, propertyId, roomId, tenantId, role) {
-  localStorage.setItem(getReadKey(landlordEmail, propertyId, roomId, tenantId, role), new Date().toISOString());
-}
-
-function saveMessages(landlordEmail, propertyId, roomId, tenantId, messages) {
-  localStorage.setItem(getChatKey(landlordEmail, propertyId, roomId, tenantId), JSON.stringify(messages));
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatFileSize(bytes) {
   if (!bytes) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -45,38 +32,26 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function AttachmentView({ attachment, isMe }) {
-  const [dataUrl, setDataUrl] = useState(null);
-
-  useEffect(() => {
-    getFile(attachment.id).then(url => setDataUrl(url)).catch(() => {});
-  }, [attachment.id]);
-
-  const isImage = attachment.fileType?.startsWith('image/');
+// ─── Attachment renderer ──────────────────────────────────────────────────────
+function AttachmentView({ msg, isMe }) {
+  const isImage = msg.attachment_type?.startsWith('image/');
 
   const handleDownload = () => {
-    if (dataUrl) {
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = attachment.fileName;
-      a.click();
-    }
+    const a = document.createElement('a');
+    a.href = msg.attachment_url;
+    a.download = msg.attachment_name;
+    a.target = '_blank';
+    a.click();
   };
 
   if (isImage) {
     return (
-      <div style={{ marginTop: attachment.text ? '6px' : 0 }} onClick={handleDownload}>
-        {dataUrl ? (
-          <img
-            src={dataUrl}
-            alt={attachment.fileName}
-            style={{ maxWidth: '220px', maxHeight: '200px', borderRadius: '10px', display: 'block', cursor: 'pointer', objectFit: 'cover' }}
-          />
-        ) : (
-          <div style={{ width: '220px', height: '120px', borderRadius: '10px', background: 'rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '12px', color: 'rgba(0,0,0,0.4)' }}>Cargando...</span>
-          </div>
-        )}
+      <div style={{ marginTop: msg.content ? '6px' : 0 }} onClick={handleDownload}>
+        <img
+          src={msg.attachment_url}
+          alt={msg.attachment_name}
+          style={{ maxWidth: '220px', maxHeight: '200px', borderRadius: '10px', display: 'block', cursor: 'pointer', objectFit: 'cover' }}
+        />
       </div>
     );
   }
@@ -85,7 +60,7 @@ function AttachmentView({ attachment, isMe }) {
     <button
       onClick={handleDownload}
       style={{
-        marginTop: attachment.text ? '6px' : 0,
+        marginTop: msg.content ? '6px' : 0,
         background: isMe ? 'rgba(255,255,255,0.15)' : '#f5f5f5',
         border: 'none', borderRadius: '10px', padding: '10px 12px',
         display: 'flex', alignItems: 'center', gap: '10px',
@@ -98,10 +73,10 @@ function AttachmentView({ attachment, isMe }) {
       </svg>
       <div style={{ minWidth: 0 }}>
         <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: isMe ? 'white' : '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '150px' }}>
-          {attachment.fileName}
+          {msg.attachment_name}
         </p>
         <p style={{ margin: 0, fontSize: '11px', color: isMe ? 'rgba(255,255,255,0.6)' : '#aaa' }}>
-          {formatFileSize(attachment.fileSize)}
+          {formatFileSize(msg.attachment_size)}
         </p>
       </div>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginLeft: 'auto' }}>
@@ -111,27 +86,88 @@ function AttachmentView({ attachment, isMe }) {
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, onBack }) {
-  const [messages, setMessages] = useState(() => getMessages(landlordEmail, propertyId, roomId, tenantId));
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
-  const [pendingFile, setPendingFile] = useState(null); // { id, dataUrl, fileName, fileType, fileSize }
+  const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
 
+  // Load messages on mount
   useEffect(() => {
-    markAsRead(landlordEmail, propertyId, roomId, tenantId, currentRole);
-  }, [landlordEmail, propertyId, roomId, tenantId, currentRole]);
+    loadMessages();
+  }, [landlordEmail, propertyId, roomId, tenantId]); // eslint-disable-line
 
+  // Mark as read once messages are loaded
+  useEffect(() => {
+    if (!loading) markAsRead();
+  }, [loading]); // eslint-disable-line
+
+  // Real-time subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel(`chat:${landlordEmail}:${propertyId}:${roomId || tenantId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `property_id=eq.${propertyId}`,
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new]);
+        markAsRead();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [landlordEmail, propertyId, roomId, tenantId, currentRole]); // eslint-disable-line
+
+  // Scroll to bottom on new message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleFileSelect = async (e) => {
+  async function loadMessages() {
+    setLoading(true);
+    let q = supabase
+      .from('messages')
+      .select('*')
+      .eq('landlord_email', landlordEmail)
+      .eq('property_id', propertyId)
+      .order('created_at', { ascending: true });
+    if (roomId) {
+      q = q.eq('room_id', roomId);
+    } else {
+      q = q.is('room_id', null).eq('tenant_id', tenantId);
+    }
+    const { data } = await q;
+    setMessages(data || []);
+    setLoading(false);
+  }
+
+  async function markAsRead() {
+    const col = currentRole === 'landlord' ? 'read_by_landlord' : 'read_by_tenant';
+    let q = supabase
+      .from('messages')
+      .update({ [col]: true })
+      .eq('landlord_email', landlordEmail)
+      .eq('property_id', propertyId)
+      .eq(col, false)
+      .neq('sender', currentRole);
+    if (roomId) {
+      q = q.eq('room_id', roomId);
+    } else {
+      q = q.is('room_id', null).eq('tenant_id', tenantId);
+    }
+    await q;
+  }
+
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    setPendingFile({ id: Date.now(), dataUrl, fileName: file.name, fileType: file.type, fileSize: file.size });
+    const preview = URL.createObjectURL(file);
+    setPendingFile({ file, preview, fileName: file.name, fileType: file.type, fileSize: file.size });
     e.target.value = '';
   };
 
@@ -139,24 +175,43 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     if (!text.trim() && !pendingFile) return;
     setSending(true);
     try {
-      let attachment = null;
+      let attachment_url = null, attachment_name = null, attachment_type = null, attachment_size = null;
+
       if (pendingFile) {
-        const { dataUrl, ...meta } = pendingFile;
-        await saveFile(meta.id, dataUrl);
-        attachment = meta;
+        const ext = pendingFile.fileName.split('.').pop();
+        const path = `${landlordEmail}/${propertyId}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('chat-attachments')
+          .upload(path, pendingFile.file, { contentType: pendingFile.fileType });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
+        attachment_url = publicUrl;
+        attachment_name = pendingFile.fileName;
+        attachment_type = pendingFile.fileType;
+        attachment_size = pendingFile.fileSize;
       }
-      const newMsg = {
-        id: Date.now(),
+
+      const { error } = await supabase.from('messages').insert({
+        property_id: propertyId,
+        room_id: roomId || null,
+        tenant_id: roomId ? null : tenantId,
+        landlord_email: landlordEmail,
         sender: currentRole,
-        text: text.trim(),
-        timestamp: new Date().toISOString(),
-        ...(attachment && { attachment }),
-      };
-      const updated = [...messages, newMsg];
-      saveMessages(landlordEmail, propertyId, roomId, tenantId, updated);
-      setMessages(updated);
+        sender_id: currentRole === 'landlord' ? landlordEmail : tenantId,
+        content: text.trim() || null,
+        attachment_url,
+        attachment_name,
+        attachment_type,
+        attachment_size,
+        read_by_landlord: currentRole === 'landlord',
+        read_by_tenant: currentRole === 'tenant',
+      });
+      if (error) throw error;
+
       setText('');
       setPendingFile(null);
+    } catch (err) {
+      console.error('Error enviando mensaje:', err);
     } finally {
       setSending(false);
     }
@@ -183,7 +238,10 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {messages.length === 0 && (
+        {loading && (
+          <p style={{ textAlign: 'center', color: '#bbb', fontSize: '14px', marginTop: '60px' }}>Cargando...</p>
+        )}
+        {!loading && messages.length === 0 && (
           <p style={{ textAlign: 'center', color: '#bbb', fontSize: '14px', marginTop: '60px' }}>
             Sin mensajes todavía. ¡Inicia la conversación!
           </p>
@@ -194,15 +252,15 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
               background: isMe(msg.sender) ? '#111' : 'white',
               color: isMe(msg.sender) ? 'white' : '#111',
               borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-              padding: msg.attachment && !msg.text ? '8px' : '10px 14px',
+              padding: msg.attachment_url && !msg.content ? '8px' : '10px 14px',
               fontSize: '14px', lineHeight: '1.4',
               boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
             }}>
-              {msg.text && <span>{msg.text}</span>}
-              {msg.attachment && <AttachmentView attachment={msg.attachment} isMe={isMe(msg.sender)} />}
+              {msg.content && <span>{msg.content}</span>}
+              {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
             </div>
             <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
-              {new Date(msg.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              {new Date(msg.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
         ))}
@@ -213,7 +271,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       {pendingFile && (
         <div style={{ background: 'white', padding: '10px 16px', borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: '10px' }}>
           {pendingFile.fileType?.startsWith('image/') ? (
-            <img src={pendingFile.dataUrl} alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+            <img src={pendingFile.preview} alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
           ) : (
             <div style={{ width: 48, height: 48, borderRadius: 8, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none">

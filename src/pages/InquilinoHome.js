@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import './InquilinoHome.css';
 import CodeEntry from './CodeEntry';
 import InquilinoDetail from './InquilinoDetail';
-import ChatConversation, { getUnreadCount } from './ChatConversation';
+import ChatConversation from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
 import { supabase } from '../supabaseClient';
 
@@ -13,6 +13,29 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [viewingRental, setViewingRental] = useState(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [chatForRental, setChatForRental] = useState(null);
+  const [unreadCounts, setUnreadCounts] = useState({}); // { [code]: number }
+
+  useEffect(() => {
+    const active = rentals.filter(r => !r.expired);
+    if (!active.length) return;
+    Promise.all(
+      active.map(r => {
+        let q = supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('landlord_email', r.landlordEmail)
+          .eq('property_id', r.propertyId)
+          .eq('sender', 'landlord')
+          .eq('read_by_tenant', false);
+        if (r.roomId) {
+          q = q.eq('room_id', r.roomId);
+        } else {
+          q = q.is('room_id', null).eq('tenant_id', r.tenantId);
+        }
+        return q.then(({ count }) => [r.code, count || 0]);
+      })
+    ).then(results => setUnreadCounts(Object.fromEntries(results)));
+  }, [rentals]); // eslint-disable-line
 
   // Construye los alquileres desde localStorage y verifica en Supabase si siguen activos
   useEffect(() => {
@@ -196,7 +219,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
             );
           }
 
-          const unread = getUnreadCount(data.landlordEmail, data.propertyId, data.roomId, data.tenantId, 'tenant');
+          const unread = unreadCounts[data.code] || 0;
           return (
             <div key={data.code} className="rental-card" style={{ cursor: 'default' }}>
               <div style={{ display: 'flex', alignItems: 'stretch' }}>

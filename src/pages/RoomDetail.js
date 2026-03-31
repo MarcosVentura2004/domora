@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
-import ChatConversation, { getUnreadCount } from './ChatConversation';
+import ChatConversation from './ChatConversation';
+import { supabase } from '../supabaseClient';
 
 function exportRoomToExcel(roomName, historyMonths, accumulated) {
   import('xlsx').then(XLSX => {
@@ -169,6 +170,20 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [showExpenseHistory, setShowExpenseHistory] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!room.tenant || !landlordEmail) return;
+    supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('landlord_email', landlordEmail)
+      .eq('property_id', property.id)
+      .eq('room_id', room.id)
+      .eq('sender', 'tenant')
+      .eq('read_by_landlord', false)
+      .then(({ count }) => setUnreadCount(count || 0));
+  }, [room.id, room.tenant, property.id, landlordEmail]); // eslint-disable-line
 
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -518,7 +533,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                {getUnreadCount(landlordEmail, property.id, room.id, room.tenant.id || room.id, 'landlord') > 0 && (
+                {unreadCount > 0 && (
                   <span style={{
                     position: 'absolute', top: -4, right: -4,
                     background: '#e74c3c', color: 'white',
@@ -526,7 +541,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     fontSize: 10, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    {getUnreadCount(landlordEmail, property.id, room.id, room.tenant.id || room.id, 'landlord')}
+                    {unreadCount}
                   </span>
                 )}
               </div>

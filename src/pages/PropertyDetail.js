@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import RoomDetail from './RoomDetail';
-import ChatConversation, { getUnreadCount } from './ChatConversation';
+import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
 
 function isFutureMonth(year, month) {
@@ -165,6 +165,25 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [confirmingTenant, setConfirmingTenant] = useState(null); // { id, name, amount }
   const [chatWithTenant, setChatWithTenant] = useState(null); // { tenantId, tenantName, roomId }
+  const [unreadCounts, setUnreadCounts] = useState({}); // { [tenantId]: number }
+
+  useEffect(() => {
+    if (!tenants.length || property.status !== 'alquilado') return;
+    Promise.all(
+      tenants.map(t =>
+        supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('landlord_email', landlordEmail)
+          .eq('property_id', property.id)
+          .is('room_id', null)
+          .eq('tenant_id', t.id)
+          .eq('sender', 'tenant')
+          .eq('read_by_landlord', false)
+          .then(({ count }) => [t.id, count || 0])
+      )
+    ).then(results => setUnreadCounts(Object.fromEntries(results)));
+  }, [tenants, property.id, landlordEmail, property.status]); // eslint-disable-line
 
   const [paymentConfig, setPaymentConfig] = useState(property.paymentConfig || {
     startDay: 1,
@@ -1047,7 +1066,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
-                      {getUnreadCount(landlordEmail, property.id, null, tenant.id, 'landlord') > 0 && (
+                      {(unreadCounts[tenant.id] || 0) > 0 && (
                         <span style={{
                           position: 'absolute', top: -4, right: -4,
                           background: '#e74c3c', color: 'white',
@@ -1055,7 +1074,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                           fontSize: 10, fontWeight: 700,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          {getUnreadCount(landlordEmail, property.id, null, tenant.id, 'landlord')}
+                          {unreadCounts[tenant.id]}
                         </span>
                       )}
                     </div>

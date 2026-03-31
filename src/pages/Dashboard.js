@@ -3,7 +3,7 @@ import './Dashboard.css';
 import PropertyDetail from './PropertyDetail';
 import VacationalDetail from './VacationalDetail';
 import GeneralPanel from './GeneralPanel';
-import ChatConversation, { getMessages, getUnreadCount } from './ChatConversation';
+import ChatConversation from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
 import { supabase } from '../supabaseClient';
 
@@ -64,6 +64,33 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   const [editingProperty, setEditingProperty] = useState(null);
   const [viewingProperty, setViewingProperty] = useState(null);
   const [chatWith, setChatWith] = useState(null);
+  // tenantMeta: { [key]: { unread: number, lastTs: string, lastContent: string } }
+  const [tenantMeta, setTenantMeta] = useState({});
+  const [metaTick, setMetaTick] = useState(0);
+
+  // Carga unread counts + última actividad de cada conversación (batch)
+  useEffect(() => {
+    if (!userEmail) return;
+    supabase
+      .from('messages')
+      .select('property_id, room_id, tenant_id, sender, read_by_landlord, content, created_at')
+      .eq('landlord_email', userEmail)
+      .then(({ data }) => {
+        if (!data) return;
+        const meta = {};
+        getAllTenants(properties, userEmail).forEach(t => {
+          const convMsgs = data.filter(m =>
+            t.roomId
+              ? m.property_id === t.propertyId && m.room_id === t.roomId
+              : m.property_id === t.propertyId && !m.room_id && m.tenant_id === t.tenantId
+          );
+          const unread = convMsgs.filter(m => m.sender === 'tenant' && !m.read_by_landlord).length;
+          const last = convMsgs[convMsgs.length - 1];
+          meta[t.key] = { unread, lastTs: last?.created_at || '', lastContent: last?.content || '' };
+        });
+        setTenantMeta(meta);
+      });
+  }, [properties, userEmail, metaTick]); // eslint-disable-line
 
   // Carga propiedades desde Supabase al iniciar sesión
   useEffect(() => {
@@ -416,14 +443,9 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
             ) : (
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {[...filteredTenants]
-                  .map(t => {
-                    const msgs = getMessages(t.landlordEmail, t.propertyId, t.roomId, t.tenantId);
-                    return { ...t, unread: getUnreadCount(t.landlordEmail, t.propertyId, t.roomId, t.tenantId, 'landlord'), lastTs: msgs[msgs.length - 1]?.timestamp || '' };
-                  })
+                  .map(t => ({ ...t, ...(tenantMeta[t.key] || { unread: 0, lastTs: '', lastContent: '' }) }))
                   .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
                   .map(t => {
-                    const msgs = getMessages(t.landlordEmail, t.propertyId, t.roomId, t.tenantId);
-                    const last = msgs[msgs.length - 1];
                     const initials = t.tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                     const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
                     const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
@@ -464,18 +486,18 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
                             <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>{t.tenantName}</p>
-                            {last && (
+                            {t.lastTs && (
                               <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
-                                {new Date(last.timestamp).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                {new Date(t.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                               </span>
                             )}
                           </div>
                           <p style={{ margin: 0, fontSize: '12px', color: '#888', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {t.propertyName}
                           </p>
-                          {last && (
+                          {t.lastContent && (
                             <p style={{ margin: '2px 0 0', fontSize: '13px', color: t.unread > 0 ? '#333' : '#aaa', fontWeight: t.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {last.text}
+                              {t.lastContent}
                             </p>
                           )}
                         </div>
@@ -497,7 +519,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
           tenantName={chatWith.tenantName}
           propertyName={chatWith.propertyName}
           currentRole="landlord"
-          onBack={() => setChatWith(null)}
+          onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
         />
       )}
 
@@ -538,8 +560,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
 
         {/* Chat */}
         {(() => {
-          const totalUnread = getAllTenants(properties, userEmail).reduce((sum, t) =>
-            sum + getUnreadCount(t.landlordEmail, t.propertyId, t.roomId, t.tenantId, 'landlord'), 0);
+          const totalUnread = Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
           return (
             <button onClick={() => switchTab('chat')} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
