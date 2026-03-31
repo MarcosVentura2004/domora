@@ -66,13 +66,30 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
     setRentals(built);
     setLoading(false);
 
-    // Verificar en Supabase si cada código sigue activo
+    const now = new Date();
+
+    // Verificar en Supabase si cada código sigue activo y leer estado de pago
     built.forEach(async (rental) => {
-      const { data, error } = await supabase.rpc('find_property_by_tenant_code', { p_code: rental.code });
-      console.log('[InquilinoHome] RPC result for code', rental.code, '→ data:', data, '| error:', error);
+      const { data } = await supabase.rpc('find_property_by_tenant_code', { p_code: rental.code });
       if (!data) {
         setRentals(prev =>
           prev.map(r => r.code === rental.code ? { ...r, expired: true } : r)
+        );
+        return;
+      }
+      // Leer estado del pago del mes actual
+      const col = rental.roomId ? 'room_id' : 'tenant_id';
+      const val = rental.roomId || rental.tenantId;
+      const { data: payment } = await supabase
+        .from('payments')
+        .select('status')
+        .eq(col, val)
+        .eq('year', now.getFullYear())
+        .eq('month', now.getMonth())
+        .maybeSingle();
+      if (payment) {
+        setRentals(prev =>
+          prev.map(r => r.code === rental.code ? { ...r, paymentStatus: payment.status } : r)
         );
       }
     });
@@ -195,9 +212,17 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
                     <p className="rental-price">{data.rent} €/mes</p>
                   </div>
                   <div className="rental-card-footer">
-                    <span className="payment-badge pending">
-                      Pago pendiente ({data.paymentConfig.startDay}–{data.paymentConfig.endDay})
-                    </span>
+                    {data.paymentStatus === 'confirmed' && (
+                      <span className="payment-badge paid">Pago confirmado</span>
+                    )}
+                    {data.paymentStatus === 'pending' && (
+                      <span className="payment-badge sent">Pago enviado — pendiente de confirmar</span>
+                    )}
+                    {!data.paymentStatus && (
+                      <span className="payment-badge pending">
+                        Pago pendiente ({data.paymentConfig.startDay}–{data.paymentConfig.endDay})
+                      </span>
+                    )}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                       <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
