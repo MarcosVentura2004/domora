@@ -4,6 +4,7 @@ import CodeEntry from './CodeEntry';
 import InquilinoDetail from './InquilinoDetail';
 import ChatConversation, { getUnreadCount } from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
+import { supabase } from '../supabaseClient';
 
 export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCodesUpdate, onSwitchRole }) {
   const [rentals, setRentals] = useState([]);
@@ -13,7 +14,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [chatForRental, setChatForRental] = useState(null);
 
-  // Construye los alquileres desde localStorage (guardado por CodeEntry)
+  // Construye los alquileres desde localStorage y verifica en Supabase si siguen activos
   useEffect(() => {
     if (!tenantCodes.length) {
       setRentals([]);
@@ -29,38 +30,52 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
 
       const props = JSON.parse(localStorage.getItem(`properties_${meta.landlordEmail}`) || '[]');
       const prop = props.find(p => String(p.id) === String(meta.propertyId));
-      if (!prop) return null;
 
+      // Si no hay datos en localStorage usamos placeholders para mostrar la tarjeta expirada
+      const address = prop?.name || code;
       let tenantName = '';
-      let rent = prop.price;
+      let rent = prop?.price || 0;
 
-      if (meta.roomId) {
-        const room = (prop.rooms || []).find(r => String(r.id) === String(meta.roomId));
-        rent = room?.price || prop.price;
-        tenantName = room?.tenant?.name || '';
-      } else {
-        const tenant = (prop.tenants || []).find(t => String(t.id) === String(meta.tenantId));
-        rent = tenant?.amount || prop.price;
-        tenantName = tenant?.name || '';
+      if (prop) {
+        if (meta.roomId) {
+          const room = (prop.rooms || []).find(r => String(r.id) === String(meta.roomId));
+          rent = room?.price || prop.price;
+          tenantName = room?.tenant?.name || '';
+        } else {
+          const tenant = (prop.tenants || []).find(t => String(t.id) === String(meta.tenantId));
+          rent = tenant?.amount || prop.price;
+          tenantName = tenant?.name || '';
+        }
       }
 
       return {
         code,
         type: meta.roomId ? 'room' : 'alquilado',
-        address: prop.name,
+        address,
         rent,
         tenantName,
-        paymentConfig: prop.paymentConfig || { startDay: 1, endDay: 5 },
+        paymentConfig: prop?.paymentConfig || { startDay: 1, endDay: 5 },
         landlordEmail: meta.landlordEmail,
         propertyId: meta.propertyId,
         roomId: meta.roomId || null,
         tenantId: meta.tenantId,
-        expired: false,
+        expired: false, // se actualiza tras verificar en Supabase
       };
     }).filter(Boolean);
 
     setRentals(built);
     setLoading(false);
+
+    // Verificar en Supabase si cada código sigue activo
+    built.forEach(async (rental) => {
+      const { data, error } = await supabase.rpc('find_property_by_tenant_code', { p_code: rental.code });
+      console.log('[InquilinoHome] RPC result for code', rental.code, '→ data:', data, '| error:', error);
+      if (!data) {
+        setRentals(prev =>
+          prev.map(r => r.code === rental.code ? { ...r, expired: true } : r)
+        );
+      }
+    });
   }, [tenantCodes]);
 
   const handleCodeValid = (code) => {
