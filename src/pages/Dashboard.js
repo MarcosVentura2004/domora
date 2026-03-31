@@ -13,12 +13,16 @@ function getAllTenants(properties, landlordEmail) {
     // Entrada de grupo para propiedades multi-inquilino o por habitaciones
     const isGroupEligible = prop.status === 'por_habitaciones' || prop.isSharedProperty;
     if (isGroupEligible) {
+      const names = prop.status === 'por_habitaciones'
+        ? (prop.rooms || []).filter(r => r.tenant?.name).map(r => r.tenant.name)
+        : (prop.tenants || []).map(t => t.name).filter(Boolean);
       list.push({
         key: `${prop.id}_group`,
         landlordEmail,
         propertyId: prop.id,
         propertyName: prop.name,
-        tenantName: 'Todos los inquilinos',
+        tenantName: `Inquilinos · ${prop.name}`,
+        tenantSubtitle: names.join(', ') || 'Sin inquilinos',
         tenantId: null,
         roomId: null,
         isGroup: true,
@@ -523,7 +527,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                             )}
                           </div>
                           <p style={{ margin: 0, fontSize: '12px', color: '#888', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {t.propertyName}
+                            {t.isGroup ? t.tenantSubtitle : t.propertyName}
                           </p>
                           {t.lastContent && (
                             <p style={{ margin: '2px 0 0', fontSize: '13px', color: t.unread > 0 ? '#333' : '#aaa', fontWeight: t.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

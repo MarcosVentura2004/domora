@@ -73,6 +73,17 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [incidentFile, setIncidentFile] = useState(null); // { id, dataUrl, fileName, fileType, fileSize }
   const [showChat, setShowChat] = useState(false);
   const [showGroupChat, setShowGroupChat] = useState(false);
+  const [hasGroupChat, setHasGroupChat] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('landlord_email', rental.landlordEmail)
+      .eq('property_id', rental.propertyId)
+      .eq('is_group_message', true)
+      .then(({ count }) => { if (count > 0) setHasGroupChat(true); });
+  }, [rental.landlordEmail, rental.propertyId]); // eslint-disable-line
   const incidentFileRef = useRef(null);
   const [showDocs, setShowDocs] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
@@ -340,7 +351,7 @@ export default function InquilinoDetail({ rental, onBack }) {
             </svg>
             <span>Chat con el propietario</span>
           </button>
-          {rental.hasGroupChat && (
+          {hasGroupChat && (
             <button className="inquilino-action-box" onClick={() => setShowGroupChat(true)}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
