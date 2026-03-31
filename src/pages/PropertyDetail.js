@@ -178,7 +178,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     const nowDate = new Date();
     supabase
       .from('payments')
-      .select('tenant_id, room_id, status, amount')
+      .select('tenant_id, room_id, status, amount, confirmed_at')
       .eq('property_id', String(property.id))
       .eq('year', nowDate.getFullYear())
       .eq('month', nowDate.getMonth())
@@ -803,11 +803,19 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
             <div className="tenants-payment-grid">
               {tenants.map(tenant => {
                 const tenantStatus = getTenantPaymentStatus(tenant.id);
-                const tenantPayment = payments.find(p => 
-                  p.year === currentYear && 
-                  p.month === currentMonth && 
-                  p.tenantId === tenant.id
+                const supabasePaymentForTenant = pendingSupabasePayments.find(p => p.tenant_id === tenant.id);
+                const localPayment = payments.find(p =>
+                  p.year === currentYear && p.month === currentMonth && p.tenantId === tenant.id
                 );
+                // Supabase es fuente de verdad; localStorage como fallback solo para datos históricos
+                const tenantPayment = supabasePaymentForTenant
+                  ? {
+                      ...localPayment,
+                      amount: supabasePaymentForTenant.amount ?? localPayment?.amount,
+                      status: supabasePaymentForTenant.status,
+                      confirmedAt: supabasePaymentForTenant.confirmed_at ?? localPayment?.confirmedAt,
+                    }
+                  : localPayment;
                 const statusInfo = getPaymentStatusInfo(tenantStatus);
                 
                 return (
@@ -828,7 +836,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                       </span>
                     </div>
 
-                    {tenantStatus === 'pending_confirmation' && tenantPayment && (
+                    {tenantStatus === 'pending_confirmation' && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: tenant.amount })}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -846,14 +854,14 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                       </div>
                     )}
 
-                    {tenantStatus === 'paid' && tenantPayment && (
+                    {tenantStatus === 'paid' && (
                       <div className="tenant-payment-actions">
                         <p className="payment-confirmed-text">
-                          ✓ {tenantPayment.amount !== undefined ? `${tenantPayment.amount} €` : `${tenant.amount} €`}
-                          {tenantPayment.amount !== undefined && tenantPayment.amount !== tenant.amount && (
+                          ✓ {tenantPayment?.amount !== undefined ? `${tenantPayment.amount} €` : `${tenant.amount} €`}
+                          {tenantPayment?.amount !== undefined && tenantPayment.amount !== tenant.amount && (
                             <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '4px' }}>(base: {tenant.amount} €)</span>
                           )}
-                          {' · '}{new Date(tenantPayment.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                          {tenantPayment?.confirmedAt && ' · '}{tenantPayment?.confirmedAt && new Date(tenantPayment.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </p>
                         <button className="payment-cancel-link" onClick={() => handleCancelPayment(tenant.id)}>
                           Cancelar

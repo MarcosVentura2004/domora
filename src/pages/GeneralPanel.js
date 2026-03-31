@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
 import { getFile } from '../utils/fileStorage';
 import ProfileMenu from '../components/ProfileMenu';
+import { supabase } from '../supabaseClient';
 
 const now = new Date();
 const currentYear = now.getFullYear();
@@ -42,21 +43,25 @@ function getMonthlyExpenses(property) {
   }, 0);
 }
 
-function generateAlerts(properties) {
+function generateAlerts(properties, supabasePayments = []) {
   const alerts = [];
 
   properties.forEach(property => {
     const ownership = (property.ownershipPercentage || 100) / 100;
 
-    // Pagos pendientes de confirmar
+    // Pagos pendientes de confirmar (Supabase es fuente de verdad)
     if (property.status === 'alquilado' || property.status === 'por_habitaciones') {
-      const pending = (property.payments || []).filter(
+      const supabasePending = supabasePayments.filter(
+        p => String(p.property_id) === String(property.id) && p.status === 'pending'
+      );
+      const localPending = (property.payments || []).filter(
         p => p.year === currentYear && p.month === currentMonth && p.status === 'pending'
       );
-      if (pending.length > 0) {
+      const pendingCount = supabasePending.length || localPending.length;
+      if (pendingCount > 0) {
         alerts.push({
           type: 'warning',
-          text: `${property.name} — ${pending.length} pago${pending.length > 1 ? 's' : ''} pendiente${pending.length > 1 ? 's' : ''} de confirmar`,
+          text: `${property.name} — ${pendingCount} pago${pendingCount > 1 ? 's' : ''} pendiente${pendingCount > 1 ? 's' : ''} de confirmar`,
           property: property.name,
         });
       }
@@ -102,10 +107,14 @@ function generateAlerts(properties) {
 
     // Sin pagos este mes (alquilado con inquilino)
     if (property.status === 'alquilado' && (property.tenants || []).length > 0) {
-      const hasPayment = (property.payments || []).some(
+      const supabaseForProperty = supabasePayments.filter(
+        p => String(p.property_id) === String(property.id)
+      );
+      const hasSupabasePayment = supabaseForProperty.length > 0;
+      const hasLocalPayment = (property.payments || []).some(
         p => p.year === currentYear && p.month === currentMonth
       );
-      if (!hasPayment) {
+      if (!hasSupabasePayment && !hasLocalPayment) {
         alerts.push({
           type: 'warning',
           text: `${property.name} — sin registro de pago este mes`,
@@ -252,6 +261,19 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [supabasePayments, setSupabasePayments] = useState([]);
+
+  useEffect(() => {
+    const propertyIds = properties.map(p => String(p.id));
+    if (propertyIds.length === 0) return;
+    supabase
+      .from('payments')
+      .select('property_id, tenant_id, room_id, status')
+      .in('property_id', propertyIds)
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .then(({ data }) => { if (data) setSupabasePayments(data); });
+  }, [properties]);
 
   const totalIncome = properties.reduce((sum, p) => sum + getMonthlyIncome(p), 0);
   const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p), 0);
@@ -269,7 +291,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
   // Re-read from localStorage to catch incidents added by tenants after page load
   const freshProperties = JSON.parse(localStorage.getItem(`properties_${userEmail}`) || '[]');
-  const alerts = generateAlerts(freshProperties);
+  const alerts = generateAlerts(freshProperties, supabasePayments);
   const tips = generateTips(properties);
 
   // Datos por propiedad para el ranking

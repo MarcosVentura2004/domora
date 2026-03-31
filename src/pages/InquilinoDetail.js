@@ -11,47 +11,6 @@ function getProperty(rental) {
   return properties.find(p => p.id === rental.propertyId) || null;
 }
 
-function getPayments(rental) {
-  return getProperty(rental)?.payments || [];
-}
-
-function getCurrentPayment(rental) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const payments = getPayments(rental);
-  return rental.roomId
-    ? payments.find(p => p.year === year && p.month === month && p.roomId === rental.roomId)
-    : payments.find(p => p.year === year && p.month === month && p.tenantId === rental.tenantId);
-}
-
-function markPaymentAsPending(rental) {
-  const { landlordEmail, propertyId, roomId, tenantId } = rental;
-  const properties = JSON.parse(localStorage.getItem(`properties_${landlordEmail}`) || '[]');
-  const idx = properties.findIndex(p => p.id === propertyId);
-  if (idx === -1) return false;
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const payments = properties[idx].payments || [];
-
-  const exists = roomId
-    ? payments.find(p => p.year === year && p.month === month && p.roomId === roomId)
-    : payments.find(p => p.year === year && p.month === month && p.tenantId === tenantId);
-  if (exists) return false;
-
-  properties[idx].payments = [...payments, {
-    year, month,
-    status: 'pending',
-    markedAt: new Date().toISOString(),
-    amount: rental.rent,
-    tenantName: rental.tenantName,
-    ...(roomId ? { roomId } : { tenantId }),
-  }];
-  localStorage.setItem(`properties_${landlordEmail}`, JSON.stringify(properties));
-  return true;
-}
 
 function getDocs(rental) {
   const property = getProperty(rental);
@@ -156,31 +115,38 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [showDocs, setShowDocs] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [, setDocsVersion] = useState(0);
-  const [, setPaymentVersion] = useState(0);
   const [supabasePayment, setSupabasePayment] = useState(null);
+  const [paymentHistory, setPaymentHistory] = useState([]);
 
   useEffect(() => {
     const now = new Date();
+    // Pago del mes actual
     supabase
       .rpc('get_payment_by_code', {
         p_code: rental.code,
         p_year: now.getFullYear(),
         p_month: now.getMonth(),
       })
-      .then(({ data }) => setSupabasePayment(data));
-  }, [rental.code]);
+      .then(({ data }) => setSupabasePayment(Array.isArray(data) ? (data[0] ?? null) : data));
+    // Historial completo
+    const query = supabase
+      .from('payments')
+      .select('year, month, status, amount')
+      .order('year', { ascending: false })
+      .order('month', { ascending: false });
+    if (rental.roomId) {
+      query.eq('room_id', rental.roomId);
+    } else {
+      query.eq('tenant_id', rental.tenantId);
+    }
+    query.then(({ data }) => { if (data) setPaymentHistory(data); });
+  }, [rental.code, rental.roomId, rental.tenantId]);
 
-  // Re-read from localStorage on each render bump
-  const currentPayment = getCurrentPayment(rental); // eslint-disable-line react-hooks/exhaustive-deps
-  const isPaid = supabasePayment?.status === 'confirmed' || currentPayment?.status === 'confirmed';
-  const isSent = !isPaid && (supabasePayment?.status === 'pending' || currentPayment?.status === 'pending');
+  const isPaid = supabasePayment?.status === 'confirmed';
+  const isSent = !isPaid && supabasePayment?.status === 'pending';
   const canConfirm = !isPaid && !isSent;
 
-  const allPayments = getPayments(rental);
-  const historyPayments = (rental.roomId
-    ? allPayments.filter(p => p.roomId === rental.roomId)
-    : allPayments.filter(p => p.tenantId === rental.tenantId)
-  ).sort((a, b) => b.year !== a.year ? b.year - a.year : b.month - a.month);
+  const historyPayments = paymentHistory;
 
   const allDocs = getDocs(rental);
   const landlordDocs = allDocs.filter(d => d.sharedWithTenant && !d.sharedByTenant && !d.uploadedByTenant);
@@ -202,9 +168,7 @@ export default function InquilinoDetail({ rental, onBack }) {
       alert('Ya has enviado el pago este mes.');
       return;
     }
-    markPaymentAsPending(rental);
     setSupabasePayment({ status: 'pending' });
-    setPaymentVersion(v => v + 1);
   };
 
   const handleSendIncident = async () => {
