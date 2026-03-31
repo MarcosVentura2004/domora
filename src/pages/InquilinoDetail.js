@@ -1,53 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import './InquilinoDetail.css';
-import { saveFile, getFile } from '../utils/fileStorage';
+import { saveFile } from '../utils/fileStorage';
 import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-function getProperty(rental) {
-  const properties = JSON.parse(localStorage.getItem(`properties_${rental.landlordEmail}`) || '[]');
-  return properties.find(p => p.id === rental.propertyId) || null;
-}
-
-
-function getDocs(rental) {
-  const property = getProperty(rental);
-  if (!property) return [];
-  if (rental.roomId) {
-    return (property.rooms || []).find(r => r.id === rental.roomId)?.documents || [];
-  }
-  return property.documents || [];
-}
-
-function saveDocs(rental, updatedDocs) {
-  const { landlordEmail, propertyId, roomId } = rental;
-  const properties = JSON.parse(localStorage.getItem(`properties_${landlordEmail}`) || '[]');
-  const idx = properties.findIndex(p => p.id === propertyId);
-  if (idx === -1) return;
-
-  if (roomId) {
-    const room = (properties[idx].rooms || []).find(r => r.id === roomId);
-    const roomName = room?.name || '';
-    properties[idx].rooms = (properties[idx].rooms || []).map(r =>
-      r.id === roomId ? { ...r, documents: updatedDocs } : r
-    );
-    // Sync shared tenant docs to property-level (both old sharedByTenant and new uploadedByTenant)
-    const sharedTenantDocs = updatedDocs
-      .filter(d => d.sharedByTenant)
-      .map(d => ({ ...d, roomName }));
-    properties[idx].documents = [
-      ...(properties[idx].documents || []).filter(d => !d.uploadedByTenant && !d.sharedByTenant),
-      ...sharedTenantDocs,
-    ];
-  } else {
-    // Keep landlord docs, replace all tenant docs with updated ones
-    const landlordDocs = (properties[idx].documents || []).filter(d => !d.uploadedByTenant && !d.sharedByTenant);
-    const tenantDocs = updatedDocs.filter(d => d.uploadedByTenant || d.sharedByTenant);
-    properties[idx].documents = [...landlordDocs, ...tenantDocs];
-  }
-  localStorage.setItem(`properties_${landlordEmail}`, JSON.stringify(properties));
+function getPublicUrl(storagePath) {
+  if (!storagePath) return null;
+  return supabase.storage.from('documents').getPublicUrl(storagePath).data.publicUrl;
 }
 
 function FileIcon({ fileType, size = 20 }) {
@@ -114,7 +75,7 @@ export default function InquilinoDetail({ rental, onBack }) {
   const incidentFileRef = useRef(null);
   const [showDocs, setShowDocs] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
-  const [, setDocsVersion] = useState(0);
+  const [docs, setDocs] = useState([]);
   const [supabasePayment, setSupabasePayment] = useState(null);
   const [paymentHistory, setPaymentHistory] = useState([]);
 
@@ -166,9 +127,8 @@ export default function InquilinoDetail({ rental, onBack }) {
 
   const historyPayments = paymentHistory;
 
-  const allDocs = getDocs(rental);
-  const landlordDocs = allDocs.filter(d => d.sharedWithTenant && !d.sharedByTenant && !d.uploadedByTenant);
-  const myDocs = allDocs.filter(d => d.uploadedByTenant || d.sharedByTenant);
+  const landlordDocs = docs.filter(d => d.uploaded_by === 'landlord' && d.shared_with_tenant);
+  const myDocs = docs.filter(d => d.uploaded_by === 'tenant');
 
   const handleConfirmPayment = async () => {
     if (supabasePayment) {
@@ -188,6 +148,17 @@ export default function InquilinoDetail({ rental, onBack }) {
     }
     setSupabasePayment({ status: 'pending' });
   };
+
+  // Cargar documentos desde Supabase
+  useEffect(() => {
+    const query = supabase
+      .from('documents')
+      .select('*')
+      .eq('property_id', String(rental.propertyId))
+      .order('created_at', { ascending: false });
+    if (rental.roomId) query.eq('room_id', String(rental.roomId));
+    query.then(({ data }) => { if (data) setDocs(data); });
+  }, [rental.propertyId, rental.roomId]);
 
   const handleSendIncident = async () => {
     if (!incidentText.trim() && !incidentFile) return;
@@ -235,31 +206,48 @@ export default function InquilinoDetail({ rental, onBack }) {
     );
   }
 
-  const handleAddDoc = async (newDoc, shareWithLandlord) => {
-    const id = Date.now();
-    const { dataUrl, ...docMeta } = newDoc;
+  const handleAddDoc = async ({ name, file, shareWithLandlord }) => {
+    const storagePath = file
+      ? `${rental.propertyId}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
+      : null;
 
-    // Save metadata to localStorage first (synchronous — always persists)
-    const current = getDocs(rental);
-    const updated = [...current, { ...docMeta, id, uploadedByTenant: true, sharedByTenant: shareWithLandlord }];
-    saveDocs(rental, updated);
-    setDocsVersion(v => v + 1);
-    setShowAddDoc(false);
-
-    // Save file to IndexedDB after (async, best-effort)
-    if (dataUrl) {
-      try { await saveFile(id, dataUrl); } catch (err) { console.error('Error guardando archivo:', err); }
+    if (file && storagePath) {
+      const { error: uploadError } = await supabase.storage.from('documents').upload(storagePath, file);
+      if (uploadError) { alert('Error subiendo el archivo.'); return; }
     }
+
+    const { data: newDoc, error: dbError } = await supabase
+      .from('documents')
+      .insert({
+        property_id: String(rental.propertyId),
+        room_id: rental.roomId ? String(rental.roomId) : null,
+        landlord_email: rental.landlordEmail,
+        name,
+        file_name: file?.name || null,
+        file_type: file?.type || null,
+        file_size: file?.size || null,
+        storage_path: storagePath || '',
+        uploaded_by: 'tenant',
+        tenant_id: String(rental.tenantId),
+        shared_by_tenant: shareWithLandlord,
+        shared_with_tenant: false,
+      })
+      .select()
+      .single();
+
+    if (dbError) { alert('Error guardando el documento.'); return; }
+    setDocs(prev => [...prev, newDoc]);
+    setShowAddDoc(false);
   };
 
-  const handleDownloadDoc = async (doc) => {
-    const dataUrl = await getFile(doc.id);
-    if (dataUrl) {
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = doc.fileName || doc.name;
-      a.click();
-    }
+  const handleDownloadDoc = (doc) => {
+    const url = getPublicUrl(doc.storage_path);
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.file_name || doc.name;
+    a.target = '_blank';
+    a.click();
   };
 
   return (
@@ -418,12 +406,12 @@ export default function InquilinoDetail({ rental, onBack }) {
                 <p className="docs-section-label">Del propietario</p>
                 {landlordDocs.map(doc => (
                   <div key={doc.id} className="inquilino-doc-row" onClick={() => handleDownloadDoc(doc)}>
-                    <FileIcon fileType={doc.fileType} size={20} />
+                    <FileIcon fileType={doc.file_type} size={20} />
                     <div className="doc-info">
                       <p className="doc-name">{doc.name}</p>
-                      {doc.fileSize && <p className="doc-meta">{formatFileSize(doc.fileSize)}</p>}
+                      {doc.file_size && <p className="doc-meta">{formatFileSize(doc.file_size)}</p>}
                     </div>
-                    {doc.fileName && (
+                    {doc.file_name && (
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                         <polyline points="7 10 12 15 17 10" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -442,12 +430,12 @@ export default function InquilinoDetail({ rental, onBack }) {
             )}
             {myDocs.map(doc => (
               <div key={doc.id} className="inquilino-doc-row" onClick={() => handleDownloadDoc(doc)}>
-                <FileIcon fileType={doc.fileType} size={20} />
+                <FileIcon fileType={doc.file_type} size={20} />
                 <div className="doc-info">
                   <p className="doc-name">{doc.name}</p>
-                  {doc.fileSize && <p className="doc-meta">{formatFileSize(doc.fileSize)}</p>}
+                  {doc.file_size && <p className="doc-meta">{formatFileSize(doc.file_size)}</p>}
                 </div>
-                {doc.sharedByTenant && <span className="doc-shared-badge">Compartido</span>}
+                {doc.shared_by_tenant && <span className="doc-shared-badge">Compartido</span>}
               </div>
             ))}
 
@@ -464,7 +452,7 @@ export default function InquilinoDetail({ rental, onBack }) {
         )}
       </div>
 
-      {showAddDoc && <AddDocModal onClose={() => setShowAddDoc(false)} onAdd={(doc, share) => handleAddDoc(doc, share)} />}
+      {showAddDoc && <AddDocModal onClose={() => setShowAddDoc(false)} onAdd={handleAddDoc} />}
     </div>
   );
 }
@@ -482,25 +470,11 @@ function AddDocModal({ onClose, onAdd }) {
     if (!name) setName(file.name.replace(/\.[^/.]+$/, ''));
   };
 
-  const buildDoc = async () => {
-    if (selectedFile) {
-      const dataUrl = await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(selectedFile);
-      });
-      return { name, fileName: selectedFile.name, fileType: selectedFile.type, fileSize: selectedFile.size, dataUrl };
-    }
-    return { name };
-  };
-
-  const handleAdd = async (share) => {
+  const handleAdd = async (shareWithLandlord) => {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      const doc = await buildDoc();
-      onAdd(doc, share);
+      await onAdd({ name, file: selectedFile || null, shareWithLandlord });
     } catch (err) {
       console.error(err);
     } finally {
