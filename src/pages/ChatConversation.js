@@ -109,26 +109,29 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   // Real-time subscription
   useEffect(() => {
     const channel = supabase
-      .channel(`chat:${landlordEmail}:${propertyId}:${roomId || tenantId}`)
+      .channel(`chat:${landlordEmail}:${propertyId}:${roomId || tenantId}:${isGroup ? 'group' : 'individual'}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
-        filter: `property_id=eq.${propertyId}`,
       }, (payload) => {
         const m = payload.new;
+        // Descartar mensajes de otras propiedades o propietarios
+        if (m.property_id !== propertyId || m.landlord_email !== landlordEmail) return;
+        // Separar grupo de individual
         if (isGroup && !m.is_group_message) return;
         if (!isGroup && m.is_group_message) return;
+        // Para chats individuales, verificar room_id o tenant_id
         if (!isGroup) {
           if (roomId && m.room_id !== roomId) return;
           if (!roomId && (m.tenant_id !== tenantId || m.room_id)) return;
         }
-        setMessages(prev => [...prev, payload.new]);
+        setMessages(prev => [...prev, m]);
         markAsRead();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [landlordEmail, propertyId, roomId, tenantId, currentRole]); // eslint-disable-line
+  }, [landlordEmail, propertyId, roomId, tenantId, currentRole, isGroup]); // eslint-disable-line
 
   // Scroll to bottom on new message
   useEffect(() => {
