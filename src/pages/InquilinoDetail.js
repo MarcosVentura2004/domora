@@ -235,7 +235,11 @@ export default function InquilinoDetail({ rental, onBack }) {
       .select()
       .single();
 
-    if (dbError) { alert('Error guardando el documento.'); return; }
+    if (dbError) {
+      console.error('[InquilinoDetail] insert error:', dbError);
+      alert(`Error guardando el documento: ${dbError.message}`);
+      return;
+    }
     setDocs(prev => [...prev, newDoc]);
     setShowAddDoc(false);
   };

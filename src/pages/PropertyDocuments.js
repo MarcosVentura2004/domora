@@ -104,7 +104,6 @@ function PropertyDocuments({ property, room, landlordEmail, onBack, onUpdate }) 
         room_id: room ? String(room.id) : null,
         landlord_email: landlordEmail,
         name,
-        description: description || null,
         file_name: file?.name || null,
         file_type: file?.type || null,
         file_size: file?.size || null,
@@ -116,7 +115,8 @@ function PropertyDocuments({ property, room, landlordEmail, onBack, onUpdate }) 
       .single();
 
     if (dbError) {
-      alert('Error guardando el documento.');
+      console.error('[PropertyDocuments] insert error:', dbError);
+      alert(`Error guardando el documento: ${dbError.message}`);
       return;
     }
 
@@ -147,7 +147,7 @@ function PropertyDocuments({ property, room, landlordEmail, onBack, onUpdate }) 
   };
 
   const landlordDocs = documents.filter(d => d.uploaded_by === 'landlord');
-  const tenantDocs = documents.filter(d => d.uploaded_by === 'tenant');
+  const tenantDocs = documents.filter(d => d.uploaded_by === 'tenant' && d.shared_by_tenant);
 
   return (
     <div className="documents-container">
