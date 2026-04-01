@@ -59,7 +59,10 @@ function getMonthlyExpenses(property, supabaseExpenses) {
   const propertyExpenses = (supabaseExpenses || []).filter(e => String(e.property_id) === String(property.id));
   const active = getExpensesForMonth(propertyExpenses, currentYear, currentMonth);
   const ownership = property.ownershipPercentage || 100;
-  return active.reduce((sum, e) => sum + getMonthlyEquivalentGP(e) * ownership / 100, 0);
+  return active.reduce((sum, e) => {
+    const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
+    return sum + getMonthlyEquivalentGP(e) * pct / 100;
+  }, 0);
 }
 
 function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []) {
@@ -160,7 +163,7 @@ function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []
     // Gastos recurrentes variables pendientes de importe
     const propertyExpenses = supabaseExpenses.filter(e => String(e.property_id) === String(property.id));
     propertyExpenses
-      .filter(e => e.type === 'recurrente_variable' && e.active !== false && !e.amount)
+      .filter(e => e.type === 'recurrente_variable' && e.frequency !== 'manual' && e.active !== false && !e.amount)
       .forEach(e => {
         const isDue = getExpensesForMonth([e], currentYear, currentMonth).length > 0;
         if (isDue) {
