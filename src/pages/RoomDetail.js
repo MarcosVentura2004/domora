@@ -3,6 +3,7 @@ import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
+import ExpenseSummary from './ExpenseSummary';
 
 function exportRoomToExcel(roomName, historyMonths, accumulated) {
   import('xlsx').then(XLSX => {
@@ -175,6 +176,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [expenses, setExpenses] = useState([]);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showExpenseSummary, setShowExpenseSummary] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
   const [showEditTenant, setShowEditTenant] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
@@ -403,6 +405,21 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
   if (showDocuments) {
     return <PropertyDocuments property={property} room={room} landlordEmail={landlordEmail} onBack={() => setShowDocuments(false)} onUpdate={onUpdate} />;
+  }
+
+  if (showExpenseSummary) {
+    const getMonthlyIncome = (yr, mo) =>
+      (property.payments || [])
+        .filter(p => p.year === yr && p.month === mo && p.roomId === room.id && p.status === 'confirmed')
+        .reduce((s, p) => s + (p.amount ?? room.price), 0) * ((property.ownershipPercentage || 100) / 100);
+    return (
+      <ExpenseSummary
+        expenses={expenses}
+        onBack={() => setShowExpenseSummary(false)}
+        propertyName={`${property.name} — ${room.name}`}
+        getMonthlyIncome={getMonthlyIncome}
+      />
+    );
   }
 
   if (showChat && room.tenant) {
@@ -733,9 +750,15 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       <div className="info-card expenses-card">
         <div className="card-header clickable" onClick={() => setShowExpenses(!showExpenses)}>
           <h3>Gastos de esta habitación</h3>
-          <div className="expenses-total">
-            <span>{totalExpenses.toFixed(2)} €/mes</span>
-            <span className="arrow">{showExpenses ? '▼' : '›'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={e => { e.stopPropagation(); setShowExpenseSummary(true); }}
+              style={{ fontSize: 11, padding: '3px 9px', borderRadius: 8, border: '1px solid #ddd', background: 'white', color: '#666', cursor: 'pointer' }}>
+              Resumen
+            </button>
+            <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>{totalExpenses.toFixed(2)} €/mes</span>
+              <span className="arrow">{showExpenses ? '▼' : '›'}</span>
+            </span>
           </div>
         </div>
         {showExpenses && (
@@ -940,15 +963,14 @@ function PendingVariableInput({ expenseId, onSave }) {
 }
 
 const EXPENSE_CATEGORIES = [
-  { key: 'ibi', label: 'IBI' },
-  { key: 'comunidad', label: 'Comunidad de propietarios' },
-  { key: 'seguro', label: 'Seguro del hogar' },
-  { key: 'reparaciones', label: 'Reparaciones y conservación' },
-  { key: 'suministros', label: 'Suministros' },
-  { key: 'amortizacion', label: 'Amortización del inmueble' },
-  { key: 'hipoteca', label: 'Intereses hipotecarios' },
-  { key: 'gestion', label: 'Gastos de gestión' },
-  { key: 'otros', label: 'Otros' },
+  { key: 'comunidad',    label: 'Comunidad',         subcategories: ['Cuota', 'Derrama', 'Otros'] },
+  { key: 'suministros',  label: 'Suministros',        subcategories: ['Luz', 'Agua', 'Gas', 'Internet', 'Otros'] },
+  { key: 'seguros',      label: 'Seguros',            subcategories: ['Hogar', 'Impago', 'Responsabilidad civil', 'Otros'] },
+  { key: 'reparaciones', label: 'Reparaciones',       subcategories: ['Fontanería', 'Electricidad', 'Pintura', 'Electrodomésticos', 'Otros'] },
+  { key: 'impuestos',    label: 'Impuestos',          subcategories: ['IBI', 'Basuras', 'Otros'] },
+  { key: 'gestion',      label: 'Gestión',            subcategories: ['Agencia', 'Gestoría', 'Otros'] },
+  { key: 'hipoteca',     label: 'Hipoteca/Préstamo',  subcategories: [] },
+  { key: 'otros',        label: 'Otros',              subcategories: [] },
 ];
 
 const EXPENSE_TYPES = [
@@ -962,12 +984,15 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
   const today = new Date().toISOString().split('T')[0];
   const [type, setType] = useState('recurrente_fijo');
   const [category, setCategory] = useState('');
+  const [subcategory, setSubcategory] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [frequency, setFrequency] = useState('mensual');
   const [durationPayments, setDurationPayments] = useState('');
   const [startDate, setStartDate] = useState(today);
   const [expensePct, setExpensePct] = useState(defaultExpensePct != null ? String(defaultExpensePct) : '');
+
+  const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
   const needsFrequency = type !== 'puntual';
   const isManual = type === 'recurrente_variable' && frequency === 'manual';
@@ -982,10 +1007,13 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const categoryLabel = EXPENSE_CATEGORIES.find(c => c.key === category)?.label || category;
+    const catObj = EXPENSE_CATEGORIES.find(c => c.key === category);
+    const parts = [catObj?.label || category];
+    if (subcategory) parts.push(subcategory);
+    if (description) parts.push(description);
     onAdd({
-      name: description ? `${categoryLabel} — ${description}` : categoryLabel,
-      category, description, type,
+      name: parts.join(' — '),
+      category, subcategory: subcategory || null, description, type,
       frequency: type === 'puntual' ? 'unico' : frequency,
       amount: needsAmount && amount ? parseFloat(amount) : null,
       duration_payments: needsDuration && durationPayments ? parseInt(durationPayments) : null,
@@ -1002,12 +1030,26 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Categoría</label>
-            <select value={category} onChange={e => setCategory(e.target.value)} required
+            <select value={category} onChange={e => handleCategoryChange(e.target.value)} required
               style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', background: 'white', color: category ? '#111' : '#aaa' }}>
               <option value="" disabled>Selecciona una categoría</option>
               {EXPENSE_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>
+          {category && (EXPENSE_CATEGORIES.find(c => c.key === category)?.subcategories?.length > 0) && (
+            <div className="form-group">
+              <label>Subcategoría</label>
+              <div className="frequency-options" style={{ flexWrap: 'wrap' }}>
+                {EXPENSE_CATEGORIES.find(c => c.key === category).subcategories.map(s => (
+                  <button key={s} type="button"
+                    className={`frequency-option ${subcategory === s ? 'selected' : ''}`}
+                    onClick={() => setSubcategory(s === subcategory ? '' : s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="form-group">
             <label>Tipo de gasto</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
