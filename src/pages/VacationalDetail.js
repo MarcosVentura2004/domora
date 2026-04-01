@@ -27,6 +27,7 @@ function getExpensesForMonth(expenses, year, month) {
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
     if (e.type === 'puntual' || e.frequency === 'unico') return year === sy && month === sm;
+    if (e.frequency === 'manual') return true;
     const monthsDiff = (year - sy) * 12 + (month - sm);
     const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : 1;
     if (monthsDiff % step !== 0) return false;
@@ -153,7 +154,11 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
     .reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipMultiplier;
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
-  const myExpenses = visibleExpenses.reduce((sum, e) => sum + getMonthlyEquivalent(e) * (property.ownershipPercentage || 100) / 100, 0);
+  const ownershipPct = property.ownershipPercentage || 100;
+  const myExpenses = visibleExpenses.reduce((sum, e) => {
+    const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPct;
+    return sum + getMonthlyEquivalent(e) * pct / 100;
+  }, 0);
 
   const netIncome = isCurrentMonthFuture ? null : monthIncome - myExpenses;
 
@@ -215,7 +220,10 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
         return s <= me && e >= ms && b.status === 'confirmed';
       });
       const income = mb.reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipMultiplier;
-      const exp = getExpensesForMonth(expenses, y, m).reduce((sum, e) => sum + getMonthlyEquivalent(e) * (property.ownershipPercentage || 100) / 100, 0);
+      const exp = getExpensesForMonth(expenses, y, m).reduce((sum, e) => {
+        const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
+        return sum + getMonthlyEquivalent(e) * pct / 100;
+      }, 0);
       months.push({ year: y, month: m, income, expenses: exp, net: income - exp, bookings: mb.length });
       if (m === 11) { m = 0; y++; } else m++;
     }
@@ -422,7 +430,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
             {visibleExpenses.length === 0 ? (
               <p className="no-expenses">No hay gastos añadidos</p>
             ) : visibleExpenses.map(exp => {
-              const isPendingVariable = exp.type === 'recurrente_variable' && !exp.amount;
+              const isPendingVariable = exp.type === 'recurrente_variable' && exp.frequency !== 'manual' && !exp.amount;
               const monthly = getMonthlyEquivalent(exp);
               const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', mensual: null }[exp.frequency] || null;
               const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[exp.type] || null;
@@ -437,6 +445,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
                         <span style={{ fontSize: 10, color: '#aaa' }}>({exp.payments_made || 0}/{exp.duration_payments} pagos)</span>
                       )}
                       {exp.active === false && <span style={{ fontSize: 10, color: '#aaa' }}>Pausado</span>}
+                      {exp.expense_percentage != null && <span style={{ fontSize: 10, color: '#aaa' }}>{exp.expense_percentage}%</span>}
                     </div>
                     {isPendingVariable && (
                       <PendingVariableInput expenseId={exp.id} onSave={handleUpdateVariableAmount} />
@@ -530,7 +539,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
         />
       )}
       {showAddExpense && (
-        <AddExpenseModal onClose={() => setShowAddExpense(false)} onAdd={handleAddExpense} />
+        <AddExpenseModal onClose={() => setShowAddExpense(false)} onAdd={handleAddExpense} defaultExpensePct={property.ownershipPercentage || 100} />
       )}
       {showEditProperty && (
         <EditVacationalModal
@@ -698,7 +707,7 @@ const EXPENSE_TYPES = [
   { key: 'recurrente_temporal', label: 'Recurrente temporal', desc: 'Mismo importe durante X pagos y para' },
 ];
 
-function AddExpenseModal({ onClose, onAdd }) {
+function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
   const today = new Date().toISOString().split('T')[0];
   const [type, setType] = useState('recurrente_fijo');
   const [category, setCategory] = useState('');
@@ -707,12 +716,18 @@ function AddExpenseModal({ onClose, onAdd }) {
   const [frequency, setFrequency] = useState('mensual');
   const [durationPayments, setDurationPayments] = useState('');
   const [startDate, setStartDate] = useState(today);
+  const [expensePct, setExpensePct] = useState(defaultExpensePct != null ? String(defaultExpensePct) : '');
 
   const needsFrequency = type !== 'puntual';
-  const needsAmount = type !== 'recurrente_variable';
+  const needsAmount = !(type === 'recurrente_variable' && frequency !== 'manual');
+  const isManual = type === 'recurrente_variable' && frequency === 'manual';
   const needsDuration = type === 'recurrente_temporal';
   const freqStep = frequency === 'trimestral' ? 3 : frequency === 'anual' ? 12 : 1;
-  const monthlyEquiv = amount && needsAmount ? (parseFloat(amount) / freqStep).toFixed(2) : null;
+  const monthlyEquiv = amount && needsAmount && !isManual ? (parseFloat(amount) / freqStep).toFixed(2) : null;
+
+  const freqOptions = type === 'recurrente_variable'
+    ? ['mensual', 'trimestral', 'anual', 'manual']
+    : ['mensual', 'trimestral', 'anual'];
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -721,10 +736,11 @@ function AddExpenseModal({ onClose, onAdd }) {
       name: description ? `${categoryLabel} — ${description}` : categoryLabel,
       category, description, type,
       frequency: type === 'puntual' ? 'unico' : frequency,
-      amount: needsAmount && amount ? parseFloat(amount) : null,
+      amount: needsAmount && !isManual && amount ? parseFloat(amount) : null,
       duration_payments: needsDuration && durationPayments ? parseInt(durationPayments) : null,
       start_date: startDate,
       active: true,
+      expense_percentage: expensePct ? parseFloat(expensePct) : null,
     });
   };
 
@@ -734,18 +750,6 @@ function AddExpenseModal({ onClose, onAdd }) {
         <div className="modal-header"><h2>Añadir gasto</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Tipo de gasto</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {EXPENSE_TYPES.map(t => (
-                <button key={t.key} type="button" onClick={() => setType(t.key)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 14px', borderRadius: 10, border: `2px solid ${type === t.key ? '#111' : '#e0e0e0'}`, background: type === t.key ? '#f5f5f5' : 'white', cursor: 'pointer', textAlign: 'left' }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>{t.label}</span>
-                  <span style={{ fontSize: 12, color: '#aaa' }}>{t.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="form-group">
             <label>Categoría</label>
             <select value={category} onChange={e => setCategory(e.target.value)} required
               style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', background: 'white', color: category ? '#111' : '#aaa' }}>
@@ -754,22 +758,35 @@ function AddExpenseModal({ onClose, onAdd }) {
             </select>
           </div>
           <div className="form-group">
-            <label>Descripción (opcional)</label>
-            <input type="text" placeholder="Ej: recibo gas, fontanero..." value={description} onChange={e => setDescription(e.target.value)} />
+            <label>Tipo de gasto</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {EXPENSE_TYPES.map(t => (
+                <button key={t.key} type="button" onClick={() => { setType(t.key); if (t.key !== 'recurrente_variable') setFrequency('mensual'); }}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 14px', borderRadius: 10, border: `2px solid ${type === t.key ? '#111' : '#e0e0e0'}`, background: type === t.key ? '#f5f5f5' : 'white', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>{t.label}</span>
+                  <span style={{ fontSize: 12, color: '#aaa' }}>{t.desc}</span>
+                </button>
+              ))}
+            </div>
           </div>
           {needsFrequency && (
             <div className="form-group">
               <label>Frecuencia</label>
               <div className="frequency-options">
-                {['mensual', 'trimestral', 'anual'].map(f => (
+                {freqOptions.map(f => (
                   <button key={f} type="button" className={`frequency-option ${frequency === f ? 'selected' : ''}`} onClick={() => setFrequency(f)}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                    {f === 'manual' ? 'Manual' : f.charAt(0).toUpperCase() + f.slice(1)}
                   </button>
                 ))}
               </div>
+              {isManual && (
+                <p style={{ fontSize: 12, color: '#888', margin: '6px 0 0' }}>
+                  Introduces el importe cuando llega la factura, sin avisos automáticos.
+                </p>
+              )}
             </div>
           )}
-          {needsAmount && (
+          {needsAmount && !isManual && (
             <div className="form-group">
               <label>Importe por {type === 'puntual' ? 'pago' : { mensual: 'mes', trimestral: 'trimestre', anual: 'año' }[frequency]} (€)</label>
               <input type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required step="0.01" min="0.01" />
@@ -777,11 +794,6 @@ function AddExpenseModal({ onClose, onAdd }) {
                 <p className="monthly-equivalent">Equivalente mensual: {monthlyEquiv} €/mes</p>
               )}
             </div>
-          )}
-          {!needsAmount && (
-            <p style={{ fontSize: 13, color: '#888', background: '#FFF8E1', borderRadius: 8, padding: '10px 12px', margin: '0 0 16px' }}>
-              ℹ El importe se introduce cada vez que llega la factura. Recibirás un aviso cuando toque.
-            </p>
           )}
           {needsDuration && (
             <div className="form-group">
@@ -795,6 +807,15 @@ function AddExpenseModal({ onClose, onAdd }) {
           <div className="form-group">
             <label>Fecha de inicio</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>% de titularidad (opcional)</label>
+            <input type="number" placeholder={`${defaultExpensePct ?? 100}`} value={expensePct} onChange={e => setExpensePct(e.target.value)} step="0.01" min="0" max="100" />
+            <p className="payment-range-note" style={{ marginTop: 6 }}>Déjalo en blanco para usar el % de la propiedad ({defaultExpensePct ?? 100}%)</p>
+          </div>
+          <div className="form-group">
+            <label>Descripción (opcional)</label>
+            <input type="text" placeholder="Ej: recibo gas, fontanero..." value={description} onChange={e => setDescription(e.target.value)} />
           </div>
           <button type="submit" className="submit-button">Añadir gasto</button>
         </form>
