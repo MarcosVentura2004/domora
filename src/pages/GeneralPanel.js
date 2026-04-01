@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
-import { getFile } from '../utils/fileStorage';
 import ProfileMenu from '../components/ProfileMenu';
 import { supabase } from '../supabaseClient';
 
@@ -149,20 +148,6 @@ function generateAlerts(properties, supabasePayments = []) {
       });
     }
 
-    // Incidencias abiertas reportadas por inquilinos
-    (property.incidents || []).filter(i => i.status === 'open').forEach(incident => {
-      const desc = incident.description
-        ? (incident.description.length > 60 ? incident.description.slice(0, 60) + '...' : incident.description)
-        : '';
-      const hasAttachment = !!incident.attachment;
-      const attachmentNote = hasAttachment ? (incident.attachment.fileType?.startsWith('image/') ? ' 📷' : ' 📎') : '';
-      alerts.push({
-        type: 'danger',
-        text: `⚠ Incidencia en ${property.name} (${incident.tenantName})${desc ? `: "${desc}"` : ''}${attachmentNote}`,
-        property: property.name,
-        incident,
-      });
-    });
   });
 
   return alerts;
@@ -212,45 +197,38 @@ function generateTips(properties) {
 }
 
 // ─────────────────────────────────────────────
-// Vista adjunto incidencia
+// Vista adjunto incidencia (URL de Supabase Storage)
 // ─────────────────────────────────────────────
-function IncidentAttachmentView({ attachment }) {
-  const [dataUrl, setDataUrl] = useState(null);
-
-  useEffect(() => {
-    getFile(attachment.id).then(url => setDataUrl(url)).catch(() => {});
-  }, [attachment.id]);
-
-  const isImage = attachment.fileType?.startsWith('image/');
-
-  const handleDownload = () => {
-    if (dataUrl) {
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = attachment.fileName;
-      a.click();
-    }
-  };
+function IncidentAttachmentView({ attachmentUrl }) {
+  if (!attachmentUrl) return null;
+  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(attachmentUrl);
 
   if (isImage) {
     return (
       <div style={{ marginTop: 8 }}>
-        {dataUrl
-          ? <img src={dataUrl} alt={attachment.fileName} onClick={handleDownload} style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: 8, cursor: 'pointer', objectFit: 'cover', display: 'block' }} />
-          : <div style={{ height: 60, background: 'rgba(0,0,0,0.06)', borderRadius: 8 }} />
-        }
+        <img
+          src={attachmentUrl}
+          alt="Adjunto"
+          onClick={() => window.open(attachmentUrl, '_blank')}
+          style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: 8, cursor: 'pointer', objectFit: 'cover', display: 'block' }}
+        />
       </div>
     );
   }
 
   return (
-    <button onClick={handleDownload} style={{ marginTop: 8, background: 'rgba(0,0,0,0.06)', border: 'none', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', width: '100%' }}>
+    <a
+      href={attachmentUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ marginTop: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
+    >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M14 2v6h6" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
-      <span style={{ fontSize: 12, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachment.fileName}</span>
-    </button>
+      <span style={{ fontSize: 12, color: '#555' }}>Ver archivo adjunto</span>
+    </a>
   );
 }
 
@@ -262,6 +240,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [supabasePayments, setSupabasePayments] = useState([]);
+  const [supabaseIncidents, setSupabaseIncidents] = useState([]);
 
   useEffect(() => {
     const propertyIds = properties.map(p => String(p.id));
@@ -274,6 +253,22 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
       .eq('month', currentMonth)
       .then(({ data }) => { if (data) setSupabasePayments(data); });
   }, [properties]);
+
+  useEffect(() => {
+    if (!userEmail) return;
+    supabase
+      .from('incidents')
+      .select('*')
+      .eq('landlord_email', userEmail)
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (data) setSupabaseIncidents(data); });
+  }, [userEmail]);
+
+  const handleResolveIncident = async (incidentId) => {
+    await supabase.from('incidents').update({ status: 'resolved' }).eq('id', incidentId);
+    setSupabaseIncidents(prev => prev.filter(i => i.id !== incidentId));
+  };
 
   const totalIncome = properties.reduce((sum, p) => sum + getMonthlyIncome(p), 0);
   const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p), 0);
@@ -289,9 +284,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   ).length;
 
   const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-  // Re-read from localStorage to catch incidents added by tenants after page load
-  const freshProperties = JSON.parse(localStorage.getItem(`properties_${userEmail}`) || '[]');
-  const alerts = generateAlerts(freshProperties, supabasePayments);
+  const alerts = generateAlerts(properties, supabasePayments);
   const tips = generateTips(properties);
 
   // Datos por propiedad para el ranking
@@ -374,7 +367,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
         </div>
 
         {/* Incidencias */}
-        {alerts.filter(a => a.incident).length > 0 && (
+        {supabaseIncidents.length > 0 && (
           <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', borderLeft: '4px solid #F44336' }}>
             <h3 style={{ margin: '0 0 14px', fontSize: '15px', fontWeight: 600, color: '#C62828', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -385,15 +378,31 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
               Incidencias
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {alerts.filter(a => a.incident).map((alert, i) => (
-                <div key={i} style={{ padding: '10px 12px', borderRadius: '12px', background: '#FBE9E7' }}>
+              {supabaseIncidents.map((incident) => (
+                <div key={incident.id} style={{ padding: '10px 12px', borderRadius: '12px', background: '#FBE9E7' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <div style={{ flexShrink: 0, width: '10px', height: '10px', marginTop: '3px', background: '#F44336', borderRadius: '50%' }} />
-                    <p style={{ margin: 0, fontSize: '13px', color: '#333', lineHeight: '1.4' }}>{alert.text}</p>
+                    <div style={{ flexShrink: 0, width: '10px', height: '10px', marginTop: '6px', background: '#F44336', borderRadius: '50%' }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#333', lineHeight: '1.4' }}>
+                        <strong>{incident.property_name}</strong> — {incident.tenant_name}
+                      </p>
+                      <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#555', lineHeight: '1.4' }}>
+                        {incident.description.length > 80 ? incident.description.slice(0, 80) + '...' : incident.description}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '11px', color: '#aaa' }}>
+                        {new Date(incident.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleResolveIncident(incident.id)}
+                      style={{ flexShrink: 0, fontSize: '11px', fontWeight: 600, background: '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', padding: '5px 10px', cursor: 'pointer' }}
+                    >
+                      Resolver
+                    </button>
                   </div>
-                  {alert.incident?.attachment && (
-                    <div style={{ paddingLeft: '20px' }}>
-                      <IncidentAttachmentView attachment={alert.incident.attachment} />
+                  {incident.attachment_url && (
+                    <div style={{ paddingLeft: '20px', marginTop: 4 }}>
+                      <IncidentAttachmentView attachmentUrl={incident.attachment_url} />
                     </div>
                   )}
                 </div>

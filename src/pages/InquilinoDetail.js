@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import './InquilinoDetail.css';
-import { saveFile } from '../utils/fileStorage';
 import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
 
@@ -175,29 +174,57 @@ export default function InquilinoDetail({ rental, onBack }) {
   const handleSendIncident = async () => {
     if (!incidentText.trim() && !incidentFile) return;
     const { landlordEmail, propertyId, tenantId, roomId, tenantName, address } = rental;
-    const properties = JSON.parse(localStorage.getItem(`properties_${landlordEmail}`) || '[]');
-    const idx = properties.findIndex(p => p.id === propertyId);
-    if (idx !== -1) {
-      let attachment = null;
-      if (incidentFile) {
-        const { dataUrl, ...meta } = incidentFile;
-        try { await saveFile(meta.id, dataUrl); } catch (e) { console.error(e); }
-        attachment = meta;
+
+    // 1. Subir adjunto a Supabase Storage (si existe)
+    let attachmentUrl = null;
+    if (incidentFile) {
+      const ext = incidentFile.fileName.split('.').pop();
+      const path = `${propertyId}/${Date.now()}.${ext}`;
+      const blob = await fetch(incidentFile.dataUrl).then(r => r.blob());
+      const { error: uploadError } = await supabase.storage
+        .from('incident-attachments')
+        .upload(path, blob, { contentType: incidentFile.fileType });
+      if (uploadError) {
+        console.error('[InquilinoDetail] upload error:', uploadError);
+        alert('Error subiendo el archivo adjunto.');
+        return;
       }
-      const incident = {
-        id: Date.now(),
-        tenantName,
-        tenantId,
-        roomId: roomId || null,
-        description: incidentText.trim(),
-        propertyName: address,
-        timestamp: new Date().toISOString(),
-        status: 'open',
-        ...(attachment && { attachment }),
-      };
-      properties[idx].incidents = [...(properties[idx].incidents || []), incident];
-      localStorage.setItem(`properties_${landlordEmail}`, JSON.stringify(properties));
+      attachmentUrl = supabase.storage.from('incident-attachments').getPublicUrl(path).data.publicUrl;
     }
+
+    // 2. Insertar incidencia en Supabase
+    const { error: dbError } = await supabase.from('incidents').insert({
+      property_id: String(propertyId),
+      landlord_email: landlordEmail,
+      tenant_id: String(tenantId),
+      tenant_name: tenantName,
+      room_id: roomId ? String(roomId) : null,
+      description: incidentText.trim(),
+      property_name: address,
+      status: 'open',
+      attachment_url: attachmentUrl,
+    });
+
+    if (dbError) {
+      console.error('[InquilinoDetail] insert incident error:', dbError);
+      alert(`Error guardando la incidencia: ${dbError.message}`);
+      return;
+    }
+
+    // 3. Mensaje automático en el chat
+    await supabase.from('messages').insert({
+      property_id: String(propertyId),
+      room_id: roomId ? String(roomId) : null,
+      tenant_id: roomId ? null : String(tenantId),
+      landlord_email: landlordEmail,
+      sender: 'tenant',
+      sender_id: String(tenantId),
+      content: `🔧 Nueva incidencia: ${incidentText.trim()}`,
+      is_group_message: false,
+      read_by_landlord: false,
+      read_by_tenant: true,
+    });
+
     setIncidentText('');
     setIncidentFile(null);
     setShowIncident(false);
