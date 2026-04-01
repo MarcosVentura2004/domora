@@ -193,6 +193,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
           property={viewingProperty}
           onBack={() => setViewingProperty(null)}
           onUpdate={handleUpdateProperty}
+          landlordEmail={userEmail}
         />
       );
     }

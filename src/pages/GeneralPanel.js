@@ -30,19 +30,39 @@ function getMonthlyIncome(property) {
   return 0;
 }
 
-function getMonthlyExpenses(property) {
-  const expenses = property.expenses || [];
-  return expenses.reduce((sum, e) => {
-    const created = new Date(e.createdAt);
-    const cy = created.getFullYear(), cm = created.getMonth();
-    if (currentYear < cy || (currentYear === cy && currentMonth < cm)) return sum;
-    if (e.frequency === 'unico' && !(currentYear === cy && currentMonth === cm)) return sum;
-    const pct = e.expensePercentage || (property.ownershipPercentage || 100);
-    return sum + (e.amount * pct / 100);
-  }, 0);
+function getExpensesForMonth(expenses, year, month) {
+  return expenses.filter(e => {
+    if (e.active === false) return false;
+    const start = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
+    const sy = start.getFullYear(), sm = start.getMonth();
+    if (year < sy || (year === sy && month < sm)) return false;
+    if (e.type === 'puntual' || e.frequency === 'unico') return year === sy && month === sm;
+    const monthsDiff = (year - sy) * 12 + (month - sm);
+    const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : 1;
+    if (monthsDiff % step !== 0) return false;
+    if (e.type === 'recurrente_temporal') {
+      const paymentIndex = monthsDiff / step;
+      if (paymentIndex >= (e.duration_payments || 0)) return false;
+    }
+    return true;
+  });
 }
 
-function generateAlerts(properties, supabasePayments = []) {
+function getMonthlyEquivalentGP(expense) {
+  const amt = Number(expense.amount) || 0;
+  if (expense.frequency === 'trimestral') return amt / 3;
+  if (expense.frequency === 'anual') return amt / 12;
+  return amt;
+}
+
+function getMonthlyExpenses(property, supabaseExpenses) {
+  const propertyExpenses = (supabaseExpenses || []).filter(e => String(e.property_id) === String(property.id));
+  const active = getExpensesForMonth(propertyExpenses, currentYear, currentMonth);
+  const ownership = property.ownershipPercentage || 100;
+  return active.reduce((sum, e) => sum + getMonthlyEquivalentGP(e) * ownership / 100, 0);
+}
+
+function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []) {
   const alerts = [];
 
   properties.forEach(property => {
@@ -137,9 +157,24 @@ function generateAlerts(properties, supabasePayments = []) {
       }
     }
 
+    // Gastos recurrentes variables pendientes de importe
+    const propertyExpenses = supabaseExpenses.filter(e => String(e.property_id) === String(property.id));
+    propertyExpenses
+      .filter(e => e.type === 'recurrente_variable' && e.active !== false && !e.amount)
+      .forEach(e => {
+        const isDue = getExpensesForMonth([e], currentYear, currentMonth).length > 0;
+        if (isDue) {
+          alerts.push({
+            type: 'warning',
+            text: `${property.name} — "${e.name}": pendiente de introducir importe`,
+            property: property.name,
+          });
+        }
+      });
+
     // Rentabilidad negativa
     const income = getMonthlyIncome(property);
-    const expenses = getMonthlyExpenses(property);
+    const expenses = getMonthlyExpenses(property, supabaseExpenses);
     if (expenses > 0 && income < expenses) {
       alerts.push({
         type: 'danger',
@@ -153,13 +188,13 @@ function generateAlerts(properties, supabasePayments = []) {
   return alerts;
 }
 
-function generateTips(properties) {
+function generateTips(properties, supabaseExpenses = []) {
   const tips = [];
   if (properties.length === 0) return tips;
 
   // Inmueble menos rentable
   const withIncome = properties
-    .map(p => ({ p, net: getMonthlyIncome(p) - getMonthlyExpenses(p) }))
+    .map(p => ({ p, net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses) }))
     .filter(({ p }) => p.status !== 'vacio');
 
   if (withIncome.length > 1) {
@@ -186,7 +221,7 @@ function generateTips(properties) {
 
   // Muchos gastos
   properties.forEach(p => {
-    const expenses = getMonthlyExpenses(p);
+    const expenses = getMonthlyExpenses(p, supabaseExpenses);
     const income = getMonthlyIncome(p);
     if (income > 0 && expenses / income > 0.4) {
       tips.push(`Los gastos de ${p.name} representan el ${Math.round(expenses / income * 100)}% de los ingresos. Puede que haya margen de optimización.`);
@@ -241,6 +276,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   const [showReportModal, setShowReportModal] = useState(false);
   const [supabasePayments, setSupabasePayments] = useState([]);
   const [supabaseIncidents, setSupabaseIncidents] = useState([]);
+  const [supabaseExpenses, setSupabaseExpenses] = useState([]);
 
   useEffect(() => {
     const propertyIds = properties.map(p => String(p.id));
@@ -252,6 +288,11 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
       .eq('year', currentYear)
       .eq('month', currentMonth)
       .then(({ data }) => { if (data) setSupabasePayments(data); });
+    supabase
+      .from('expenses')
+      .select('*')
+      .in('property_id', propertyIds)
+      .then(({ data }) => { if (data) setSupabaseExpenses(data); });
   }, [properties]);
 
   useEffect(() => {
@@ -271,7 +312,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   };
 
   const totalIncome = properties.reduce((sum, p) => sum + getMonthlyIncome(p), 0);
-  const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p), 0);
+  const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p, supabaseExpenses), 0);
   const totalNet = totalIncome - totalExpenses;
 
   const occupied = properties.filter(p =>
@@ -284,16 +325,16 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   ).length;
 
   const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-  const alerts = generateAlerts(properties, supabasePayments);
-  const tips = generateTips(properties);
+  const alerts = generateAlerts(properties, supabasePayments, supabaseExpenses);
+  const tips = generateTips(properties, supabaseExpenses);
 
   // Datos por propiedad para el ranking
   const propertyStats = properties.map(p => ({
     name: p.name,
     status: p.status,
     income: getMonthlyIncome(p),
-    expenses: getMonthlyExpenses(p),
-    net: getMonthlyIncome(p) - getMonthlyExpenses(p),
+    expenses: getMonthlyExpenses(p, supabaseExpenses),
+    net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses),
   })).sort((a, b) => b.net - a.net);
 
   return (

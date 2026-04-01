@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
+import { supabase } from '../supabaseClient';
 
 function isFutureMonth(year, month) {
   const now = new Date();
@@ -20,13 +21,28 @@ function getFirstDayOfMonth(year, month) {
 }
 
 function getExpensesForMonth(expenses, year, month) {
-  return expenses.filter(expense => {
-    const created = new Date(expense.createdAt);
-    const cy = created.getFullYear(), cm = created.getMonth();
-    if (year < cy || (year === cy && month < cm)) return false;
-    if (expense.frequency === 'unico') return year === cy && month === cm;
+  return expenses.filter(e => {
+    if (e.active === false) return false;
+    const start = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
+    const sy = start.getFullYear(), sm = start.getMonth();
+    if (year < sy || (year === sy && month < sm)) return false;
+    if (e.type === 'puntual' || e.frequency === 'unico') return year === sy && month === sm;
+    const monthsDiff = (year - sy) * 12 + (month - sm);
+    const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : 1;
+    if (monthsDiff % step !== 0) return false;
+    if (e.type === 'recurrente_temporal') {
+      const paymentIndex = monthsDiff / step;
+      if (paymentIndex >= (e.duration_payments || 0)) return false;
+    }
     return true;
   });
+}
+
+function getMonthlyEquivalent(expense) {
+  const amt = Number(expense.amount) || 0;
+  if (expense.frequency === 'trimestral') return amt / 3;
+  if (expense.frequency === 'anual') return amt / 12;
+  return amt;
 }
 
 function exportVacationalToExcel(name, historyMonths, accumulated) {
@@ -82,15 +98,23 @@ function exportVacationalToPDF(name, historyMonths, accumulated) {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-function VacationalDetail({ property, onBack, onUpdate }) {
+function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
-  const [expenses, setExpenses] = useState(property.expenses || []);
+  const [expenses, setExpenses] = useState([]);
   const [bookings, setBookings] = useState(property.bookings || []);
 
   React.useEffect(() => { setBookings(property.bookings || []); }, [property.bookings]);
-  React.useEffect(() => { setExpenses(property.expenses || []); }, [property.expenses]);
+
+  useEffect(() => {
+    supabase
+      .from('expenses')
+      .select('*')
+      .eq('property_id', String(property.id))
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { if (data) setExpenses(data); });
+  }, [property.id]);
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
@@ -129,10 +153,7 @@ function VacationalDetail({ property, onBack, onUpdate }) {
     .reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipMultiplier;
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
-  const myExpenses = visibleExpenses.reduce((sum, e) => {
-    const pct = e.expensePercentage || (property.ownershipPercentage || 100);
-    return sum + (e.amount * pct / 100);
-  }, 0);
+  const myExpenses = visibleExpenses.reduce((sum, e) => sum + getMonthlyEquivalent(e) * (property.ownershipPercentage || 100) / 100, 0);
 
   const netIncome = isCurrentMonthFuture ? null : monthIncome - myExpenses;
 
@@ -158,17 +179,30 @@ function VacationalDetail({ property, onBack, onUpdate }) {
     }
   };
 
-  const handleAddExpense = (expenseData) => {
-    const updated = [...expenses, { ...expenseData, id: Date.now(), createdAt: new Date().toISOString() }];
-    setExpenses(updated);
-    onUpdate({ ...property, expenses: updated });
+  const handleAddExpense = async (expenseData) => {
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert({ property_id: String(property.id), landlord_email: landlordEmail, ...expenseData })
+      .select()
+      .single();
+    if (error) { alert(`Error guardando el gasto: ${error.message}`); return; }
+    setExpenses(prev => [data, ...prev]);
     setShowAddExpense(false);
   };
 
-  const handleDeleteExpense = (id) => {
-    const updated = expenses.filter(e => e.id !== id);
-    setExpenses(updated);
-    onUpdate({ ...property, expenses: updated });
+  const handleDeleteExpense = async (id) => {
+    await supabase.from('expenses').delete().eq('id', id);
+    setExpenses(prev => prev.filter(e => e.id !== id));
+  };
+
+  const handleTogglePause = async (id, currentActive) => {
+    await supabase.from('expenses').update({ active: !currentActive }).eq('id', id);
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, active: !currentActive } : e));
+  };
+
+  const handleUpdateVariableAmount = async (id, newAmount) => {
+    await supabase.from('expenses').update({ amount: parseFloat(newAmount) }).eq('id', id);
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, amount: parseFloat(newAmount) } : e));
   };
 
   const getHistoryMonths = () => {
@@ -181,10 +215,7 @@ function VacationalDetail({ property, onBack, onUpdate }) {
         return s <= me && e >= ms && b.status === 'confirmed';
       });
       const income = mb.reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipMultiplier;
-      const exp = getExpensesForMonth(expenses, y, m).reduce((sum, e) => {
-        const pct = e.expensePercentage || (property.ownershipPercentage || 100);
-        return sum + (e.amount * pct / 100);
-      }, 0);
+      const exp = getExpensesForMonth(expenses, y, m).reduce((sum, e) => sum + getMonthlyEquivalent(e) * (property.ownershipPercentage || 100) / 100, 0);
       months.push({ year: y, month: m, income, expenses: exp, net: income - exp, bookings: mb.length });
       if (m === 11) { m = 0; y++; } else m++;
     }
@@ -382,7 +413,7 @@ function VacationalDetail({ property, onBack, onUpdate }) {
         <div className="card-header clickable" onClick={() => setShowExpenses(!showExpenses)}>
           <h3>Gastos</h3>
           <div className="expenses-total">
-            <span>{myExpenses.toFixed(2)} €</span>
+            <span>{myExpenses.toFixed(2)} €/mes</span>
             <span className="arrow">{showExpenses ? '▼' : '›'}</span>
           </div>
         </div>
@@ -390,22 +421,48 @@ function VacationalDetail({ property, onBack, onUpdate }) {
           <div className="expenses-detail">
             {visibleExpenses.length === 0 ? (
               <p className="no-expenses">No hay gastos añadidos</p>
-            ) : visibleExpenses.map(e => (
-              <div key={e.id} className="expense-item">
-                <div>
-                  <span>{e.name}</span>
-                  {e.frequency && e.frequency !== 'mensual' && (
-                    <span className={`frequency-badge ${e.frequency}`}>
-                      {e.frequency === 'trimestral' ? 'Trimestral' : e.frequency === 'anual' ? 'Anual' : 'Único'}
+            ) : visibleExpenses.map(exp => {
+              const isPendingVariable = exp.type === 'recurrente_variable' && !exp.amount;
+              const monthly = getMonthlyEquivalent(exp);
+              const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', mensual: null }[exp.frequency] || null;
+              const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[exp.type] || null;
+              return (
+                <div key={exp.id} className="expense-item" style={{ opacity: exp.active === false ? 0.5 : 1 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span>{exp.name}</span>
+                      {typeLabel && <span className={`frequency-badge ${exp.type}`} style={{ fontSize: 10 }}>{typeLabel}</span>}
+                      {freqLabel && <span className={`frequency-badge ${exp.frequency}`}>{freqLabel}</span>}
+                      {exp.type === 'recurrente_temporal' && exp.duration_payments && (
+                        <span style={{ fontSize: 10, color: '#aaa' }}>({exp.payments_made || 0}/{exp.duration_payments} pagos)</span>
+                      )}
+                      {exp.active === false && <span style={{ fontSize: 10, color: '#aaa' }}>Pausado</span>}
+                    </div>
+                    {isPendingVariable && (
+                      <PendingVariableInput expenseId={exp.id} onSave={handleUpdateVariableAmount} />
+                    )}
+                  </div>
+                  <div className="expense-actions" style={{ gap: 6 }}>
+                    <span style={{ color: isPendingVariable ? '#FFA726' : undefined }}>
+                      {isPendingVariable ? '— €' : `${monthly.toFixed(2)} €/mes`}
                     </span>
-                  )}
+                    {exp.type !== 'puntual' && (
+                      <button
+                        className="delete-expense"
+                        style={{ background: exp.active === false ? '#E8F5E9' : '#FFF8E1', color: exp.active === false ? '#388E3C' : '#F57F17', borderRadius: 6, padding: '2px 7px', fontSize: 11 }}
+                        onClick={() => handleTogglePause(exp.id, exp.active !== false)}
+                      >
+                        {exp.active === false ? '▶' : '⏸'}
+                      </button>
+                    )}
+                    <button className="delete-expense" onClick={() => handleDeleteExpense(exp.id)}>×</button>
+                  </div>
                 </div>
-                <div className="expense-actions">
-                  <span>{e.amount.toFixed(2)} €/mes</span>
-                  <button className="delete-expense" onClick={() => handleDeleteExpense(e.id)}>×</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+            {visibleExpenses.length > 0 && (
+              <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{myExpenses.toFixed(2)} €</strong></div>
+            )}
             <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
           </div>
         )}
@@ -473,7 +530,7 @@ function VacationalDetail({ property, onBack, onUpdate }) {
         />
       )}
       {showAddExpense && (
-        <AddExpenseModal onClose={() => setShowAddExpense(false)} onAdd={handleAddExpense} ownershipPercentage={property.ownershipPercentage || 100} />
+        <AddExpenseModal onClose={() => setShowAddExpense(false)} onAdd={handleAddExpense} />
       )}
       {showEditProperty && (
         <EditVacationalModal
@@ -597,70 +654,147 @@ function BookingModal({ booking, onClose, onSave, onDelete }) {
 }
 
 // ─────────────────────────────────────────────
-// Modal añadir gasto
+// Componentes de gastos
 // ─────────────────────────────────────────────
-function AddExpenseModal({ onClose, onAdd, ownershipPercentage }) {
+function PendingVariableInput({ expenseId, onSave }) {
+  const [value, setValue] = useState('');
+  const [editing, setEditing] = useState(false);
+  if (!editing) {
+    return (
+      <button onClick={() => setEditing(true)} style={{ marginTop: 4, fontSize: 11, background: '#FFF3E0', border: '1px solid #FFB74D', borderRadius: 6, padding: '3px 8px', color: '#E65100', cursor: 'pointer' }}>
+        ⚠ Introducir importe
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+      <input type="number" step="0.01" placeholder="0.00" value={value} onChange={e => setValue(e.target.value)}
+        style={{ width: 80, fontSize: 13, padding: '3px 6px', borderRadius: 6, border: '1px solid #ddd' }} autoFocus />
+      <button onClick={() => { if (value) { onSave(expenseId, value); setEditing(false); } }}
+        style={{ fontSize: 11, background: '#4CAF50', color: 'white', border: 'none', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+        Guardar
+      </button>
+      <button onClick={() => setEditing(false)} style={{ fontSize: 11, background: 'none', border: 'none', color: '#aaa', cursor: 'pointer' }}>×</button>
+    </div>
+  );
+}
+
+const EXPENSE_CATEGORIES = [
+  { key: 'ibi', label: 'IBI' },
+  { key: 'comunidad', label: 'Comunidad de propietarios' },
+  { key: 'seguro', label: 'Seguro del hogar' },
+  { key: 'reparaciones', label: 'Reparaciones y conservación' },
+  { key: 'suministros', label: 'Suministros' },
+  { key: 'amortizacion', label: 'Amortización del inmueble' },
+  { key: 'hipoteca', label: 'Intereses hipotecarios' },
+  { key: 'gestion', label: 'Gastos de gestión' },
+  { key: 'otros', label: 'Otros' },
+];
+
+const EXPENSE_TYPES = [
+  { key: 'puntual', label: 'Puntual', desc: 'Un pago único' },
+  { key: 'recurrente_fijo', label: 'Recurrente fijo', desc: 'Mismo importe, se repite indefinidamente' },
+  { key: 'recurrente_variable', label: 'Recurrente variable', desc: 'Introduces el importe cada vez que llega' },
+  { key: 'recurrente_temporal', label: 'Recurrente temporal', desc: 'Mismo importe durante X pagos y para' },
+];
+
+function AddExpenseModal({ onClose, onAdd }) {
+  const today = new Date().toISOString().split('T')[0];
+  const [type, setType] = useState('recurrente_fijo');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [frequency, setFrequency] = useState('mensual');
+  const [durationPayments, setDurationPayments] = useState('');
+  const [startDate, setStartDate] = useState(today);
 
-  const CATEGORIES = [
-    { key: 'ibi', label: 'IBI' },
-    { key: 'comunidad', label: 'Comunidad de propietarios' },
-    { key: 'seguro', label: 'Seguro del hogar' },
-    { key: 'reparaciones', label: 'Reparaciones y conservación' },
-    { key: 'suministros', label: 'Suministros' },
-    { key: 'amortizacion', label: 'Amortización del inmueble' },
-    { key: 'hipoteca', label: 'Intereses hipotecarios' },
-    { key: 'gestion', label: 'Gastos de gestión' },
-    { key: 'otros', label: 'Otros' },
-  ];
+  const needsFrequency = type !== 'puntual';
+  const needsAmount = type !== 'recurrente_variable';
+  const needsDuration = type === 'recurrente_temporal';
+  const freqStep = frequency === 'trimestral' ? 3 : frequency === 'anual' ? 12 : 1;
+  const monthlyEquiv = amount && needsAmount ? (parseFloat(amount) / freqStep).toFixed(2) : null;
 
-  const monthlyAmount = frequency === 'trimestral' ? parseFloat(amount) / 3
-    : frequency === 'anual' ? parseFloat(amount) / 12
-    : parseFloat(amount);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const categoryLabel = EXPENSE_CATEGORIES.find(c => c.key === category)?.label || category;
+    onAdd({
+      name: description ? `${categoryLabel} — ${description}` : categoryLabel,
+      category, description, type,
+      frequency: type === 'puntual' ? 'unico' : frequency,
+      amount: needsAmount && amount ? parseFloat(amount) : null,
+      duration_payments: needsDuration && durationPayments ? parseInt(durationPayments) : null,
+      start_date: startDate,
+      active: true,
+    });
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Añadir gasto</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={e => {
-          e.preventDefault();
-          const categoryLabel = CATEGORIES.find(c => c.key === category)?.label || category;
-          onAdd({ name: description ? `${categoryLabel} — ${description}` : categoryLabel, category, description, amount: monthlyAmount, frequency, expensePercentage: ownershipPercentage });
-        }}>
+        <div className="modal-header"><h2>Añadir gasto</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Categoría</label>
-            <select value={category} onChange={e => setCategory(e.target.value)} required
-              style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', background: 'white', color: category ? '#111' : '#aaa' }}>
-              <option value="" disabled>Selecciona una categoría</option>
-              {CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label>Descripción (opcional)</label>
-            <input type="text" placeholder="Ej: recibo enero, factura fontanero..." value={description} onChange={e => setDescription(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>Frecuencia</label>
-            <div className="frequency-options">
-              {['mensual','trimestral','anual','unico'].map(f => (
-                <button key={f} type="button" className={`frequency-option ${frequency === f ? 'selected' : ''}`} onClick={() => setFrequency(f)}>
-                  {f === 'mensual' ? 'Mensual' : f === 'trimestral' ? 'Trimestral' : f === 'anual' ? 'Anual' : 'Único'}
+            <label>Tipo de gasto</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {EXPENSE_TYPES.map(t => (
+                <button key={t.key} type="button" onClick={() => setType(t.key)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '10px 14px', borderRadius: 10, border: `2px solid ${type === t.key ? '#111' : '#e0e0e0'}`, background: type === t.key ? '#f5f5f5' : 'white', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>{t.label}</span>
+                  <span style={{ fontSize: 12, color: '#aaa' }}>{t.desc}</span>
                 </button>
               ))}
             </div>
           </div>
           <div className="form-group">
-            <label>Importe ({frequency === 'trimestral' ? '€/trimestre' : frequency === 'anual' ? '€/año' : '€'})</label>
-            <input type="number" placeholder="0" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} required />
-            {frequency !== 'mensual' && parseFloat(amount) > 0 && (
-              <p className="monthly-equivalent">Equivale a {monthlyAmount.toFixed(2)} €/mes</p>
-            )}
+            <label>Categoría</label>
+            <select value={category} onChange={e => setCategory(e.target.value)} required
+              style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', background: 'white', color: category ? '#111' : '#aaa' }}>
+              <option value="" disabled>Selecciona una categoría</option>
+              {EXPENSE_CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Descripción (opcional)</label>
+            <input type="text" placeholder="Ej: recibo gas, fontanero..." value={description} onChange={e => setDescription(e.target.value)} />
+          </div>
+          {needsFrequency && (
+            <div className="form-group">
+              <label>Frecuencia</label>
+              <div className="frequency-options">
+                {['mensual', 'trimestral', 'anual'].map(f => (
+                  <button key={f} type="button" className={`frequency-option ${frequency === f ? 'selected' : ''}`} onClick={() => setFrequency(f)}>
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {needsAmount && (
+            <div className="form-group">
+              <label>Importe por {type === 'puntual' ? 'pago' : { mensual: 'mes', trimestral: 'trimestre', anual: 'año' }[frequency]} (€)</label>
+              <input type="number" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required step="0.01" min="0.01" />
+              {monthlyEquiv && frequency !== 'mensual' && (
+                <p className="monthly-equivalent">Equivalente mensual: {monthlyEquiv} €/mes</p>
+              )}
+            </div>
+          )}
+          {!needsAmount && (
+            <p style={{ fontSize: 13, color: '#888', background: '#FFF8E1', borderRadius: 8, padding: '10px 12px', margin: '0 0 16px' }}>
+              ℹ El importe se introduce cada vez que llega la factura. Recibirás un aviso cuando toque.
+            </p>
+          )}
+          {needsDuration && (
+            <div className="form-group">
+              <label>Duración (número de pagos)</label>
+              <input type="number" placeholder="Ej: 12" value={durationPayments} onChange={e => setDurationPayments(e.target.value)} required min="1" />
+              {durationPayments && (
+                <p className="monthly-equivalent">Para en {durationPayments} {frequency === 'mensual' ? 'meses' : frequency === 'trimestral' ? 'trimestres' : 'años'}</p>
+              )}
+            </div>
+          )}
+          <div className="form-group">
+            <label>Fecha de inicio</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
           </div>
           <button type="submit" className="submit-button">Añadir gasto</button>
         </form>
