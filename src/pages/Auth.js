@@ -79,9 +79,11 @@ function Auth({ onLogin, onBack }) {
     });
     setLoading(false);
     if (otpError) {
-      setError('No se pudo enviar el código. Inténtalo de nuevo.');
+      console.error('Error enviando OTP:', otpError.message, otpError);
+      setError(`No se pudo enviar el código: ${otpError.message}`);
       return;
     }
+    console.log('OTP enviado correctamente a', email);
     goTo('verify');
   };
 
@@ -150,7 +152,8 @@ function Auth({ onLogin, onBack }) {
       options: { shouldCreateUser: true },
     });
     if (otpError) {
-      setError('No se pudo reenviar el código. Inténtalo más tarde.');
+      console.error('Error reenviando OTP:', otpError.message, otpError);
+      setError(`No se pudo reenviar el código: ${otpError.message}`);
     } else {
       alert(`Nuevo código enviado a ${email}`);
     }
