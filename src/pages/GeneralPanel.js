@@ -38,7 +38,7 @@ function getExpensesForMonth(expenses, year, month) {
     if (year < sy || (year === sy && month < sm)) return false;
     if (e.type === 'puntual' || e.frequency === 'unico') return year === sy && month === sm;
     const monthsDiff = (year - sy) * 12 + (month - sm);
-    const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : 1;
+    const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : e.frequency === 'custom' ? (e.custom_frequency_months || 1) : 1;
     if (monthsDiff % step !== 0) return false;
     if (e.type === 'recurrente_temporal') {
       const paymentIndex = monthsDiff / step;
@@ -52,6 +52,7 @@ function getMonthlyEquivalentGP(expense) {
   const amt = Number(expense.amount) || 0;
   if (expense.frequency === 'trimestral') return amt / 3;
   if (expense.frequency === 'anual') return amt / 12;
+  if (expense.frequency === 'custom') return amt / (expense.custom_frequency_months || 1);
   return amt;
 }
 
