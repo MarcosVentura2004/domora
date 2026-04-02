@@ -24,7 +24,6 @@ function formatMonthYear(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    if (e.active === false) return false;
     const start = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
@@ -415,8 +414,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
 
   const ownershipPct = property.ownershipPercentage || 100;
-  const totalExpenses = visibleExpenses.reduce((sum, exp) => sum + getMonthlyEquivalent(exp), 0);
+  const totalExpenses = visibleExpenses.reduce((sum, exp) => {
+    if (exp.active === false) return sum;
+    return sum + getMonthlyEquivalent(exp);
+  }, 0);
   const myExpenses = visibleExpenses.reduce((sum, exp) => {
+    if (exp.active === false) return sum;
     const pct = exp.expense_percentage != null ? exp.expense_percentage : ownershipPct;
     return sum + getMonthlyEquivalent(exp) * pct / 100;
   }, 0);
@@ -469,6 +472,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
       const monthExpenses = getExpensesForMonth(expenses, y, m);
       const myExpenses = monthExpenses.reduce((sum, e) => {
+        if (e.active === false) return sum;
         const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPercentage;
         return sum + getMonthlyEquivalent(e) * pct / 100;
       }, 0);

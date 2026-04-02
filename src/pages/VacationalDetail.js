@@ -23,7 +23,6 @@ function getFirstDayOfMonth(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    if (e.active === false) return false;
     const start = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
@@ -158,6 +157,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
   const ownershipPct = property.ownershipPercentage || 100;
   const myExpenses = visibleExpenses.reduce((sum, e) => {
+    if (e.active === false) return sum;
     const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPct;
     return sum + getMonthlyEquivalent(e) * pct / 100;
   }, 0);
@@ -223,6 +223,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
       });
       const income = mb.reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipMultiplier;
       const exp = getExpensesForMonth(expenses, y, m).reduce((sum, e) => {
+        if (e.active === false) return sum;
         const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
         return sum + getMonthlyEquivalent(e) * pct / 100;
       }, 0);

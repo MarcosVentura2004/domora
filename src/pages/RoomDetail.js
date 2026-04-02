@@ -84,7 +84,6 @@ function formatMonthYear(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    if (e.active === false) return false;
     const start = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
@@ -236,6 +235,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
   const totalExpenses = visibleExpenses.reduce((sum, e) => {
+    if (e.active === false) return sum;
     const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
     return sum + getMonthlyEquivalent(e) * pct / 100;
   }, 0);
@@ -833,6 +833,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
           while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
             const monthExpenses = getExpensesForMonth(expenses, y, m);
             const totalExp = monthExpenses.reduce((sum, e) => {
+              if (e.active === false) return sum;
               const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
               return sum + getMonthlyEquivalent(e) * pct / 100;
             }, 0);
