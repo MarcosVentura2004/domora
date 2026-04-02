@@ -203,16 +203,18 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
   const [tableFullscreen, setTableFullscreen] = useState(false);
 
   const months = Array.from({ length: 12 }, (_, m) => m);
+  const isPastOrCurrent = (m) =>
+    year < now.getFullYear() || (year === now.getFullYear() && m <= now.getMonth());
 
-  // Gastos activos de cada mes
-  const monthExpenses = months.map(m => getExpensesForMonth(expenses, year, m));
+  // Gastos activos de cada mes (solo meses pasados/actual)
+  const monthExpenses = months.map(m => isPastOrCurrent(m) ? getExpensesForMonth(expenses, year, m) : []);
   const totalByMonth = monthExpenses.map(exps => exps.reduce((s, e) => s + expVal(e), 0));
   const yearTotal = totalByMonth.reduce((s, v) => s + v, 0);
-  const monthAvg = yearTotal / 12;
+  const monthAvg = yearTotal / (now.getMonth() + 1 < 12 && year === now.getFullYear() ? now.getMonth() + 1 : 12);
 
-  // Ingresos opcionales
+  // Ingresos opcionales (solo meses pasados/actual)
   const incomeByMonth = getMonthlyIncome
-    ? months.map(m => getMonthlyIncome(year, m))
+    ? months.map(m => isPastOrCurrent(m) ? getMonthlyIncome(year, m) : 0)
     : null;
   const yearIncome = incomeByMonth ? incomeByMonth.reduce((s, v) => s + v, 0) : null;
   const yearNet = yearIncome !== null ? yearIncome - yearTotal : null;
