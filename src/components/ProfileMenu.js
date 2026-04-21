@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import './ProfileMenu.css';
 
+function formatPhone(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 9);
+  return digits.match(/.{1,3}/g)?.join(' ') ?? '';
+}
+
 export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, onClose }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
@@ -11,7 +16,7 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.user_metadata) {
         setName(user.user_metadata.name || '');
-        setPhone(user.user_metadata.phone || '');
+        setPhone(formatPhone(user.user_metadata.phone || ''));
       }
     });
   }, []);
@@ -69,7 +74,7 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
               type="tel"
               placeholder="+34 600 000 000"
               value={phone}
-              onChange={e => setPhone(e.target.value)}
+              onChange={e => setPhone(formatPhone(e.target.value))}
             />
             <div className="profile-edit-actions">
               <button type="button" className="profile-edit-cancel" onClick={() => setEditing(false)}>

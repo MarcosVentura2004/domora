@@ -156,6 +156,12 @@ function generateTenantCode() {
   return digits + letters;
 }
 
+// Formatea un número de teléfono español: "622280559" → "622 280 559"
+function formatPhone(raw) {
+  const digits = raw.replace(/\D/g, '').slice(0, 9);
+  return digits.match(/.{1,3}/g)?.join(' ') ?? '';
+}
+
 function saveTenantCode(code, landlordEmail, propertyId, tenantId, roomId = null) {
   const codes = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
   codes[code] = { landlordEmail, propertyId, tenantId, roomId };
@@ -412,7 +418,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     else { setCurrentMonth(m => m + 1); }
   };
 
-  const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
+  const visibleExpenses = expenses.filter(e => e.active !== false);
 
   const ownershipPct = property.ownershipPercentage || 100;
   const totalExpenses = visibleExpenses.reduce((sum, exp) => {
@@ -1571,11 +1577,11 @@ function AddTenantModal({ onClose, onAdd, isFirstTenant }) {
           </div>
           <div className="form-group">
             <label>Email del inquilino</label>
-            <input type="email" placeholder="laura@ejemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input type="email" placeholder="laura@ejemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="form-group">
             <label>Teléfono</label>
-            <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
           </div>
           {isFirstTenant && (
             <div className="form-group">
@@ -1604,7 +1610,7 @@ function AddTenantModal({ onClose, onAdd, isFirstTenant }) {
 
 function EditTenantModal({ tenant, paymentConfig, onClose, onSave, onDelete }) {
   const [name, setName] = useState(tenant.name);
-  const [phone, setPhone] = useState(tenant.phone);
+  const [phone, setPhone] = useState(formatPhone(tenant.phone || ''));
   const [amount, setAmount] = useState(tenant.amount?.toString() || '');
   const [paymentStartDay, setPaymentStartDay] = useState(paymentConfig?.startDay?.toString() || '1');
   const [paymentEndDay, setPaymentEndDay] = useState(paymentConfig?.endDay?.toString() || '5');
@@ -1638,7 +1644,7 @@ function EditTenantModal({ tenant, paymentConfig, onClose, onSave, onDelete }) {
           </div>
           <div className="form-group">
             <label>Teléfono</label>
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <input type="tel" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
           </div>
           <div className="form-group">
             <label>Cantidad que paga (€/mes)</label>
@@ -1832,7 +1838,7 @@ function AddTenantToRoomModal({ onClose, onAdd }) {
           </div>
           <div className="form-group">
             <label>Teléfono</label>
-            <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
           </div>
           <button type="submit" className="submit-button">Asignar inquilino</button>
         </form>
