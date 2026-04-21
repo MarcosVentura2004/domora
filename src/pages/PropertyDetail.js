@@ -1576,11 +1576,11 @@ function AddTenantModal({ onClose, onAdd, isFirstTenant }) {
             <input type="text" placeholder="Ej: Laura Martínez" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="form-group">
-            <label>Email del inquilino</label>
+            <label>Email del inquilino <span style={{ fontWeight: 400, color: '#999' }}>(opcional)</span></label>
             <input type="email" placeholder="laura@ejemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Teléfono</label>
+            <label>Teléfono <span style={{ fontWeight: 400, color: '#999' }}>(opcional)</span></label>
             <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
           </div>
           {isFirstTenant && (
