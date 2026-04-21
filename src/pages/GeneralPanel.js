@@ -1068,9 +1068,34 @@ function RentabilityModal({ properties, supabaseExpenses, onClose }) {
     setSaved(true);
   };
 
+  // Ingresos configurados (alquiler base, no pagos confirmados — igual que el gauge)
+  const getConfiguredIncome = (p) => {
+    const ownership = (p.ownershipPercentage || 100) / 100;
+    if (p.status === 'por_habitaciones') {
+      return (p.rooms || []).reduce((sum, r) => sum + (Number(r.price) || 0), 0) * ownership;
+    }
+    if (p.status === 'alquilado') {
+      const tenantsTotal = (p.tenants || []).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+      return (tenantsTotal || Number(p.price) || 0) * ownership;
+    }
+    return 0;
+  };
+
+  // Gastos normalizados mensualmente (equivalente mensual de todos los gastos activos — igual que el gauge)
+  const getNormalizedExpenses = (p) => {
+    const ownershipPct = p.ownershipPercentage || 100;
+    const propExpenses = (supabaseExpenses || []).filter(
+      e => String(e.property_id) === String(p.id) && e.active !== false
+    );
+    return propExpenses.reduce((sum, e) => {
+      const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPct;
+      return sum + getMonthlyEquivalentGP(e) * pct / 100;
+    }, 0);
+  };
+
   // Cálculos
-  const monthlyIncome = property ? getMonthlyIncome(property) : 0;
-  const monthlyExpenses = property ? getMonthlyExpenses(property, supabaseExpenses) : 0;
+  const monthlyIncome = property ? getConfiguredIncome(property) : 0;
+  const monthlyExpenses = property ? getNormalizedExpenses(property) : 0;
   const monthlyMortgage = parseFloat(investmentData.monthlyMortgage) || 0;
   const monthlyAmortization = parseFloat(investmentData.monthlyAmortization) || 0;
   const initialInvestment = parseFloat(investmentData.initialInvestment) || 0;
