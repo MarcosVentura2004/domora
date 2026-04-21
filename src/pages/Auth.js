@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import './Auth.css';
 
@@ -24,9 +24,9 @@ const COUNTRY_CODES = [
   { code: '+86', flag: '🇨🇳', name: 'China' },
 ];
 
-// steps: 'email' | 'verify' | 'create-password' | 'login'
+// steps: 'login' | 'register' | 'verify-email' | 'phone' | 'verify-phone'
 function Auth({ onLogin, onBack }) {
-  const [step, setStep] = useState('email');
+  const [step, setStep] = useState('login');
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+34');
   const [phone, setPhone] = useState('');
@@ -36,101 +36,19 @@ function Auth({ onLogin, onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const fullPhone = phone.trim() ? `${countryCode} ${phone.trim()}` : '';
+  const fullPhone = `${countryCode}${phone.trim()}`;
 
-  const goTo = (s) => { setError(''); setStep(s); };
+  const goTo = (s) => { setError(''); setOtp(''); setStep(s); };
 
-  // PASO 1: comprueba si el usuario existe y enruta en consecuencia
-  const handleEmailSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password: '' });
-    setLoading(false);
-
-    if (error?.code === 'invalid_credentials') {
-      // Usuario existe y tiene contraseña → mostrar campo de contraseña
-      setPassword('');
-      goTo('login');
-      return;
-    }
-
-    if (error?.code === 'user_not_found') {
-      // Usuario nuevo → enviar OTP de registro
-      await handleSendOtp();
-      return;
-    }
-
-    // Error inesperado
-    setError('No se pudo verificar el correo. Inténtalo de nuevo.');
+  const backTarget = {
+    'login': onBack,
+    'register': () => goTo('login'),
+    'verify-email': () => goTo('register'),
+    'phone': () => goTo('login'),
+    'verify-phone': () => goTo('phone'),
   };
 
-  // Envía OTP para registro nuevo
-  const handleSendOtp = async () => {
-    setLoading(true);
-    setError('');
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        data: { phone: fullPhone || null },
-      },
-    });
-    setLoading(false);
-    if (otpError) {
-      console.error('Error enviando OTP:', otpError.message, otpError);
-      setError(`No se pudo enviar el código: ${otpError.message}`);
-      return;
-    }
-    console.log('OTP enviado correctamente a', email);
-    goTo('verify');
-  };
-
-  // PASO 2: verifica el código de 6 dígitos → va a crear contraseña
-  const handleVerifySubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: 'email',
-    });
-    setLoading(false);
-    if (verifyError) {
-      setError('Código incorrecto o expirado. Inténtalo de nuevo.');
-      return;
-    }
-    setOtp('');
-    goTo('create-password');
-  };
-
-  // PASO 3: crea contraseña (usuario ya autenticado vía OTP) → Dashboard
-  const handleCreatePasswordSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.');
-      return;
-    }
-    if (password.length < 8) {
-      setError('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-    setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    if (updateError) {
-      setLoading(false);
-      setError(updateError.message);
-      return;
-    }
-    const { data: { user } } = await supabase.auth.getUser();
-    setLoading(false);
-    onLogin(user);
-  };
-
-  // LOGIN EXISTENTE: email + contraseña
+  // LOGIN: email + contraseña
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -144,18 +62,99 @@ function Auth({ onLogin, onBack }) {
     onLogin(data.user);
   };
 
-  // Reenvía OTP
-  const handleResend = async () => {
+  // REGISTRO: email + contraseña + confirmar → envía OTP al email
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    setLoading(true);
     setError('');
-    const { error: otpError } = await supabase.auth.signInWithOtp({
+    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    setLoading(false);
+    if (signUpError) {
+      setError(signUpError.message);
+      return;
+    }
+    goTo('verify-email');
+  };
+
+  // VERIFICAR OTP de email (tras registro)
+  const handleVerifyEmailSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
       email,
-      options: { shouldCreateUser: true },
+      token: otp,
+      type: 'email',
     });
-    if (otpError) {
-      console.error('Error reenviando OTP:', otpError.message, otpError);
-      setError(`No se pudo reenviar el código: ${otpError.message}`);
+    setLoading(false);
+    if (verifyError) {
+      setError('Código incorrecto o expirado. Inténtalo de nuevo.');
+      return;
+    }
+    onLogin(data.user);
+  };
+
+  const handleResendEmailOtp = async () => {
+    setError('');
+    const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+    if (resendError) {
+      setError(`No se pudo reenviar el código: ${resendError.message}`);
     } else {
       alert(`Nuevo código enviado a ${email}`);
+    }
+  };
+
+  // TELÉFONO: enviar OTP por SMS
+  const handlePhoneSubmit = async (e) => {
+    e.preventDefault();
+    if (!phone.trim()) {
+      setError('Introduce tu número de teléfono.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    const { error: otpError } = await supabase.auth.signInWithOtp({ phone: fullPhone });
+    setLoading(false);
+    if (otpError) {
+      setError(`No se pudo enviar el SMS: ${otpError.message}`);
+      return;
+    }
+    goTo('verify-phone');
+  };
+
+  // VERIFICAR OTP de teléfono (SMS)
+  const handleVerifyPhoneSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      phone: fullPhone,
+      token: otp,
+      type: 'sms',
+    });
+    setLoading(false);
+    if (verifyError) {
+      setError('Código incorrecto o expirado. Inténtalo de nuevo.');
+      return;
+    }
+    onLogin(data.user);
+  };
+
+  const handleResendPhoneOtp = async () => {
+    setError('');
+    const { error: otpError } = await supabase.auth.signInWithOtp({ phone: fullPhone });
+    if (otpError) {
+      setError(`No se pudo reenviar el SMS: ${otpError.message}`);
+    } else {
+      alert(`Nuevo código enviado a ${fullPhone}`);
     }
   };
 
@@ -165,30 +164,21 @@ function Auth({ onLogin, onBack }) {
   return (
     <div className="auth-container">
       <div className="auth-content">
-        <button
-          className="back-arrow"
-          onClick={
-            step === 'email' || step === 'login' ? onBack
-            : step === 'verify' ? () => goTo('email')
-            : null  // create-password: no volver (sesión activa)
-          }
-          style={step === 'create-password' ? { visibility: 'hidden' } : {}}
-        >
+        <button className="back-arrow" onClick={backTarget[step]}>
           ← Volver
         </button>
         <h1 className="auth-logo">Domora</h1>
 
         <div className="auth-form">
-
           {error && <p className="auth-error">{error}</p>}
 
-          {/* PASO 1: Email */}
-          {step === 'email' && (
+          {/* INICIAR SESIÓN */}
+          {step === 'login' && (
             <>
-              <h2>Acceder a Domora</h2>
-              <p className="auth-subtitle">Introduce tu correo y te enviamos un código</p>
+              <h2>Iniciar sesión</h2>
+              <p className="auth-subtitle">Bienvenido de nuevo</p>
 
-              <form onSubmit={handleEmailSubmit}>
+              <form onSubmit={handleLoginSubmit}>
                 <input
                   type="email"
                   className="auth-input"
@@ -198,32 +188,32 @@ function Auth({ onLogin, onBack }) {
                   required
                   autoFocus
                 />
-                <div className="phone-input-wrapper">
-                  <select
-                    className="phone-prefix-select"
-                    value={countryCode}
-                    onChange={(e) => setCountryCode(e.target.value)}
-                  >
-                    {COUNTRY_CODES.map((c, i) => (
-                      <option key={i} value={c.code}>
-                        {c.flag} {c.code}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="tel"
-                    className="phone-number-input"
-                    placeholder="Teléfono (opcional)"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  />
-                </div>
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Contraseña"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
                 <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Enviando código…' : 'Continuar'}
+                  {loading ? 'Entrando…' : 'Iniciar sesión'}
                 </button>
               </form>
 
+              <p className="auth-switch">
+                ¿No tienes cuenta?{' '}
+                <button className="auth-link-btn" onClick={() => goTo('register')}>
+                  Crear cuenta
+                </button>
+              </p>
+
               <div className="divider"><span>o</span></div>
+
+              <button className="social-button" onClick={() => goTo('phone')}>
+                <span style={{ fontSize: 20 }}>📱</span>
+                Entrar con número de teléfono
+              </button>
 
               <button className="social-button google" onClick={handleGoogleLogin}>
                 <svg className="social-icon" viewBox="0 0 24 24" width="20" height="20">
@@ -250,14 +240,62 @@ function Auth({ onLogin, onBack }) {
             </>
           )}
 
-          {/* PASO 2: Código OTP */}
-          {step === 'verify' && (
+          {/* CREAR CUENTA */}
+          {step === 'register' && (
             <>
-              <h2>Introduce el código</h2>
+              <h2>Crear cuenta</h2>
+              <p className="auth-subtitle">Introduce tus datos para registrarte</p>
+
+              <form onSubmit={handleRegisterSubmit}>
+                <input
+                  type="email"
+                  className="auth-input"
+                  placeholder="correo@ejemplo.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Contraseña (mínimo 8 caracteres)"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength="8"
+                  required
+                />
+                <input
+                  type="password"
+                  className="auth-input"
+                  placeholder="Confirmar contraseña"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  minLength="8"
+                  required
+                />
+                <button type="submit" className="continue-button" disabled={loading}>
+                  {loading ? 'Registrando…' : 'Crear cuenta'}
+                </button>
+              </form>
+
+              <p className="auth-switch">
+                ¿Ya tienes cuenta?{' '}
+                <button className="auth-link-btn" onClick={() => goTo('login')}>
+                  Iniciar sesión
+                </button>
+              </p>
+            </>
+          )}
+
+          {/* VERIFICAR EMAIL (tras registro) */}
+          {step === 'verify-email' && (
+            <>
+              <h2>Verifica tu correo</h2>
               <p className="auth-subtitle">
                 Hemos enviado un código de 6 dígitos a <strong>{email}</strong>
               </p>
-              <form onSubmit={handleVerifySubmit}>
+              <form onSubmit={handleVerifyEmailSubmit}>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -273,77 +311,74 @@ function Auth({ onLogin, onBack }) {
                   {loading ? 'Verificando…' : 'Verificar'}
                 </button>
               </form>
-              <button className="resend-button" onClick={handleResend}>
+              <button className="resend-button" onClick={handleResendEmailOtp}>
                 Reenviar código
               </button>
             </>
           )}
 
-          {/* PASO 3: Crear contraseña */}
-          {step === 'create-password' && (
+          {/* LOGIN CON TELÉFONO */}
+          {step === 'phone' && (
             <>
-              <h2>Crea tu contraseña</h2>
-              <p className="auth-subtitle">Ya casi está. Elige una contraseña para tu cuenta</p>
-              <form onSubmit={handleCreatePasswordSubmit}>
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Contraseña (mínimo 8 caracteres)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength="8"
-                  required
-                  autoFocus
-                />
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Repetir contraseña"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  minLength="8"
-                  required
-                />
-                <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Guardando…' : 'Crear cuenta'}
+              <h2>Entrar con teléfono</h2>
+              <p className="auth-subtitle">Te enviaremos un código SMS para verificar tu número</p>
+
+              <form onSubmit={handlePhoneSubmit}>
+                <div className="phone-input-wrapper">
+                  <select
+                    className="phone-prefix-select"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                  >
+                    {COUNTRY_CODES.map((c, i) => (
+                      <option key={i} value={c.code}>
+                        {c.flag} {c.code}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    className="phone-number-input"
+                    placeholder="612 345 678"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <button type="submit" className="continue-button" disabled={loading || !phone.trim()}>
+                  {loading ? 'Enviando SMS…' : 'Enviar código'}
                 </button>
               </form>
             </>
           )}
 
-          {/* LOGIN: email + contraseña */}
-          {step === 'login' && (
+          {/* VERIFICAR TELÉFONO (SMS OTP) */}
+          {step === 'verify-phone' && (
             <>
-              <h2>Iniciar sesión</h2>
-              <p className="auth-subtitle">Introduce tu correo y contraseña</p>
-              <form onSubmit={handleLoginSubmit}>
+              <h2>Introduce el código</h2>
+              <p className="auth-subtitle">
+                Hemos enviado un SMS con el código a <strong>{fullPhone}</strong>
+              </p>
+              <form onSubmit={handleVerifyPhoneSubmit}>
                 <input
-                  type="email"
-                  className="auth-input"
-                  placeholder="correo@ejemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  className="auth-input verification-input"
+                  placeholder="123456"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength="6"
                   required
                   autoFocus
                 />
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Contraseña"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Entrando…' : 'Iniciar sesión'}
+                <button type="submit" className="continue-button" disabled={loading || otp.length < 6}>
+                  {loading ? 'Verificando…' : 'Verificar'}
                 </button>
               </form>
-              <p className="auth-switch">
-                ¿No tienes cuenta?{' '}
-                <button className="auth-link-btn" disabled={loading} onClick={handleSendOtp}>
-                  {loading ? 'Enviando código…' : 'Crear cuenta'}
-                </button>
-              </p>
+              <button className="resend-button" onClick={handleResendPhoneOtp}>
+                Reenviar SMS
+              </button>
             </>
           )}
 
