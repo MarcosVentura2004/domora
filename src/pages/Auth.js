@@ -27,6 +27,8 @@ const COUNTRY_CODES = [
 // steps: 'login' | 'register' | 'verify-email' | 'phone' | 'verify-phone'
 function Auth({ onLogin, onBack }) {
   const [step, setStep] = useState('login');
+  const [registerTab, setRegisterTab] = useState('email'); // 'email' | 'phone'
+  const [phoneFrom, setPhoneFrom] = useState('phone');     // where to back from verify-phone
   const [email, setEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+34');
   const [phone, setPhone] = useState('');
@@ -45,7 +47,7 @@ function Auth({ onLogin, onBack }) {
     'register': () => goTo('login'),
     'verify-email': () => goTo('register'),
     'phone': () => goTo('login'),
-    'verify-phone': () => goTo('phone'),
+    'verify-phone': () => goTo(phoneFrom),
   };
 
   // LOGIN: email + contraseña
@@ -210,8 +212,10 @@ function Auth({ onLogin, onBack }) {
 
               <div className="divider"><span>o</span></div>
 
-              <button className="social-button" onClick={() => goTo('phone')}>
-                <span style={{ fontSize: 20 }}>📱</span>
+              <button className="social-button" onClick={() => { setPhoneFrom('phone'); goTo('phone'); }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.69A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                </svg>
                 Entrar con número de teléfono
               </button>
 
@@ -244,40 +248,95 @@ function Auth({ onLogin, onBack }) {
           {step === 'register' && (
             <>
               <h2>Crear cuenta</h2>
-              <p className="auth-subtitle">Introduce tus datos para registrarte</p>
 
-              <form onSubmit={handleRegisterSubmit}>
-                <input
-                  type="email"
-                  className="auth-input"
-                  placeholder="correo@ejemplo.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoFocus
-                />
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Contraseña (mínimo 8 caracteres)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength="8"
-                  required
-                />
-                <input
-                  type="password"
-                  className="auth-input"
-                  placeholder="Confirmar contraseña"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  minLength="8"
-                  required
-                />
-                <button type="submit" className="continue-button" disabled={loading}>
-                  {loading ? 'Registrando…' : 'Crear cuenta'}
+              <div className="register-tabs">
+                <button
+                  type="button"
+                  className={`register-tab${registerTab === 'email' ? ' active' : ''}`}
+                  onClick={() => { setError(''); setRegisterTab('email'); }}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M2 7l10 7 10-7"/>
+                  </svg>
+                  Correo
                 </button>
-              </form>
+                <button
+                  type="button"
+                  className={`register-tab${registerTab === 'phone' ? ' active' : ''}`}
+                  onClick={() => { setError(''); setRegisterTab('phone'); }}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+                    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.69A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                  </svg>
+                  Teléfono
+                </button>
+              </div>
+
+              {registerTab === 'email' && (
+                <form onSubmit={handleRegisterSubmit}>
+                  <input
+                    type="email"
+                    className="auth-input"
+                    placeholder="correo@ejemplo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                  <input
+                    type="password"
+                    className="auth-input"
+                    placeholder="Contraseña (mínimo 8 caracteres)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength="8"
+                    required
+                  />
+                  <input
+                    type="password"
+                    className="auth-input"
+                    placeholder="Confirmar contraseña"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    minLength="8"
+                    required
+                  />
+                  <button type="submit" className="continue-button" disabled={loading}>
+                    {loading ? 'Registrando…' : 'Crear cuenta'}
+                  </button>
+                </form>
+              )}
+
+              {registerTab === 'phone' && (
+                <form onSubmit={(e) => { setPhoneFrom('register'); handlePhoneSubmit(e); }}>
+                  <div className="phone-input-wrapper">
+                    <select
+                      className="phone-prefix-select"
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                    >
+                      {COUNTRY_CODES.map((c, i) => (
+                        <option key={i} value={c.code}>
+                          {c.flag} {c.code}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      className="phone-number-input"
+                      placeholder="612 345 678"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <button type="submit" className="continue-button" disabled={loading || !phone.trim()}>
+                    {loading ? 'Enviando SMS…' : 'Enviar código'}
+                  </button>
+                </form>
+              )}
 
               <p className="auth-switch">
                 ¿Ya tienes cuenta?{' '}
