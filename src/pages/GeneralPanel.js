@@ -278,6 +278,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showRentabilityModal, setShowRentabilityModal] = useState(false);
   const [supabasePayments, setSupabasePayments] = useState([]);
   const [supabaseIncidents, setSupabaseIncidents] = useState([]);
   const [supabaseExpenses, setSupabaseExpenses] = useState([]);
@@ -359,6 +360,9 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
               <button className="option-item" onClick={() => { setShowReportModal(true); setShowOptionsMenu(false); }}>
                 Reporte anual
               </button>
+              <button className="option-item" onClick={() => { setShowRentabilityModal(true); setShowOptionsMenu(false); }}>
+                Calcular rentabilidad
+              </button>
             </div>
           )}
         </div>
@@ -375,6 +379,13 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
 
       {showReportModal && (
         <ReportModal properties={properties} onClose={() => setShowReportModal(false)} />
+      )}
+      {showRentabilityModal && (
+        <RentabilityModal
+          properties={properties}
+          supabaseExpenses={supabaseExpenses}
+          onClose={() => setShowRentabilityModal(false)}
+        />
       )}
 
       <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1007,6 +1018,253 @@ function ReportModal({ properties, onClose }) {
             <button className="submit-button" style={{ flex: 1 }} onClick={generatePDF}>Descargar PDF</button>
             <button className="submit-button" style={{ flex: 1, background: '#1D6F42' }} onClick={generateExcel}>Descargar Excel</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Modal calculadora de rentabilidad
+// ─────────────────────────────────────────────
+function RentabilityModal({ properties, supabaseExpenses, onClose }) {
+  const [selectedPropertyId, setSelectedPropertyId] = useState(
+    properties.length > 0 ? String(properties[0].id) : ''
+  );
+  const [investmentData, setInvestmentData] = useState({
+    purchasePrice: '',
+    initialInvestment: '',
+    monthlyMortgage: '',
+    monthlyAmortization: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const property = properties.find(p => String(p.id) === String(selectedPropertyId));
+
+  useEffect(() => {
+    if (property?.investmentData) {
+      setInvestmentData({
+        purchasePrice: property.investmentData.purchasePrice ?? '',
+        initialInvestment: property.investmentData.initialInvestment ?? '',
+        monthlyMortgage: property.investmentData.monthlyMortgage ?? '',
+        monthlyAmortization: property.investmentData.monthlyAmortization ?? '',
+      });
+    } else {
+      setInvestmentData({ purchasePrice: '', initialInvestment: '', monthlyMortgage: '', monthlyAmortization: '' });
+    }
+    setSaved(false);
+  }, [selectedPropertyId]);
+
+  const handleSave = async () => {
+    if (!property) return;
+    setSaving(true);
+    const updatedProperty = { ...property, investmentData };
+    await supabase
+      .from('properties')
+      .update({ data: updatedProperty, updated_at: new Date().toISOString() })
+      .eq('id', property.id);
+    setSaving(false);
+    setSaved(true);
+  };
+
+  // Cálculos
+  const monthlyIncome = property ? getMonthlyIncome(property) : 0;
+  const monthlyExpenses = property ? getMonthlyExpenses(property, supabaseExpenses) : 0;
+  const monthlyMortgage = parseFloat(investmentData.monthlyMortgage) || 0;
+  const monthlyAmortization = parseFloat(investmentData.monthlyAmortization) || 0;
+  const initialInvestment = parseFloat(investmentData.initialInvestment) || 0;
+
+  const cashflowMensual = monthlyIncome - monthlyExpenses - monthlyMortgage;
+  const beneficioAnual = cashflowMensual * 12;
+  const roiAnual = initialInvestment > 0 ? (beneficioAnual / initialInvestment) * 100 : null;
+  const payback = initialInvestment > 0 && beneficioAnual > 0 ? initialInvestment / beneficioAnual : null;
+
+  // Equity acumulado desde createdAt o purchaseDate guardada
+  const startDateStr = property?.investmentData?.purchaseDate || property?.createdAt;
+  const startDate = startDateStr ? new Date(startDateStr) : new Date();
+  const monthsElapsed = Math.max(0,
+    (currentYear - startDate.getFullYear()) * 12 + (currentMonth - startDate.getMonth())
+  );
+  const equityAcumulado = cashflowMensual * monthsElapsed + monthlyAmortization * monthsElapsed;
+
+  // Semáforo ROI
+  const roiColor = roiAnual === null ? '#999'
+    : roiAnual < 3 ? '#C62828'
+    : roiAnual < 6 ? '#F57F17'
+    : '#2E7D32';
+  const roiBg = roiAnual === null ? '#F5F5F5'
+    : roiAnual < 3 ? '#FBE9E7'
+    : roiAnual < 6 ? '#FFF8E1'
+    : '#F1F8E9';
+  const roiLabel = roiAnual === null ? null
+    : roiAnual < 3 ? 'Bajo'
+    : roiAnual < 6 ? 'Moderado'
+    : 'Bueno';
+
+  const inputStyle = {
+    width: '100%', padding: '12px', borderRadius: '10px',
+    border: '1px solid #ddd', fontSize: '15px', background: 'white',
+    boxSizing: 'border-box',
+  };
+  const labelStyle = {
+    display: 'block', fontSize: '13px', fontWeight: 500, color: '#555', marginBottom: '6px',
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-header">
+          <h2>Rentabilidad</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '4px 0' }}>
+
+          {/* Selector de inmueble */}
+          <div>
+            <label style={labelStyle}>Inmueble a analizar</label>
+            <select
+              value={selectedPropertyId}
+              onChange={e => setSelectedPropertyId(e.target.value)}
+              style={inputStyle}
+            >
+              {properties.map(p => (
+                <option key={p.id} value={String(p.id)}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {property && (
+            <>
+              {/* Sección 1: Datos de inversión */}
+              <div style={{ background: '#F9F9F9', borderRadius: '16px', padding: '16px' }}>
+                <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 600, color: '#111' }}>
+                  Datos de inversión
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {[
+                    { key: 'purchasePrice',      label: 'Precio de compra',                          placeholder: 'Ej: 150000' },
+                    { key: 'initialInvestment',  label: 'Inversión inicial (entrada + impuestos + reforma)', placeholder: 'Ej: 40000' },
+                    { key: 'monthlyMortgage',    label: 'Cuota hipoteca mensual',                    placeholder: 'Ej: 650' },
+                    { key: 'monthlyAmortization',label: 'De esa cuota, ¿cuánto es amortización?',    placeholder: 'Ej: 300' },
+                  ].map(({ key, label, placeholder }) => (
+                    <div key={key}>
+                      <label style={labelStyle}>{label}</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder={placeholder}
+                          value={investmentData[key]}
+                          onChange={e => {
+                            setInvestmentData(prev => ({ ...prev, [key]: e.target.value }));
+                            setSaved(false);
+                          }}
+                          style={{ ...inputStyle, paddingRight: '36px' }}
+                        />
+                        <span style={{
+                          position: 'absolute', right: '12px', top: '50%',
+                          transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px',
+                        }}>€</span>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    style={{
+                      padding: '12px', borderRadius: '10px', border: 'none',
+                      background: saved ? '#4CAF50' : '#111',
+                      color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    {saving ? 'Guardando...' : saved ? 'Guardado ✓' : 'Guardar datos'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Sección 2: Resultados */}
+              <div>
+                <h3 style={{ margin: '0 0 14px', fontSize: '15px', fontWeight: 600, color: '#111' }}>
+                  Resultados
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+
+                  {/* Cashflow mensual */}
+                  <div style={{
+                    background: cashflowMensual >= 0 ? '#F1F8E9' : '#FBE9E7',
+                    borderRadius: '14px', padding: '16px', textAlign: 'center',
+                  }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>
+                      Cashflow mensual
+                    </p>
+                    <p style={{
+                      margin: 0, fontSize: '22px', fontWeight: 700,
+                      color: cashflowMensual >= 0 ? '#2E7D32' : '#C62828',
+                    }}>
+                      {cashflowMensual >= 0 ? '+' : ''}{cashflowMensual.toFixed(0)} €
+                    </p>
+                  </div>
+
+                  {/* ROI anual */}
+                  <div style={{ background: roiBg, borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>
+                      ROI anual
+                    </p>
+                    <p style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: roiColor }}>
+                      {roiAnual !== null ? `${roiAnual.toFixed(1)}%` : '—'}
+                    </p>
+                    {roiLabel && (
+                      <p style={{ margin: '4px 0 0', fontSize: '11px', fontWeight: 600, color: roiColor }}>
+                        {roiLabel}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Payback */}
+                  <div style={{ background: '#F0F7FF', borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>
+                      Payback
+                    </p>
+                    <p style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#1565C0' }}>
+                      {payback !== null ? `${payback.toFixed(1)} años` : '—'}
+                    </p>
+                  </div>
+
+                  {/* Equity acumulado */}
+                  <div style={{ background: '#F3F4F6', borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>
+                      Equity acumulado
+                    </p>
+                    <p style={{
+                      margin: 0, fontSize: '22px', fontWeight: 700,
+                      color: equityAcumulado >= 0 ? '#2E7D32' : '#C62828',
+                    }}>
+                      {equityAcumulado >= 0 ? '+' : ''}{equityAcumulado.toFixed(0)} €
+                    </p>
+                    {monthsElapsed > 0 && (
+                      <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#aaa' }}>
+                        {monthsElapsed} meses
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <p style={{ margin: '12px 0 0', fontSize: '11px', color: '#bbb', lineHeight: 1.5, textAlign: 'center' }}>
+                  Cashflow = ingresos − gastos − hipoteca (mes actual).{' '}
+                  Equity acumulado desde {startDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}.
+                </p>
+              </div>
+            </>
+          )}
+
+          {properties.length === 0 && (
+            <p style={{ textAlign: 'center', color: '#aaa', fontSize: '14px' }}>
+              No tienes inmuebles registrados.
+            </p>
+          )}
         </div>
       </div>
     </div>
