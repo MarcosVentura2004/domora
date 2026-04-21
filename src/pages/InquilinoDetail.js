@@ -90,6 +90,8 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [docs, setDocs] = useState([]);
   const [supabasePayment, setSupabasePayment] = useState(null);
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [incidents, setIncidents] = useState([]);
+  const [showIncidents, setShowIncidents] = useState(false);
 
   useEffect(() => {
     const now = new Date();
@@ -172,6 +174,18 @@ export default function InquilinoDetail({ rental, onBack }) {
     query.then(({ data }) => { if (data) setDocs(data); });
   }, [rental.propertyId, rental.roomId]);
 
+  // Cargar incidencias del inquilino desde Supabase
+  useEffect(() => {
+    const query = supabase
+      .from('incidents')
+      .select('id, description, status, created_at, attachment_url')
+      .eq('property_id', String(rental.propertyId))
+      .eq('tenant_id', String(rental.tenantId))
+      .order('created_at', { ascending: false });
+    if (rental.roomId) query.eq('room_id', String(rental.roomId));
+    query.then(({ data }) => { if (data) setIncidents(data); });
+  }, [rental.propertyId, rental.tenantId, rental.roomId]);
+
   const handleSendIncident = async () => {
     if (!incidentText.trim() && !incidentFile) return;
     if (sendingIncident) return;
@@ -230,9 +244,18 @@ export default function InquilinoDetail({ rental, onBack }) {
       read_by_tenant: true,
     });
 
+    const newIncident = {
+      id: Date.now(),
+      description: incidentText.trim(),
+      status: 'open',
+      created_at: new Date().toISOString(),
+      attachment_url: attachmentUrl,
+    };
+    setIncidents(prev => [newIncident, ...prev]);
     setIncidentText('');
     setIncidentFile(null);
     setShowIncident(false);
+    setShowIncidents(true);
     setSendingIncident(false);
   };
 
@@ -457,6 +480,48 @@ export default function InquilinoDetail({ rental, onBack }) {
             >
               {sendingIncident ? 'Enviando…' : 'Enviar incidencia'}
             </button>
+          </div>
+        )}
+
+        {/* Historial de incidencias */}
+        <div className="inquilino-docs-card" onClick={() => setShowIncidents(!showIncidents)} style={{ cursor: 'pointer' }}>
+          <span className="docs-label">Mis incidencias</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {incidents.length > 0 && (
+              <span className="docs-count">{incidents.length}</span>
+            )}
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <polyline points={showIncidents ? '18 15 12 9 6 15' : '6 9 12 15 18 9'} stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
+
+        {showIncidents && (
+          <div className="inquilino-docs-section">
+            {incidents.length === 0 ? (
+              <p className="docs-empty">No has reportado ninguna incidencia todavía.</p>
+            ) : (
+              incidents.map(inc => {
+                const statusMap = {
+                  open:        { label: 'Pendiente',   cls: 'incident-status-open' },
+                  in_progress: { label: 'En proceso',  cls: 'incident-status-progress' },
+                  resolved:    { label: 'Resuelta',    cls: 'incident-status-resolved' },
+                };
+                const { label, cls } = statusMap[inc.status] || statusMap.open;
+                const fecha = new Date(inc.created_at).toLocaleDateString('es-ES', {
+                  day: '2-digit', month: 'short', year: 'numeric',
+                });
+                return (
+                  <div key={inc.id} className="incident-history-row">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p className="incident-history-desc">{inc.description}</p>
+                      <p className="incident-history-date">{fecha}</p>
+                    </div>
+                    <span className={`incident-status-badge ${cls}`}>{label}</span>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 
