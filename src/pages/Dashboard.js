@@ -635,6 +635,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
 function AddPropertyModal({ property, onClose, onSave, onDelete }) {
   const [name, setName] = useState(property?.name || '');
   const [status, setStatus] = useState(property?.status || 'vacio');
+  const [saving, setSaving] = useState(false);
   const [paymentStartDay, setPaymentStartDay] = useState(property?.paymentConfig?.startDay?.toString() || '1');
   const [paymentEndDay, setPaymentEndDay] = useState(property?.paymentConfig?.endDay?.toString() || '5');
   const [ownershipPercentage, setOwnershipPercentage] = useState(property?.ownershipPercentage?.toString() || '100');
@@ -663,6 +664,7 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (saving) return;
 
     const propertyData = {
       name,
@@ -701,7 +703,8 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
       };
     }
 
-    onSave(propertyData);
+    setSaving(true);
+    Promise.resolve(onSave(propertyData)).finally(() => setSaving(false));
   };
 
   const allRoomPricesFilled = roomPrices.length > 0 && roomPrices.every(p => parseFloat(p) > 0);
@@ -895,9 +898,9 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
             <button
               type="submit"
               className="submit-button"
-              disabled={status === 'por_habitaciones' && !property && parseInt(numberOfRooms) > 0 && !allRoomPricesFilled}
+              disabled={saving || (status === 'por_habitaciones' && !property && parseInt(numberOfRooms) > 0 && !allRoomPricesFilled)}
             >
-              {property ? 'Guardar cambios' : 'Añadir propiedad'}
+              {saving ? 'Guardando…' : property ? 'Guardar cambios' : 'Añadir propiedad'}
             </button>
 
             {property && onDelete && (

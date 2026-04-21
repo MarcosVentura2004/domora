@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import Welcome from './pages/Welcome';
 import Auth from './pages/Auth';
@@ -8,7 +8,9 @@ import InquilinoHome from './pages/InquilinoHome';
 import './App.css';
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('welcome');
+  const [currentPage, rawSetPage] = useState('welcome');
+  const currentPageRef = useRef('welcome');
+  const setPage = (page) => { currentPageRef.current = page; rawSetPage(page); };
   const [userType, setUserType] = useState(null); // 'propietario' o 'inquilino'
   const [userEmail, setUserEmail] = useState(null);
   const [tenantCodes, setTenantCodes] = useState([]);
@@ -20,7 +22,7 @@ function App() {
       setUserType('inquilino');
       const saved = JSON.parse(localStorage.getItem('inquilino_codes') || '[]');
       setTenantCodes(saved);
-      setCurrentPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
+      setPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
       return;
     }
 
@@ -28,18 +30,21 @@ function App() {
       setUserEmail(user.email);
       setUserType('propietario');
       localStorage.setItem('userType', 'propietario');
-      setCurrentPage('dashboard');
+      setPage('dashboard');
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) restoreFromUser(session.user);
+      if (session?.user && currentPageRef.current !== 'auth') restoreFromUser(session.user);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      // INITIAL_SESSION se dispara al montar junto a getSession — ignorarlo para evitar
+      // doble llamada a restoreFromUser. Solo reaccionar a SIGNED_IN real (post-login).
+      if (event === 'INITIAL_SESSION') return;
+      if (event === 'SIGNED_IN' && session?.user && currentPageRef.current !== 'auth') {
         restoreFromUser(session.user);
       } else if (event === 'SIGNED_OUT') {
-        setCurrentPage('welcome');
+        setPage('welcome');
         setUserType(null);
         setUserEmail(null);
         setTenantCodes([]);
@@ -53,9 +58,9 @@ function App() {
     setUserType(type);
     if (type === 'inquilino') {
       localStorage.setItem('userType', 'inquilino');
-      setCurrentPage('code-entry');
+      setPage('code-entry');
     } else {
-      setCurrentPage('auth');
+      setPage('auth');
     }
   };
 
@@ -63,14 +68,14 @@ function App() {
     setUserEmail(user.email);
     localStorage.setItem('userType', 'propietario');
     await supabase.auth.updateUser({ data: { userType: 'propietario' } });
-    setCurrentPage('dashboard');
+    setPage('dashboard');
   };
 
   const handleCodeValid = (code) => {
     const updated = tenantCodes.includes(code) ? tenantCodes : [...tenantCodes, code];
     setTenantCodes(updated);
     localStorage.setItem('inquilino_codes', JSON.stringify(updated));
-    setCurrentPage('inquilino-home');
+    setPage('inquilino-home');
   };
 
   const handleCodesUpdate = (codes) => {
@@ -84,7 +89,7 @@ function App() {
     }
     localStorage.removeItem('userType');
     localStorage.removeItem('inquilino_codes');
-    setCurrentPage('welcome');
+    setPage('welcome');
     setUserType(null);
     setUserEmail(null);
     setTenantCodes([]);
@@ -97,10 +102,10 @@ function App() {
     if (newType === 'inquilino') {
       const saved = JSON.parse(localStorage.getItem('inquilino_codes') || '[]');
       setTenantCodes(saved);
-      setCurrentPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
+      setPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
     } else {
       await supabase.auth.updateUser({ data: { userType: 'propietario' } });
-      setCurrentPage('dashboard');
+      setPage('dashboard');
     }
   };
 
@@ -113,7 +118,7 @@ function App() {
       {currentPage === 'auth' && (
         <Auth
           onLogin={handleLogin}
-          onBack={() => setCurrentPage('welcome')}
+          onBack={() => setPage('welcome')}
         />
       )}
 
@@ -128,7 +133,7 @@ function App() {
       {currentPage === 'code-entry' && (
         <CodeEntry
           onCodeValid={handleCodeValid}
-          onBack={() => setCurrentPage('welcome')}
+          onBack={() => setPage('welcome')}
         />
       )}
 

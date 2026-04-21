@@ -70,6 +70,7 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [showIncident, setShowIncident] = useState(false);
   const [incidentText, setIncidentText] = useState('');
   const [incidentFile, setIncidentFile] = useState(null); // { id, dataUrl, fileName, fileType, fileSize }
+  const [sendingIncident, setSendingIncident] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showGroupChat, setShowGroupChat] = useState(false);
   const [hasGroupChat, setHasGroupChat] = useState(false);
@@ -173,6 +174,8 @@ export default function InquilinoDetail({ rental, onBack }) {
 
   const handleSendIncident = async () => {
     if (!incidentText.trim() && !incidentFile) return;
+    if (sendingIncident) return;
+    setSendingIncident(true);
     const { landlordEmail, propertyId, tenantId, roomId, tenantName, address } = rental;
 
     // 1. Subir adjunto a Supabase Storage (si existe)
@@ -187,6 +190,7 @@ export default function InquilinoDetail({ rental, onBack }) {
       if (uploadError) {
         console.error('[InquilinoDetail] upload error:', uploadError);
         alert('Error subiendo el archivo adjunto.');
+        setSendingIncident(false);
         return;
       }
       attachmentUrl = supabase.storage.from('incident-attachments').getPublicUrl(path).data.publicUrl;
@@ -208,6 +212,7 @@ export default function InquilinoDetail({ rental, onBack }) {
     if (dbError) {
       console.error('[InquilinoDetail] insert incident error:', dbError);
       alert(`Error guardando la incidencia: ${dbError.message}`);
+      setSendingIncident(false);
       return;
     }
 
@@ -228,6 +233,7 @@ export default function InquilinoDetail({ rental, onBack }) {
     setIncidentText('');
     setIncidentFile(null);
     setShowIncident(false);
+    setSendingIncident(false);
   };
 
   if (showChat) {
@@ -447,9 +453,9 @@ export default function InquilinoDetail({ rental, onBack }) {
             <button
               className="inquilino-action-btn primary"
               onClick={handleSendIncident}
-              disabled={!incidentText.trim() && !incidentFile}
+              disabled={sendingIncident || (!incidentText.trim() && !incidentFile)}
             >
-              Enviar incidencia
+              {sendingIncident ? 'Enviando…' : 'Enviar incidencia'}
             </button>
           </div>
         )}
