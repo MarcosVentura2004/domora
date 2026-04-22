@@ -115,33 +115,22 @@ function expVal(e) {
   return (Number(e.amount) || 0) * pct / 100;
 }
 
-// Valor prorrateado de un gasto para un mes concreto
+// Total real que un gasto aporta durante el año completo (suma de todos sus pagos)
+function expenseYearContribution(e, year) {
+  let total = 0;
+  for (let m = 0; m < 12; m++) {
+    if (getExpensesForMonth([e], year, m).length > 0) total += expVal(e);
+  }
+  return total;
+}
+
+// Valor mensual prorrateado: redistribuye el total anual real en los 12 meses.
+// Los gastos únicos/puntuales permanecen en su mes original.
 function proratedExpenseMonthValue(e, year, month) {
-  const startStr = e.start_date || e.createdAt || '';
-  const start = new Date(startStr.includes('T') ? startStr : startStr + 'T12:00:00');
-  const sy = start.getFullYear(), sm = start.getMonth();
-  if (year < sy || (year === sy && month < sm)) return 0;
-
-  const val = expVal(e);
-  const freq = e.frequency;
-
-  if (e.type === 'puntual' || freq === 'unico') {
-    return (sy === year && sm === month) ? val : 0;
+  if (e.type === 'puntual' || e.frequency === 'unico') {
+    return getExpensesForMonth([e], year, month).length > 0 ? expVal(e) : 0;
   }
-  if (freq === 'manual') return val;
-
-  if (e.type === 'recurrente_temporal') {
-    const step = freq === 'trimestral' ? 3 : freq === 'anual' ? 12 : freq === 'custom' ? (e.custom_frequency_months || 1) : 1;
-    const monthsDiff = (year - sy) * 12 + (month - sm);
-    const paymentIdx = Math.floor(monthsDiff / step);
-    if (paymentIdx >= (e.duration_payments || 0)) return 0;
-  }
-
-  if (freq === 'anual') return val / 12;
-  if (freq === 'trimestral') return val / 3;
-  if (freq === 'mensual') return val;
-  if (freq === 'custom') return val / (e.custom_frequency_months || 1);
-  return val;
+  return expenseYearContribution(e, year) / 12;
 }
 
 function TableContent({ catData, totalByMonth, yearTotal, expanded, toggleExpand, getSubcats }) {
@@ -278,36 +267,35 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
   };
 
   // ── Datos prorrateados ──────────────────────────────────────────────────────
+  // Se muestran los 12 meses (sin filtro isPastOrCurrent) para que el total
+  // anual coincida con el modo Real y la distribución sea uniforme.
   const proratedCatData = Object.keys(CATEGORY_LABELS).map(cat => {
-    const byMonth = months.map((m) => {
-      if (!isPastOrCurrent(m)) return 0;
-      return expenses
+    const byMonth = months.map((m) =>
+      expenses
         .filter(e => e.active !== false && normCat(e.category) === cat)
-        .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0);
-    });
+        .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0)
+    );
     return { cat, byMonth, total: byMonth.reduce((s, v) => s + v, 0) };
   }).filter(d => d.total > 0);
 
-  const proratedTotalByMonth = months.map((m) => {
-    if (!isPastOrCurrent(m)) return 0;
-    return expenses
+  const proratedTotalByMonth = months.map((m) =>
+    expenses
       .filter(e => e.active !== false)
-      .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0);
-  });
+      .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0)
+  );
   const proratedYearTotal = proratedTotalByMonth.reduce((s, v) => s + v, 0);
-  const proratedMonthAvg = proratedYearTotal / (now.getMonth() + 1 < 12 && year === now.getFullYear() ? now.getMonth() + 1 : 12);
+  const proratedMonthAvg = proratedYearTotal / 12;
 
   const getProratedSubcats = (cat) => {
     const subs = [...new Set(
       expenses.filter(e => normCat(e.category) === cat && e.subcategory).map(e => e.subcategory)
     )];
     return subs.map(sub => {
-      const byMonth = months.map((m) => {
-        if (!isPastOrCurrent(m)) return 0;
-        return expenses
+      const byMonth = months.map((m) =>
+        expenses
           .filter(e => e.active !== false && normCat(e.category) === cat && e.subcategory === sub)
-          .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0);
-      });
+          .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0)
+      );
       return { sub, byMonth, total: byMonth.reduce((s, v) => s + v, 0) };
     }).filter(d => d.total > 0);
   };
