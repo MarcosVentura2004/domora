@@ -115,6 +115,35 @@ function expVal(e) {
   return (Number(e.amount) || 0) * pct / 100;
 }
 
+// Valor prorrateado de un gasto para un mes concreto
+function proratedExpenseMonthValue(e, year, month) {
+  const startStr = e.start_date || e.createdAt || '';
+  const start = new Date(startStr.includes('T') ? startStr : startStr + 'T12:00:00');
+  const sy = start.getFullYear(), sm = start.getMonth();
+  if (year < sy || (year === sy && month < sm)) return 0;
+
+  const val = expVal(e);
+  const freq = e.frequency;
+
+  if (e.type === 'puntual' || freq === 'unico') {
+    return (sy === year && sm === month) ? val : 0;
+  }
+  if (freq === 'manual') return val;
+
+  if (e.type === 'recurrente_temporal') {
+    const step = freq === 'trimestral' ? 3 : freq === 'anual' ? 12 : freq === 'custom' ? (e.custom_frequency_months || 1) : 1;
+    const monthsDiff = (year - sy) * 12 + (month - sm);
+    const paymentIdx = Math.floor(monthsDiff / step);
+    if (paymentIdx >= (e.duration_payments || 0)) return 0;
+  }
+
+  if (freq === 'anual') return val / 12;
+  if (freq === 'trimestral') return val / 3;
+  if (freq === 'mensual') return val;
+  if (freq === 'custom') return val / (e.custom_frequency_months || 1);
+  return val;
+}
+
 function TableContent({ catData, totalByMonth, yearTotal, expanded, toggleExpand, getSubcats }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -201,6 +230,7 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
   const [year, setYear] = useState(now.getFullYear());
   const [expanded, setExpanded] = useState(new Set());
   const [tableFullscreen, setTableFullscreen] = useState(false);
+  const [prorated, setProrated] = useState(false);
 
   const months = Array.from({ length: 12 }, (_, m) => m);
   const isPastOrCurrent = (m) =>
@@ -230,7 +260,7 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
     return { cat, byMonth, total: byMonth.reduce((s, v) => s + v, 0) };
   }).filter(d => d.total > 0);
 
-  // Subcategorías para una categoría
+  // Subcategorías para una categoría (modo real)
   const getSubcats = (cat) => {
     const subs = [...new Set(
       expenses
@@ -247,9 +277,51 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
     }).filter(d => d.total > 0);
   };
 
+  // ── Datos prorrateados ──────────────────────────────────────────────────────
+  const proratedCatData = Object.keys(CATEGORY_LABELS).map(cat => {
+    const byMonth = months.map((m) => {
+      if (!isPastOrCurrent(m)) return 0;
+      return expenses
+        .filter(e => e.active !== false && normCat(e.category) === cat)
+        .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0);
+    });
+    return { cat, byMonth, total: byMonth.reduce((s, v) => s + v, 0) };
+  }).filter(d => d.total > 0);
+
+  const proratedTotalByMonth = months.map((m) => {
+    if (!isPastOrCurrent(m)) return 0;
+    return expenses
+      .filter(e => e.active !== false)
+      .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0);
+  });
+  const proratedYearTotal = proratedTotalByMonth.reduce((s, v) => s + v, 0);
+  const proratedMonthAvg = proratedYearTotal / (now.getMonth() + 1 < 12 && year === now.getFullYear() ? now.getMonth() + 1 : 12);
+
+  const getProratedSubcats = (cat) => {
+    const subs = [...new Set(
+      expenses.filter(e => normCat(e.category) === cat && e.subcategory).map(e => e.subcategory)
+    )];
+    return subs.map(sub => {
+      const byMonth = months.map((m) => {
+        if (!isPastOrCurrent(m)) return 0;
+        return expenses
+          .filter(e => e.active !== false && normCat(e.category) === cat && e.subcategory === sub)
+          .reduce((s, e) => s + proratedExpenseMonthValue(e, year, m), 0);
+      });
+      return { sub, byMonth, total: byMonth.reduce((s, v) => s + v, 0) };
+    }).filter(d => d.total > 0);
+  };
+
+  // Datos activos según el modo seleccionado
+  const activeCatData      = prorated ? proratedCatData      : catData;
+  const activeTotalByMonth = prorated ? proratedTotalByMonth : totalByMonth;
+  const activeYearTotal    = prorated ? proratedYearTotal    : yearTotal;
+  const activeMonthAvg     = prorated ? proratedMonthAvg     : monthAvg;
+  const activeGetSubcats   = prorated ? getProratedSubcats   : getSubcats;
+
   // Gráfico de barras
   const CHART_H = 120, BAR_W = 18, GAP = 6;
-  const maxBar = Math.max(...totalByMonth, 0.01);
+  const maxBar = Math.max(...activeTotalByMonth, 0.01);
 
   const toggleExpand = (cat) => {
     setExpanded(prev => {
@@ -277,8 +349,8 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
       {/* 3 métricas */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '0 16px 16px' }}>
         {[
-          { label: 'Total anual',    value: yearTotal > 0 ? `-${yearTotal.toFixed(0)} €`   : '—',  color: '#F44336' },
-          { label: 'Media mensual',  value: monthAvg > 0  ? `-${monthAvg.toFixed(0)} €/mes` : '—', color: '#FF9800' },
+          { label: 'Total anual',    value: activeYearTotal > 0 ? `-${activeYearTotal.toFixed(0)} €`   : '—',  color: '#F44336' },
+          { label: 'Media mensual',  value: activeMonthAvg > 0  ? `-${activeMonthAvg.toFixed(0)} €/mes` : '—', color: '#FF9800' },
           {
             label: 'Neto',
             value: yearNet !== null ? `${yearNet >= 0 ? '+' : ''}${yearNet.toFixed(0)} €` : '—',
@@ -293,7 +365,7 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
       </div>
 
       {/* Gráfico */}
-      {catData.length > 0 && (
+      {activeCatData.length > 0 && (
         <div className="info-card">
           <h3 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 600 }}>Gastos por mes</h3>
           <div style={{ overflowX: 'auto' }}>
@@ -307,7 +379,7 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
                 let yOff = CHART_H;
                 return (
                   <g key={m}>
-                    {catData.map(({ cat, byMonth }) => {
+                    {activeCatData.map(({ cat, byMonth }) => {
                       const val = byMonth[i];
                       if (!val) return null;
                       const h = (val / maxBar) * CHART_H;
@@ -328,7 +400,7 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
           </div>
           {/* Leyenda */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginTop: 10 }}>
-            {catData.map(({ cat }) => (
+            {activeCatData.map(({ cat }) => (
               <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555' }}>
                 <div style={{ width: 9, height: 9, borderRadius: 2, background: CATEGORY_COLORS[cat] || '#9E9E9E', flexShrink: 0 }} />
                 {CATEGORY_LABELS[cat] || cat}
@@ -346,27 +418,52 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
             <button onClick={() => setTableFullscreen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#555', lineHeight: 1 }}>✕</button>
           </div>
           <div style={{ flex: 1, overflowX: 'auto', overflowY: 'auto' }}>
-            <TableContent catData={catData} totalByMonth={totalByMonth} yearTotal={yearTotal} expanded={expanded} toggleExpand={toggleExpand} getSubcats={getSubcats} />
+            <TableContent catData={activeCatData} totalByMonth={activeTotalByMonth} yearTotal={activeYearTotal} expanded={expanded} toggleExpand={toggleExpand} getSubcats={activeGetSubcats} />
           </div>
         </div>
       )}
       <div className="info-card" style={{ padding: 0, overflowX: 'auto' }}>
-        {catData.length === 0 ? (
+        {activeCatData.length === 0 ? (
           <p style={{ textAlign: 'center', color: '#aaa', padding: 24, fontSize: 13 }}>Sin gastos en {year}</p>
         ) : (
           <>
-          <div style={{ display: 'flex', gap: 8, padding: '10px 12px 0', justifyContent: 'flex-end' }}>
-            <button onClick={() => setTableFullscreen(true)} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
-              ⤢ Pantalla completa
-            </button>
-            <button onClick={() => exportToExcel({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
-              ↓ Excel
-            </button>
-            <button onClick={() => exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
-              ↓ PDF
-            </button>
+          <div style={{ display: 'flex', gap: 8, padding: '10px 12px 0', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            {/* Toggle Prorrateado / Real */}
+            <div style={{ display: 'flex', background: '#f0f0f0', borderRadius: 8, padding: 2, gap: 2 }}>
+              {[{ label: 'Real', value: false }, { label: 'Prorrateado', value: true }].map(opt => (
+                <button
+                  key={opt.label}
+                  onClick={() => setProrated(opt.value)}
+                  style={{
+                    background: prorated === opt.value ? 'white' : 'transparent',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: prorated === opt.value ? 600 : 400,
+                    color: prorated === opt.value ? '#333' : '#888',
+                    cursor: 'pointer',
+                    boxShadow: prorated === opt.value ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setTableFullscreen(true)} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
+                ⤢ Pantalla completa
+              </button>
+              <button onClick={() => exportToExcel({ catData: activeCatData, getSubcats: activeGetSubcats, totalByMonth: activeTotalByMonth, yearTotal: activeYearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
+                ↓ Excel
+              </button>
+              <button onClick={() => exportToPDF({ catData: activeCatData, getSubcats: activeGetSubcats, totalByMonth: activeTotalByMonth, yearTotal: activeYearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
+                ↓ PDF
+              </button>
+            </div>
           </div>
-          <TableContent catData={catData} totalByMonth={totalByMonth} yearTotal={yearTotal} expanded={expanded} toggleExpand={toggleExpand} getSubcats={getSubcats} />
+          <TableContent catData={activeCatData} totalByMonth={activeTotalByMonth} yearTotal={activeYearTotal} expanded={expanded} toggleExpand={toggleExpand} getSubcats={activeGetSubcats} />
           </>
         )}
       </div>
