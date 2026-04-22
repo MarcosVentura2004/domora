@@ -1,7 +1,33 @@
 import React, { useState } from 'react';
 
-async function exportToExcel({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS }) {
+// Devuelve los pagos individuales del año ordenados por fecha
+function buildPaymentRows(expenses, year, CATEGORY_LABELS) {
+  const payments = [];
+  for (let m = 0; m < 12; m++) {
+    getExpensesForMonth(expenses, year, m).forEach(e => {
+      const startStr = e.start_date || e.createdAt || '';
+      const start = new Date(startStr.includes('T') ? startStr : startStr + 'T12:00:00');
+      const day = start.getDate();
+      const lastDay = new Date(year, m + 1, 0).getDate();
+      const d = Math.min(day, lastDay);
+      payments.push({
+        sortKey: year * 10000 + (m + 1) * 100 + d,
+        dateStr: `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${year}`,
+        cat: CATEGORY_LABELS[normCat(e.category)] || e.category || '',
+        sub: e.subcategory || '',
+        desc: e.description || e.name || '',
+        amount: parseFloat(expVal(e).toFixed(2)),
+      });
+    });
+  }
+  payments.sort((a, b) => a.sortKey - b.sortKey);
+  return payments;
+}
+
+async function exportToExcel({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses }) {
   const XLSX = await import('xlsx');
+
+  // Hoja 1: Resumen por categoría y mes
   const header = ['Categoría', ...MONTH_NAMES, 'Total'];
   const rows = [header];
   catData.forEach(({ cat, byMonth, total }) => {
@@ -11,16 +37,25 @@ async function exportToExcel({ catData, getSubcats, totalByMonth, yearTotal, yea
     });
   });
   rows.push(['Total', ...totalByMonth.map(v => v > 0 ? parseFloat(v.toFixed(2)) : ''), parseFloat(yearTotal.toFixed(2))]);
-  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Hoja 2: Detalle con fecha exacta de cada pago
+  const detailRows = [['Fecha', 'Categoría', 'Subcategoría', 'Descripción', 'Importe (€)']];
+  buildPaymentRows(expenses, year, CATEGORY_LABELS).forEach(p =>
+    detailRows.push([p.dateStr, p.cat, p.sub, p.desc, p.amount])
+  );
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, `Gastos ${year}`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), `Resumen ${year}`);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detailRows), `Detalle ${year}`);
   XLSX.writeFile(wb, `gastos_${propertyName || 'propiedad'}_${year}.xlsx`);
 }
 
-async function exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS }) {
+async function exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses }) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const colW = 54, firstColW = 110, rowH = 16, startX = 20, startY = 50;
+
+  // ── Página 1: Resumen por categoría y mes ──────────────────────────────────
   doc.setFontSize(13);
   doc.text(`Gastos ${year}${propertyName ? ` — ${propertyName}` : ''}`, startX, 30);
   doc.setFontSize(8);
@@ -52,6 +87,37 @@ async function exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year,
     });
   });
   drawRow(['Total', ...totalByMonth.map(v => v > 0 ? v.toFixed(0) : ''), yearTotal.toFixed(0)], true);
+
+  // ── Página 2: Detalle con fecha exacta de cada pago ────────────────────────
+  doc.addPage();
+  doc.setFontSize(13);
+  doc.text(`Detalle de pagos ${year}${propertyName ? ` — ${propertyName}` : ''}`, startX, 30);
+  doc.setFontSize(8);
+
+  const detailCols = [
+    { label: 'Fecha',         w: 62 },
+    { label: 'Categoría',     w: 90 },
+    { label: 'Subcategoría',  w: 80 },
+    { label: 'Descripción',   w: 190 },
+    { label: 'Importe (€)',   w: 65 },
+  ];
+  let dy = startY;
+  doc.setFont(undefined, 'bold');
+  let dx = startX;
+  detailCols.forEach(col => { doc.text(col.label, dx, dy); dx += col.w; });
+  dy += rowH;
+  doc.setFont(undefined, 'normal');
+
+  buildPaymentRows(expenses, year, CATEGORY_LABELS).forEach(p => {
+    if (dy > 560) { doc.addPage(); dy = 30; }
+    dx = startX;
+    [p.dateStr, p.cat, p.sub, p.desc, `${p.amount} €`].forEach((cell, i) => {
+      doc.text(String(cell || '—'), dx, dy);
+      dx += detailCols[i].w;
+    });
+    dy += rowH;
+  });
+
   doc.save(`gastos_${propertyName || 'propiedad'}_${year}.pdf`);
 }
 
@@ -443,10 +509,10 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
               <button onClick={() => setTableFullscreen(true)} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
                 ⤢ Pantalla completa
               </button>
-              <button onClick={() => exportToExcel({ catData: activeCatData, getSubcats: activeGetSubcats, totalByMonth: activeTotalByMonth, yearTotal: activeYearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => exportToExcel({ catData: activeCatData, getSubcats: activeGetSubcats, totalByMonth: activeTotalByMonth, yearTotal: activeYearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
                 ↓ Excel
               </button>
-              <button onClick={() => exportToPDF({ catData: activeCatData, getSubcats: activeGetSubcats, totalByMonth: activeTotalByMonth, yearTotal: activeYearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => exportToPDF({ catData: activeCatData, getSubcats: activeGetSubcats, totalByMonth: activeTotalByMonth, yearTotal: activeYearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses })} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 4 }}>
                 ↓ PDF
               </button>
             </div>
