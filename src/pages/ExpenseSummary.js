@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 
-// Devuelve los pagos individuales del año ordenados por fecha
+// Devuelve los pagos individuales del año ordenados por fecha, solo los ya pagados (≤ hoy)
 function buildPaymentRows(expenses, year, CATEGORY_LABELS) {
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
   const payments = [];
   for (let m = 0; m < 12; m++) {
     getExpensesForMonth(expenses, year, m).forEach(e => {
@@ -10,6 +12,8 @@ function buildPaymentRows(expenses, year, CATEGORY_LABELS) {
       const day = start.getDate();
       const lastDay = new Date(year, m + 1, 0).getDate();
       const d = Math.min(day, lastDay);
+      const paymentDate = new Date(year, m, d);
+      if (paymentDate > today) return; // omitir pagos futuros
       payments.push({
         sortKey: year * 10000 + (m + 1) * 100 + d,
         dateStr: `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${year}`,
