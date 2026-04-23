@@ -1492,7 +1492,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const [uploading, setUploading] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [selectedFolderPath, setSelectedFolderPath] = useState('');
+  const [selectedFolderPath, setSelectedFolderPath] = useState(null); // null = no elegido, '' = raíz
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
@@ -1521,8 +1521,9 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
       setUploading(true);
       try {
         const safeName = attachmentFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const uploadPath = selectedFolderPath
-          ? `${landlordEmail}/${selectedFolderPath}/${Date.now()}_${safeName}`
+        // selectedFolderPath: null = picker no usado (fallback gastos), '' = raíz, 'X' = carpeta X
+        const uploadPath = selectedFolderPath !== null
+          ? `${landlordEmail}${selectedFolderPath ? '/' + selectedFolderPath : ''}/${Date.now()}_${safeName}`
           : `${landlordEmail}/gastos/${propertyId}/${Date.now()}_${safeName}`;
         const { error: upErr } = await supabase.storage.from('documentos').upload(uploadPath, attachmentFile, { upsert: false });
         if (upErr) {

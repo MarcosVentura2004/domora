@@ -123,10 +123,8 @@ function PropertyDocuments({ landlordEmail, onBack }) {
       if (error) {
         setFiles([]);
       } else {
-        // Only real files have metadata with a size field
-        const realFiles = (storageItems || []).filter(
-          item => item.metadata && item.metadata.size !== undefined
-        );
+        // Files have a non-null id; virtual folder entries have id === null
+        const realFiles = (storageItems || []).filter(item => item.id !== null);
         setFiles(realFiles);
       }
     } catch (err) {
