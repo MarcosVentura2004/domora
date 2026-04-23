@@ -172,10 +172,71 @@ function saveTenantCode(code, landlordEmail, propertyId, tenantId, roomId) {
   localStorage.setItem('tenant_codes', JSON.stringify(codes));
 }
 
+function ExpenseMenu({ expenseId, openMenuId, setOpenMenuId, onEdit, onDelete }) {
+  const isOpen = openMenuId === expenseId;
+  const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleOutside = (e) => {
+      if (!menuRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [isOpen, setOpenMenuId]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        ref={btnRef}
+        onClick={(e) => { e.stopPropagation(); setOpenMenuId(isOpen ? null : expenseId); }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: '#aaa', lineHeight: 1, display: 'flex', alignItems: 'center' }}
+        aria-label="Opciones del gasto"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="8" cy="3" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="8" cy="13" r="1.5" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div
+          ref={menuRef}
+          style={{
+            position: 'absolute', right: 0, top: '100%', zIndex: 200,
+            background: 'white', borderRadius: 10,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.13)',
+            border: '1px solid #eee', minWidth: 120, overflow: 'hidden',
+            maxWidth: 'calc(100vw - 16px)',
+          }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#333' }}
+          >
+            Editar
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpenMenuId(null); onDelete(); }}
+            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: '#F44336' }}
+          >
+            Eliminar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [expenses, setExpenses] = useState([]);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [openMenuExpenseId, setOpenMenuExpenseId] = useState(null);
   const [showExpenseSummary, setShowExpenseSummary] = useState(false);
   const [showEditRoom, setShowEditRoom] = useState(false);
   const [showEditTenant, setShowEditTenant] = useState(false);
@@ -280,9 +341,16 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setExpenses(prev => prev.filter(e => e.id !== id));
   };
 
-  const handleTogglePause = async (id, currentActive) => {
-    await supabase.from('expenses').update({ active: !currentActive }).eq('id', id);
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, active: !currentActive } : e));
+  const handleUpdateExpense = async (expenseId, expenseData) => {
+    const { data, error } = await supabase
+      .from('expenses')
+      .update(expenseData)
+      .eq('id', expenseId)
+      .select()
+      .single();
+    if (error) { alert(`Error actualizando el gasto: ${error.message}`); return; }
+    setExpenses(prev => prev.map(e => e.id === expenseId ? data : e));
+    setEditingExpense(null);
   };
 
   const handleUpdateVariableAmount = async (id, newAmount) => {
@@ -792,16 +860,13 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     <span style={{ color: isPendingVariable ? '#FFA726' : undefined }}>
                       {isPendingVariable ? '— €' : `${monthly.toFixed(2)} €/mes`}
                     </span>
-                    {exp.type !== 'puntual' && (
-                      <button
-                        className="delete-expense"
-                        style={{ background: exp.active === false ? '#E8F5E9' : '#FFF8E1', color: exp.active === false ? '#388E3C' : '#F57F17', borderRadius: 6, padding: '2px 7px', fontSize: 11 }}
-                        onClick={() => handleTogglePause(exp.id, exp.active !== false)}
-                      >
-                        {exp.active === false ? '▶' : '⏸'}
-                      </button>
-                    )}
-                    <button className="delete-expense" onClick={() => handleDeleteExpense(exp.id)}>×</button>
+                    <ExpenseMenu
+                      expenseId={exp.id}
+                      openMenuId={openMenuExpenseId}
+                      setOpenMenuId={setOpenMenuExpenseId}
+                      onEdit={() => { setEditingExpense(exp); setOpenMenuExpenseId(null); }}
+                      onDelete={() => handleDeleteExpense(exp.id)}
+                    />
                   </div>
                 </div>
               );
@@ -909,11 +974,13 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
         />
       )}
 
-      {showAddExpense && (
+      {(showAddExpense || editingExpense) && (
         <AddExpenseModal
-          onClose={() => setShowAddExpense(false)}
+          onClose={() => { setShowAddExpense(false); setEditingExpense(null); }}
           onAdd={handleAddExpense}
+          onUpdate={handleUpdateExpense}
           defaultExpensePct={property.ownershipPercentage || 100}
+          initialExpense={editingExpense}
         />
       )}
 
@@ -975,19 +1042,20 @@ const EXPENSE_CATEGORIES = [
   { key: 'otros',        label: 'Otros',              subcategories: [] },
 ];
 
-function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
+function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense }) {
   const today = new Date().toISOString().split('T')[0];
-  const [category, setCategory] = useState('');
-  const [subcategory, setSubcategory] = useState('');
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [repeats, setRepeats] = useState(false);
-  const [frequency, setFrequency] = useState('mensual');
-  const [customFreqMonths, setCustomFreqMonths] = useState('');
-  const [durationType, setDurationType] = useState('indefinido');
-  const [durationPayments, setDurationPayments] = useState('');
-  const [startDate, setStartDate] = useState(today);
-  const [expensePct, setExpensePct] = useState(defaultExpensePct != null ? String(defaultExpensePct) : '');
+  const isEditing = !!initialExpense;
+  const [category, setCategory] = useState(isEditing ? (initialExpense.category || '') : '');
+  const [subcategory, setSubcategory] = useState(isEditing ? (initialExpense.subcategory || '') : '');
+  const [description, setDescription] = useState(isEditing ? (initialExpense.description || '') : '');
+  const [amount, setAmount] = useState(isEditing ? (initialExpense.amount != null ? String(initialExpense.amount) : '') : '');
+  const [repeats, setRepeats] = useState(isEditing ? initialExpense.frequency !== 'unico' : false);
+  const [frequency, setFrequency] = useState(isEditing ? (initialExpense.frequency === 'unico' ? 'mensual' : initialExpense.frequency) : 'mensual');
+  const [customFreqMonths, setCustomFreqMonths] = useState(isEditing ? (initialExpense.custom_frequency_months ? String(initialExpense.custom_frequency_months) : '') : '');
+  const [durationType, setDurationType] = useState(isEditing ? (initialExpense.duration_payments ? 'pagos' : 'indefinido') : 'indefinido');
+  const [durationPayments, setDurationPayments] = useState(isEditing ? (initialExpense.duration_payments ? String(initialExpense.duration_payments) : '') : '');
+  const [startDate, setStartDate] = useState(isEditing ? (initialExpense.start_date || today) : today);
+  const [expensePct, setExpensePct] = useState(isEditing ? (initialExpense.expense_percentage != null ? String(initialExpense.expense_percentage) : '') : (defaultExpensePct != null ? String(defaultExpensePct) : ''));
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
@@ -1008,7 +1076,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
     const parts = [catObj?.label || category];
     if (subcategory) parts.push(subcategory);
     if (description) parts.push(description);
-    onAdd({
+    const expenseData = {
       name: parts.join(' — '),
       category,
       subcategory: subcategory || null,
@@ -1021,13 +1089,18 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
       start_date: startDate,
       active: true,
       expense_percentage: expensePct ? parseFloat(expensePct) : null,
-    });
+    };
+    if (isEditing) {
+      onUpdate(initialExpense.id, expenseData);
+    } else {
+      onAdd(expenseData);
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header"><h2>Añadir gasto</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <div className="modal-header"><h2>{isEditing ? 'Editar gasto' : 'Añadir gasto'}</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Categoría</label>
@@ -1129,7 +1202,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
               </button>
             </div>
           </div>
-          <button type="submit" className="submit-button">Añadir gasto</button>
+          <button type="submit" className="submit-button">{isEditing ? 'Guardar cambios' : 'Añadir gasto'}</button>
         </form>
       </div>
     </div>
