@@ -1,220 +1,351 @@
-.documents-container {
+/* ===================================================
+   Finder-style Document Browser
+   =================================================== */
+
+.finder-container {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 60px;
+  background: #F2F2F7;
+  display: flex;
+  flex-direction: column;
 }
 
-.documents-header {
+/* ── Header ─────────────────────────────────────────── */
+
+.finder-header {
   background: white;
-  padding: 16px 20px;
+  padding: 14px 16px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12px;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 0 #E8E8E8;
 }
 
-.documents-title {
-  font-size: 18px;
+.finder-back-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #333;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.finder-back-btn:hover {
+  background: #F0F0F0;
+}
+
+.finder-title {
+  flex: 1;
+  font-size: 17px;
   font-weight: 600;
   margin: 0;
-  flex: 1;
   text-align: center;
 }
 
-.add-document-button {
-  width: 44px;
-  height: 44px;
-  background: white;
-  border: 2px solid #e5e5e5;
-  border-radius: 12px;
-  font-size: 28px;
+/* ── Add button + dropdown ──────────────────────────── */
+
+.finder-add-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.finder-add-btn {
+  width: 36px;
+  height: 36px;
+  background: #000;
+  color: white;
+  border: none;
+  border-radius: 10px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.finder-add-btn:hover {
+  background: #333;
+}
+
+.finder-add-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  min-width: 190px;
+  overflow: hidden;
+  z-index: 200;
+  border: 1px solid #EBEBEB;
+}
+
+.finder-add-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #222;
+  text-align: left;
+  font-family: inherit;
+}
+
+.finder-add-menu button:hover {
+  background: #F5F5F5;
+}
+
+.finder-add-menu button:not(:last-child) {
+  border-bottom: 1px solid #F0F0F0;
+}
+
+/* ── Breadcrumb ─────────────────────────────────────── */
+
+.finder-breadcrumb {
+  background: white;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid #EBEBEB;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.finder-breadcrumb::-webkit-scrollbar {
+  display: none;
+}
+
+.breadcrumb-item {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #007AFF;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.breadcrumb-item:hover {
+  background: #EFF7FF;
+}
+
+.breadcrumb-item.active {
   color: #333;
+  font-weight: 500;
+  cursor: default;
 }
 
-.add-document-button:hover {
-  background: #f5f5f5;
+.breadcrumb-item.active:hover {
+  background: none;
 }
 
-.documents-list {
-  padding: 20px;
-  max-width: 600px;
-  margin: 0 auto;
+.breadcrumb-chevron {
+  flex-shrink: 0;
 }
 
-.empty-documents {
+/* ── Content area ───────────────────────────────────── */
+
+.finder-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px;
+}
+
+.finder-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+}
+
+@keyframes finder-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.finder-spinner {
+  animation: finder-spin 0.8s linear infinite;
+}
+
+.finder-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  padding: 80px 20px;
+  padding: 80px 24px;
+  color: #aaa;
 }
 
-.empty-documents svg {
-  margin: 0 auto 20px;
+.finder-empty p {
+  font-size: 16px;
+  margin: 14px 0 24px;
 }
 
-.empty-documents p {
-  font-size: 18px;
-  color: #999;
-  margin-bottom: 24px;
-}
-
-.add-first-document {
-  padding: 14px 28px;
+.finder-empty-cta {
+  padding: 12px 28px;
   background: #000;
   color: white;
   border: none;
   border-radius: 12px;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
+  font-family: inherit;
 }
 
-.add-first-document:hover {
+.finder-empty-cta:hover {
   background: #333;
 }
 
-.document-card {
+/* ── Item list ──────────────────────────────────────── */
+
+.finder-list {
+  /* intentionally no padding — items stretch edge-to-edge */
+}
+
+.finder-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
   background: white;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
+  border-bottom: 1px solid #F0F0F0;
+  cursor: pointer;
+  transition: background 0.12s;
+  min-height: 60px;
+}
+
+.finder-item:first-child {
+  border-top: 1px solid #F0F0F0;
+  margin-top: 8px;
+}
+
+.finder-item:hover {
+  background: #F7F7F7;
+}
+
+.finder-item:active {
+  background: #EFEFEF;
+}
+
+.finder-item-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s, box-shadow 0.2s;
+  justify-content: center;
 }
 
-.document-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
-.document-icon {
-  flex-shrink: 0;
-}
-
-.document-info {
+.finder-item-info {
   flex: 1;
+  min-width: 0;
 }
 
-.document-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: #000;
-  margin: 0 0 4px 0;
+.finder-item-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: #111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.document-description {
-  font-size: 14px;
-  color: #666;
-  margin: 0;
-}
-
-.delete-document {
-  background: none;
-  border: none;
-  color: #d32f2f;
-  font-size: 32px;
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.delete-document:hover {
-  color: #b71c1c;
-}
-
-.document-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.share-document-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
-  color: #bbb;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s, background 0.2s;
-}
-
-.share-document-btn:hover {
-  background: #f0f0f0;
-  color: #555;
-}
-
-.share-document-btn.shared {
-  color: #4CAF50;
-}
-
-.share-document-btn.shared:hover {
-  color: #388E3C;
-}
-
-.docs-section-label {
+.finder-item-meta {
+  display: block;
   font-size: 12px;
-  font-weight: 600;
   color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 20px 0 8px;
-  padding: 0 4px;
+  margin-top: 2px;
 }
 
-.document-card.tenant-doc {
-  background: #f9f9f9;
-  border-left: 3px solid #E0E0E0;
+/* Folder trailing chevron */
+.finder-chevron {
+  flex-shrink: 0;
+  margin-left: 2px;
 }
 
-.document-room-tag {
-  font-size: 11px;
-  color: #888;
-  background: #f0f0f0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: inline-block;
-  margin-top: 4px;
+/* ── Action buttons ─────────────────────────────────── */
+
+.finder-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
-/* Estilos del modal (reutilizamos los existentes) */
+.finder-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #C8C8C8;
+  padding: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.finder-action-share:hover {
+  color: #4CAF50;
+  background: #F0FAF0;
+}
+
+.finder-action-delete:hover {
+  color: #e74c3c;
+  background: #FFF0EE;
+}
+
+/* ===================================================
+   Shared modal styles (used by New Folder & Upload)
+   =================================================== */
+
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.48);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
   z-index: 2000;
-  padding: 20px;
+  padding: 0;
+}
+
+@media (min-width: 480px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
+  }
 }
 
 .modal-content {
   background: white;
-  border-radius: 20px;
-  padding: 24px;
-  max-width: 500px;
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px 36px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+}
+
+@media (min-width: 480px) {
+  .modal-content {
+    border-radius: 20px;
+    max-width: 460px;
+    padding: 24px;
+  }
 }
 
 .modal-header {
@@ -225,14 +356,15 @@
 }
 
 .modal-header h2 {
-  font-size: 24px;
+  font-size: 20px;
+  font-weight: 700;
   margin: 0;
 }
 
 .modal-close {
   background: none;
   border: none;
-  font-size: 32px;
+  font-size: 28px;
   cursor: pointer;
   color: #999;
   padding: 0;
@@ -241,10 +373,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 8px;
 }
 
 .modal-close:hover {
   color: #333;
+  background: #F0F0F0;
 }
 
 .form-group {
@@ -253,36 +387,34 @@
 
 .form-group label {
   display: block;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   margin-bottom: 8px;
-  color: #333;
+  color: #444;
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
-  padding: 14px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
+  padding: 13px 14px;
+  border: 1px solid #DDD;
+  border-radius: 12px;
   font-size: 16px;
   box-sizing: border-box;
   font-family: inherit;
+  background: #FAFAFA;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
   border-color: #000;
-}
-
-.form-group textarea {
-  resize: vertical;
+  background: white;
 }
 
 .submit-button {
   width: 100%;
-  padding: 16px;
+  padding: 15px;
   background: #000;
   color: white;
   border: none;
@@ -291,23 +423,31 @@
   font-weight: 600;
   cursor: pointer;
   margin-top: 8px;
+  font-family: inherit;
 }
 
 .submit-button:hover {
   background: #333;
 }
 
-/* ===== File upload ===== */
+.submit-button:disabled {
+  background: #CCC;
+  cursor: not-allowed;
+}
+
+/* ── File upload area ───────────────────────────────── */
+
 .file-upload-area {
-  border: 2px dashed #ddd;
-  border-radius: 12px;
-  padding: 20px;
+  border: 2px dashed #DDD;
+  border-radius: 14px;
+  padding: 24px;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .file-upload-area:hover {
   border-color: #007AFF;
+  background: #F8FBFF;
 }
 
 .file-upload-placeholder {
@@ -327,7 +467,7 @@
 
 .file-upload-placeholder span {
   font-size: 12px;
-  color: #999;
+  color: #AAA;
 }
 
 .file-selected {
@@ -336,21 +476,18 @@
   gap: 12px;
 }
 
-.file-selected-icon {
-  font-size: 32px;
-}
-
 .file-selected-name {
   font-size: 14px;
   font-weight: 600;
   margin: 0;
   color: #333;
+  word-break: break-all;
 }
 
 .file-selected-size {
   font-size: 12px;
   color: #999;
-  margin: 0;
+  margin: 4px 0 0;
 }
 
 .file-remove {
@@ -358,70 +495,11 @@
   background: none;
   border: none;
   font-size: 22px;
-  color: #999;
-  cursor: pointer;
-}
-
-.document-emoji {
-  font-size: 32px;
-}
-
-.document-icon-wrapper {
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.document-meta {
-  display: flex;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.document-filename {
-  font-size: 11px;
-  color: #999;
-}
-
-.document-size {
-  font-size: 11px;
   color: #bbb;
-}
-
-/* ===== Export buttons ===== */
-.export-buttons {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.export-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  flex-shrink: 0;
 }
 
-.export-btn:hover {
-  opacity: 0.85;
-}
-
-.export-btn.excel {
-  background: #E8F5E9;
-  color: #2E7D32;
-}
-
-.export-btn.pdf {
-  background: #FFEBEE;
-  color: #C62828;
+.file-remove:hover {
+  color: #e74c3c;
 }

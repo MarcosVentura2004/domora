@@ -1,54 +1,76 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './PropertyDocuments.css';
 import { supabase } from '../supabaseClient';
 
-function FileIcon({ fileType, size = 20 }) {
-  const s = size;
-  if (fileType && fileType.includes('pdf')) {
+// ─── SVG icons ────────────────────────────────────────────────────────────────
+
+function FolderIcon({ size = 36 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+        fill="#FFF3E0"
+        stroke="#F5A623"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FileIcon({ mimeType, size = 36 }) {
+  if (mimeType?.includes('pdf')) {
     return (
-      <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#e74c3c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M14 2v6h6" stroke="#e74c3c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <text x="6" y="19" fontSize="6" fill="#e74c3c" fontWeight="bold">PDF</text>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          fill="#FFEBEE" stroke="#e74c3c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 2v6h6" stroke="#e74c3c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <text x="6" y="19" fontSize="5.5" fill="#e74c3c" fontWeight="bold">PDF</text>
       </svg>
     );
   }
-  if (fileType && fileType.includes('image')) {
+  if (mimeType?.includes('image')) {
     return (
-      <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="3" width="18" height="18" rx="2" stroke="#27ae60" strokeWidth="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5" stroke="#27ae60" strokeWidth="2"/>
-        <polyline points="21 15 16 10 5 21" stroke="#27ae60" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="2" fill="#E8F5E9" stroke="#27ae60" strokeWidth="1.5"/>
+        <circle cx="8.5" cy="8.5" r="1.5" stroke="#27ae60" strokeWidth="1.5"/>
+        <polyline points="21 15 16 10 5 21" stroke="#27ae60" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     );
   }
-  if (fileType && (fileType.includes('word') || fileType.includes('document'))) {
+  if (mimeType?.includes('word') || mimeType?.includes('document') || mimeType?.includes('msword')) {
     return (
-      <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#2980b9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M14 2v6h6" stroke="#2980b9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <line x1="8" y1="13" x2="16" y2="13" stroke="#2980b9" strokeWidth="2" strokeLinecap="round"/>
-        <line x1="8" y1="17" x2="16" y2="17" stroke="#2980b9" strokeWidth="2" strokeLinecap="round"/>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          fill="#E3F2FD" stroke="#2980b9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 2v6h6" stroke="#2980b9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <line x1="8" y1="13" x2="16" y2="13" stroke="#2980b9" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="8" y1="17" x2="16" y2="17" stroke="#2980b9" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
     );
   }
-  if (fileType && (fileType.includes('sheet') || fileType.includes('excel') || fileType.includes('csv'))) {
+  if (mimeType?.includes('sheet') || mimeType?.includes('excel') || mimeType?.includes('csv')) {
     return (
-      <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#16a085" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M14 2v6h6" stroke="#16a085" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <line x1="8" y1="13" x2="16" y2="13" stroke="#16a085" strokeWidth="2" strokeLinecap="round"/>
-        <line x1="8" y1="17" x2="12" y2="17" stroke="#16a085" strokeWidth="2" strokeLinecap="round"/>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          fill="#E8F5E9" stroke="#16a085" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 2v6h6" stroke="#16a085" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <line x1="8" y1="13" x2="16" y2="13" stroke="#16a085" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="8" y1="17" x2="12" y2="17" stroke="#16a085" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
     );
   }
   return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M14 2v6h6" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+        fill="#F5F5F5" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M14 2v6h6" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatFileSize(bytes) {
   if (!bytes) return '';
@@ -57,256 +79,474 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getPublicUrl(storagePath) {
-  if (!storagePath) return null;
-  return supabase.storage.from('documents').getPublicUrl(storagePath).data.publicUrl;
+function getDirectChildren(allFolders, currentPath) {
+  return allFolders.filter(f => {
+    if (!currentPath) return !f.path.includes('/');
+    const prefix = currentPath + '/';
+    if (!f.path.startsWith(prefix)) return false;
+    return !f.path.slice(prefix.length).includes('/');
+  });
 }
 
-function PropertyDocuments({ property, room, landlordEmail, onBack, onUpdate }) {
-  const [documents, setDocuments] = useState([]);
-  const [showAddDocument, setShowAddDocument] = useState(false);
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+function PropertyDocuments({ landlordEmail, onBack }) {
+  const [currentPath, setCurrentPath] = useState(''); // relative to landlordEmail/
+  const [allFolders, setAllFolders] = useState([]);
+  const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const menuRef = useRef(null);
+
+  const storagePath = currentPath
+    ? `${landlordEmail}/${currentPath}`
+    : landlordEmail;
+
+  const loadContents = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Load all folders for this landlord
+      const { data: foldersData } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('landlord_email', landlordEmail)
+        .order('name', { ascending: true });
+      setAllFolders(foldersData || []);
+
+      // List files from storage at current path
+      const { data: storageItems, error } = await supabase.storage
+        .from('documentos')
+        .list(storagePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } });
+
+      if (error) {
+        setFiles([]);
+      } else {
+        // Only real files have metadata with a size field
+        const realFiles = (storageItems || []).filter(
+          item => item.metadata && item.metadata.size !== undefined
+        );
+        setFiles(realFiles);
+      }
+    } catch (err) {
+      console.error('[PropertyDocuments] loadContents error:', err);
+    }
+    setLoading(false);
+  }, [landlordEmail, storagePath]);
 
   useEffect(() => {
-    const query = supabase
-      .from('documents')
-      .select('*')
-      .eq('property_id', String(property.id))
-      .order('created_at', { ascending: false });
-    if (room) {
-      query.eq('room_id', String(room.id));
+    loadContents();
+  }, [loadContents]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = e => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+
+  // ── Navigation ───────────────────────────────────────────────────────────────
+
+  const breadcrumbs = ['Inicio', ...currentPath.split('/').filter(Boolean)];
+
+  const navigateToBreadcrumb = idx => {
+    if (idx === 0) {
+      setCurrentPath('');
+    } else {
+      const parts = currentPath.split('/').filter(Boolean);
+      setCurrentPath(parts.slice(0, idx).join('/'));
     }
-    query.then(({ data }) => {
-      setDocuments(data || []);
-      setLoading(false);
+  };
+
+  const handleFolderClick = folder => setCurrentPath(folder.path);
+
+  const handleFileClick = file => {
+    const filePath = `${storagePath}/${file.name}`;
+    const { data } = supabase.storage.from('documentos').getPublicUrl(filePath);
+    if (data?.publicUrl) window.open(data.publicUrl, '_blank');
+  };
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
+
+  const handleCreateFolder = async name => {
+    const newPath = currentPath ? `${currentPath}/${name}` : name;
+    const { error } = await supabase.from('folders').insert({
+      landlord_email: landlordEmail,
+      path: newPath,
+      name,
     });
-  }, [property.id, room?.id]);
-
-  const handleAddDocument = async ({ name, description, file }) => {
-    const storagePath = file
-      ? `${property.id}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`
-      : null;
-
-    if (file && storagePath) {
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(storagePath, file);
-      if (uploadError) {
-        alert('Error subiendo el archivo. Inténtalo de nuevo.');
-        return;
-      }
-    }
-
-    const { data: newDoc, error: dbError } = await supabase
-      .from('documents')
-      .insert({
-        property_id: String(property.id),
-        room_id: room ? String(room.id) : null,
-        landlord_email: landlordEmail,
-        name,
-        file_name: file?.name || null,
-        file_type: file?.type || null,
-        file_size: file?.size || null,
-        storage_path: storagePath || '',
-        uploaded_by: 'landlord',
-        shared_with_tenant: false,
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      console.error('[PropertyDocuments] insert error:', dbError);
-      alert(`Error guardando el documento: ${dbError.message}`);
+    if (error) {
+      alert(`Error creando carpeta: ${error.message}`);
       return;
     }
-
-    setDocuments(prev => [newDoc, ...prev]);
-    setShowAddDocument(false);
+    await loadContents();
+    setShowNewFolderModal(false);
   };
 
-  const handleShareDocument = async (docId) => {
-    const doc = documents.find(d => d.id === docId);
-    const newValue = !doc.shared_with_tenant;
-    await supabase.from('documents').update({ shared_with_tenant: newValue }).eq('id', docId);
-    setDocuments(prev => prev.map(d => d.id === docId ? { ...d, shared_with_tenant: newValue } : d));
-  };
-
-  const handleDeleteDocument = async (docId) => {
-    if (!window.confirm('¿Estás seguro de que quieres eliminar este documento?')) return;
-    const doc = documents.find(d => d.id === docId);
-    if (doc.storage_path) {
-      await supabase.storage.from('documents').remove([doc.storage_path]);
+  const handleUploadFile = async file => {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const uploadPath = `${storagePath}/${Date.now()}_${safeName}`;
+    const { error } = await supabase.storage
+      .from('documentos')
+      .upload(uploadPath, file, { upsert: false });
+    if (error) {
+      if (
+        error.message?.includes('Bucket not found') ||
+        error.statusCode === 404 ||
+        error.error === 'Bucket not found'
+      ) {
+        alert(
+          'El bucket "documentos" no existe en Supabase Storage.\n\n' +
+          'Cómo crearlo:\n' +
+          '1. Ve al dashboard de Supabase\n' +
+          '2. Storage → New Bucket\n' +
+          '3. Nombre: "documentos"\n' +
+          '4. Activa "Public bucket"\n' +
+          '5. Haz clic en "Create bucket"'
+        );
+      } else {
+        alert(`Error subiendo archivo: ${error.message}`);
+      }
+      return;
     }
-    await supabase.from('documents').delete().eq('id', docId);
-    setDocuments(prev => prev.filter(d => d.id !== docId));
+    await loadContents();
+    setShowUploadModal(false);
   };
 
-  const handleOpenDocument = (doc) => {
-    const url = getPublicUrl(doc.storage_path);
-    if (url) window.open(url, '_blank');
+  const handleDeleteFile = async (file, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar "${file.name}"?`)) return;
+    await supabase.storage.from('documentos').remove([`${storagePath}/${file.name}`]);
+    await loadContents();
   };
 
-  const landlordDocs = documents.filter(d => d.uploaded_by === 'landlord');
-  const tenantDocs = documents.filter(d => d.uploaded_by === 'tenant' && d.shared_by_tenant);
+  const handleDeleteFolder = async (folder, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar la carpeta "${folder.name}" y todo su contenido?`)) return;
+    const fullPath = `${landlordEmail}/${folder.path}`;
+    const { data: items } = await supabase.storage
+      .from('documentos')
+      .list(fullPath, { limit: 1000 });
+    if (items?.length > 0) {
+      await supabase.storage
+        .from('documentos')
+        .remove(items.map(i => `${fullPath}/${i.name}`));
+    }
+    // Delete this folder and all sub-folders from DB
+    await supabase
+      .from('folders')
+      .delete()
+      .eq('landlord_email', landlordEmail)
+      .or(`path.eq.${folder.path},path.like.${folder.path}/%`);
+    await loadContents();
+  };
+
+  const handleShareFile = async (file, e) => {
+    e.stopPropagation();
+    const { data } = supabase.storage
+      .from('documentos')
+      .getPublicUrl(`${storagePath}/${file.name}`);
+    if (data?.publicUrl) {
+      try {
+        await navigator.clipboard.writeText(data.publicUrl);
+        alert('Enlace copiado al portapapeles');
+      } catch {
+        prompt('Copia el enlace:', data.publicUrl);
+      }
+    }
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  const visibleFolders = getDirectChildren(allFolders, currentPath);
 
   return (
-    <div className="documents-container">
-      <div className="documents-header">
-        <button className="back-button" onClick={onBack}>←</button>
-        <h1 className="documents-title">{room ? `Docs - ${room.name}` : 'Documentos'}</h1>
-        <button className="add-document-button" onClick={() => setShowAddDocument(true)}>+</button>
+    <div className="finder-container">
+      {/* Header */}
+      <div className="finder-header">
+        <button className="finder-back-btn" onClick={onBack} aria-label="Volver">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M19 12H5M12 5l-7 7 7 7"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <h1 className="finder-title">Documentos</h1>
+        <div className="finder-add-wrapper" ref={menuRef}>
+          <button className="finder-add-btn" onClick={() => setShowMenu(v => !v)} aria-label="Añadir">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+          {showMenu && (
+            <div className="finder-add-menu">
+              <button onClick={() => { setShowMenu(false); setShowNewFolderModal(true); }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                    stroke="#F5A623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="12" y1="11" x2="12" y2="17" stroke="#F5A623" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="9" y1="14" x2="15" y2="14" stroke="#F5A623" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                Nueva carpeta
+              </button>
+              <button onClick={() => { setShowMenu(false); setShowUploadModal(true); }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                    stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <polyline points="17 8 12 3 7 8" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="12" y1="3" x2="12" y2="15" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Subir archivo
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="documents-list">
-        {loading && <p style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Cargando…</p>}
+      {/* Breadcrumb */}
+      <div className="finder-breadcrumb">
+        {breadcrumbs.map((crumb, idx) => (
+          <React.Fragment key={idx}>
+            {idx > 0 && (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="breadcrumb-chevron">
+                <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+            <button
+              className={`breadcrumb-item${idx === breadcrumbs.length - 1 ? ' active' : ''}`}
+              onClick={() => navigateToBreadcrumb(idx)}
+            >
+              {crumb}
+            </button>
+          </React.Fragment>
+        ))}
+      </div>
 
-        {/* Docs del propietario */}
-        {!loading && landlordDocs.length === 0 && tenantDocs.length === 0 && (
-          <div className="empty-documents">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* Content */}
+      <div className="finder-content">
+        {loading ? (
+          <div className="finder-loading">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="finder-spinner">
+              <circle cx="12" cy="12" r="10" stroke="#eee" strokeWidth="3"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
             </svg>
-            <p>No hay documentos añadidos</p>
-            <button className="add-first-document" onClick={() => setShowAddDocument(true)}>
-              Añadir primer documento
+          </div>
+        ) : visibleFolders.length === 0 && files.length === 0 ? (
+          <div className="finder-empty">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                fill="#F5F5F5" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <p>Esta carpeta está vacía</p>
+            <button className="finder-empty-cta" onClick={() => setShowMenu(true)}>
+              Añadir contenido
             </button>
           </div>
-        )}
-
-        {!loading && landlordDocs.map(document => (
-          <div key={document.id} className="document-card" onClick={() => handleOpenDocument(document)}>
-            <div className="document-icon-wrapper">
-              <FileIcon fileType={document.file_type} size={22} />
-            </div>
-            <div className="document-info">
-              <h3 className="document-name">{document.name}</h3>
-              {document.description && <p className="document-description">{document.description}</p>}
-              <div className="document-meta">
-                {document.file_name && <span className="document-filename">{document.file_name}</span>}
-                {document.file_size && <span className="document-size">{formatFileSize(document.file_size)}</span>}
-              </div>
-            </div>
-            <div className="document-actions" onClick={e => e.stopPropagation()}>
-              <button
-                className={`share-document-btn ${document.shared_with_tenant ? 'shared' : ''}`}
-                onClick={() => handleShareDocument(document.id)}
-                title={document.shared_with_tenant ? 'Dejar de compartir con inquilino' : 'Compartir con inquilino'}
+        ) : (
+          <div className="finder-list">
+            {/* Carpetas */}
+            {visibleFolders.map(folder => (
+              <div
+                key={folder.id}
+                className="finder-item finder-folder"
+                onClick={() => handleFolderClick(folder)}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="2"/>
-                  <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                  <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="2"/>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke="currentColor" strokeWidth="2"/>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-              </button>
-              <button className="delete-document" onClick={() => handleDeleteDocument(document.id)}>×</button>
-            </div>
-          </div>
-        ))}
-
-        {/* Docs compartidos por el inquilino */}
-        {!loading && tenantDocs.length > 0 && (
-          <>
-            <p className="docs-section-label">Documentos del inquilino</p>
-            {tenantDocs.map(document => (
-              <div key={document.id} className="document-card tenant-doc" onClick={() => handleOpenDocument(document)}>
-                <div className="document-icon-wrapper">
-                  <FileIcon fileType={document.file_type} size={22} />
+                <div className="finder-item-icon">
+                  <FolderIcon size={36} />
                 </div>
-                <div className="document-info">
-                  <h3 className="document-name">{document.name}</h3>
-                  {document.description && <p className="document-description">{document.description}</p>}
-                  <div className="document-meta">
-                    {document.file_name && <span className="document-filename">{document.file_name}</span>}
-                    {document.file_size && <span className="document-size">{formatFileSize(document.file_size)}</span>}
-                  </div>
+                <div className="finder-item-info">
+                  <span className="finder-item-name">{folder.name}</span>
+                </div>
+                <button
+                  className="finder-action-btn finder-action-delete"
+                  onClick={e => handleDeleteFolder(folder, e)}
+                  title="Eliminar carpeta"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" className="finder-chevron">
+                  <polyline points="9 18 15 12 9 6" stroke="#ccc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+            ))}
+
+            {/* Archivos */}
+            {files.map(file => (
+              <div
+                key={file.id || file.name}
+                className="finder-item finder-file"
+                onClick={() => handleFileClick(file)}
+              >
+                <div className="finder-item-icon">
+                  <FileIcon mimeType={file.metadata?.mimetype} size={36} />
+                </div>
+                <div className="finder-item-info">
+                  <span className="finder-item-name">{file.name}</span>
+                  {file.metadata?.size !== undefined && (
+                    <span className="finder-item-meta">{formatFileSize(file.metadata.size)}</span>
+                  )}
+                </div>
+                <div className="finder-file-actions" onClick={e => e.stopPropagation()}>
+                  <button
+                    className="finder-action-btn finder-action-share"
+                    onClick={e => handleShareFile(file, e)}
+                    title="Copiar enlace"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                      <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="2"/>
+                      <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                      <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="2"/>
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke="currentColor" strokeWidth="2"/>
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                  </button>
+                  <button
+                    className="finder-action-btn finder-action-delete"
+                    onClick={e => handleDeleteFile(file, e)}
+                    title="Eliminar archivo"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                      <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
             ))}
-          </>
+          </div>
         )}
       </div>
 
-      {showAddDocument && (
-        <AddDocumentModal onClose={() => setShowAddDocument(false)} onAdd={handleAddDocument} />
+      {/* Modals */}
+      {showNewFolderModal && (
+        <NewFolderModal
+          onClose={() => setShowNewFolderModal(false)}
+          onCreate={handleCreateFolder}
+        />
+      )}
+      {showUploadModal && (
+        <UploadFileModal
+          onClose={() => setShowUploadModal(false)}
+          onUpload={handleUploadFile}
+        />
       )}
     </div>
   );
 }
 
-function AddDocumentModal({ onClose, onAdd }) {
+// ─── New Folder Modal ─────────────────────────────────────────────────────────
+
+function NewFolderModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setSelectedFile(file);
-    if (!name) setName(file.name.replace(/\.[^/.]+$/, ''));
-  };
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
     if (!name.trim()) return;
     setLoading(true);
-    try {
-      await onAdd({ name, description, file: selectedFile || null });
-    } catch (err) {
-      console.error('Error añadiendo documento:', err);
-    } finally {
-      setLoading(false);
-    }
+    await onCreate(name.trim());
+    setLoading(false);
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Añadir documento</h2>
+          <h2>Nueva carpeta</h2>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Archivo (opcional)</label>
+            <label>Nombre</label>
+            <input
+              type="text"
+              placeholder="Ej: Contratos, Facturas, Seguros…"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          <button type="submit" className="submit-button" disabled={loading || !name.trim()}>
+            {loading ? 'Creando…' : 'Crear carpeta'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Upload File Modal ────────────────────────────────────────────────────────
+
+function UploadFileModal({ onClose, onUpload }) {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    if (!file) return;
+    setLoading(true);
+    await onUpload(file);
+    setLoading(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Subir archivo</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
             <div className="file-upload-area" onClick={() => fileInputRef.current.click()}>
-              {selectedFile ? (
+              {file ? (
                 <div className="file-selected">
-                  <FileIcon fileType={selectedFile.type} size={24} />
+                  <FileIcon mimeType={file.type} size={28} />
                   <div>
-                    <p className="file-selected-name">{selectedFile.name}</p>
-                    <p className="file-selected-size">{formatFileSize(selectedFile.size)}</p>
+                    <p className="file-selected-name">{file.name}</p>
+                    <p className="file-selected-size">{formatFileSize(file.size)}</p>
                   </div>
-                  <button type="button" className="file-remove" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}>×</button>
+                  <button
+                    type="button"
+                    className="file-remove"
+                    onClick={e => { e.stopPropagation(); setFile(null); }}
+                  >×</button>
                 </div>
               ) : (
                 <div className="file-upload-placeholder">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                      stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     <polyline points="17 8 12 3 7 8" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     <line x1="12" y1="3" x2="12" y2="15" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   <p>Toca para seleccionar un archivo</p>
-                  <span>PDF, imagen, Word, Excel...</span>
+                  <span>PDF, imagen, Word, Excel…</span>
                 </div>
               )}
             </div>
-            <input ref={fileInputRef} type="file" accept="*/*" style={{ display: 'none' }} onChange={handleFileChange} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="*/*"
+              style={{ display: 'none' }}
+              onChange={e => setFile(e.target.files[0] || null)}
+            />
           </div>
-          <div className="form-group">
-            <label>Nombre del documento</label>
-            <input type="text" placeholder="Ej: Contrato de alquiler, Seguro del hogar..." value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label>Descripción (opcional)</label>
-            <textarea placeholder="Ej: Renovado el 15/01/2024" value={description} onChange={(e) => setDescription(e.target.value)} rows="3" />
-          </div>
-          <button type="submit" className="submit-button" disabled={loading || !name.trim()}>
-            {loading ? 'Subiendo...' : 'Añadir documento'}
+          <button type="submit" className="submit-button" disabled={loading || !file}>
+            {loading ? 'Subiendo…' : 'Subir archivo'}
           </button>
         </form>
       </div>

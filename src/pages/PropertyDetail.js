@@ -1490,8 +1490,18 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [attachmentUrl, setAttachmentUrl] = useState(isEditing ? (initialExpense.attachment_url || '') : '');
   const [uploading, setUploading] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [selectedFolderPath, setSelectedFolderPath] = useState('');
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
+
+  const handleFolderSelected = (folderPath) => {
+    setAttachmentFile(pendingFile);
+    setSelectedFolderPath(folderPath);
+    setPendingFile(null);
+    setShowFolderPicker(false);
+  };
 
   const hasAmount = amount !== '' && parseFloat(amount) > 0;
   const derivedType = !repeats
@@ -1510,12 +1520,18 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
     if (attachmentFile) {
       setUploading(true);
       try {
-        await supabase.storage.createBucket('gastos', { public: true });
         const safeName = attachmentFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const path = `${landlordEmail}/${propertyId}/${Date.now()}_${safeName}`;
-        const { error: upErr } = await supabase.storage.from('gastos').upload(path, attachmentFile, { upsert: false });
-        if (upErr) throw upErr;
-        finalAttachmentUrl = supabase.storage.from('gastos').getPublicUrl(path).data.publicUrl;
+        const uploadPath = selectedFolderPath
+          ? `${landlordEmail}/${selectedFolderPath}/${Date.now()}_${safeName}`
+          : `${landlordEmail}/gastos/${propertyId}/${Date.now()}_${safeName}`;
+        const { error: upErr } = await supabase.storage.from('documentos').upload(uploadPath, attachmentFile, { upsert: false });
+        if (upErr) {
+          if (upErr.message?.includes('Bucket not found') || upErr.statusCode === 404 || upErr.error === 'Bucket not found') {
+            throw new Error('El bucket "documentos" no existe en Supabase Storage.\n\nCómo crearlo:\n1. Ve al dashboard de Supabase\n2. Entra en Storage → New Bucket\n3. Nombre: "documentos"\n4. Activa "Public bucket"\n5. Haz clic en "Create bucket"');
+          }
+          throw upErr;
+        }
+        finalAttachmentUrl = supabase.storage.from('documentos').getPublicUrl(uploadPath).data.publicUrl;
       } catch (err) {
         alert(`Error subiendo el archivo: ${err.message}`);
         setUploading(false);
@@ -1653,7 +1669,13 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
                 type="file"
                 accept="image/*,.pdf"
                 style={{ display: 'none' }}
-                onChange={e => { setAttachmentFile(e.target.files[0] || null); }}
+                onChange={e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setPendingFile(file);
+                setShowFolderPicker(true);
+                e.target.value = '';
+              }}
               />
               <button
                 type="button"
@@ -1679,6 +1701,167 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
           </div>
           <button type="submit" className="submit-button" disabled={uploading}>{isEditing ? 'Guardar cambios' : 'Añadir gasto'}</button>
         </form>
+      </div>
+      {showFolderPicker && (
+        <FolderPickerModal
+          landlordEmail={landlordEmail}
+          onClose={() => { setShowFolderPicker(false); setPendingFile(null); }}
+          onConfirm={handleFolderSelected}
+        />
+      )}
+    </div>
+  );
+}
+
+function FolderPickerModal({ landlordEmail, onClose, onConfirm }) {
+  const [allFolders, setAllFolders] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [currentView, setCurrentView] = React.useState('');
+  const [selectedPath, setSelectedPath] = React.useState('');
+  const [showNewFolder, setShowNewFolder] = React.useState(false);
+  const [newFolderName, setNewFolderName] = React.useState('');
+
+  React.useEffect(() => {
+    supabase.from('folders').select('*').eq('landlord_email', landlordEmail)
+      .then(({ data }) => { setAllFolders(data || []); setLoading(false); });
+  }, [landlordEmail]);
+
+  const getDirectChildren = (parentPath) =>
+    allFolders.filter(f => {
+      if (!parentPath) return !f.path.includes('/');
+      const prefix = parentPath + '/';
+      return f.path.startsWith(prefix) && !f.path.slice(prefix.length).includes('/');
+    });
+
+  const breadcrumbs = ['Inicio', ...currentView.split('/').filter(Boolean)];
+
+  const navigateTo = (idx) => {
+    if (idx === 0) setCurrentView('');
+    else {
+      const parts = currentView.split('/').filter(Boolean);
+      setCurrentView(parts.slice(0, idx).join('/'));
+    }
+  };
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    const newPath = currentView ? `${currentView}/${newFolderName.trim()}` : newFolderName.trim();
+    const { data, error } = await supabase.from('folders').insert({
+      landlord_email: landlordEmail,
+      path: newPath,
+      name: newFolderName.trim(),
+    }).select().single();
+    if (!error && data) {
+      setAllFolders(prev => [...prev, data]);
+      setSelectedPath(newPath);
+    }
+    setNewFolderName('');
+    setShowNewFolder(false);
+  };
+
+  const directFolders = getDirectChildren(currentView);
+  const confirmLabel = !selectedPath
+    ? 'Guardar en la raíz'
+    : `Guardar en "${allFolders.find(f => f.path === selectedPath)?.name || selectedPath}"`;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content folder-picker-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>¿Dónde guardar?</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        {/* Breadcrumb */}
+        <div className="picker-breadcrumb">
+          {breadcrumbs.map((crumb, idx) => (
+            <React.Fragment key={idx}>
+              {idx > 0 && <span className="picker-sep">›</span>}
+              <button
+                className={`picker-crumb${idx === breadcrumbs.length - 1 ? ' active' : ''}`}
+                onClick={() => navigateTo(idx)}
+              >{crumb}</button>
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Save here option */}
+        <button
+          className={`picker-here-btn${selectedPath === currentView ? ' selected' : ''}`}
+          onClick={() => setSelectedPath(currentView)}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <polyline points="9 22 9 12 15 12 15 22"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Guardar aquí
+          {selectedPath === currentView && (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto' }}>
+              <polyline points="20 6 9 17 4 12" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </button>
+
+        {/* Folder list */}
+        {loading ? (
+          <p style={{ textAlign: 'center', color: '#aaa', padding: '16px 0' }}>Cargando carpetas…</p>
+        ) : (
+          <div className="picker-folder-list">
+            {directFolders.map(f => (
+              <div key={f.id} className={`picker-folder-row${selectedPath === f.path ? ' selected' : ''}`}>
+                <button className="picker-folder-select" onClick={() => setSelectedPath(f.path)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                      fill="#FFF3E0" stroke="#F5A623" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span>{f.name}</span>
+                  {selectedPath === f.path && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <polyline points="20 6 9 17 4 12" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+                <button className="picker-enter-btn" onClick={() => setCurrentView(f.path)} title="Entrar en carpeta">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                    <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+
+            {showNewFolder ? (
+              <div className="picker-new-folder-row">
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Nombre de carpeta"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleCreateFolder();
+                    if (e.key === 'Escape') setShowNewFolder(false);
+                  }}
+                />
+                <button onClick={handleCreateFolder}>OK</button>
+                <button onClick={() => setShowNewFolder(false)}>×</button>
+              </div>
+            ) : (
+              <button className="picker-add-folder-btn" onClick={() => setShowNewFolder(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                Nueva carpeta aquí
+              </button>
+            )}
+          </div>
+        )}
+
+        <button className="submit-button" style={{ marginTop: 16 }} onClick={() => onConfirm(selectedPath)}>
+          {confirmLabel}
+        </button>
       </div>
     </div>
   );

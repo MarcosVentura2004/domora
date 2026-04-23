@@ -1330,3 +1330,215 @@ input[type="number"] {
   margin: 0;
 }
 
+/* ===================================================
+   Folder Picker Modal (Tarea 3 — vincular gastos)
+   =================================================== */
+
+.folder-picker-modal {
+  max-width: 440px;
+}
+
+/* Breadcrumb dentro del picker */
+.picker-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #F7F7F7;
+  border-radius: 10px;
+}
+
+.picker-sep {
+  color: #bbb;
+  font-size: 14px;
+  padding: 0 2px;
+}
+
+.picker-crumb {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #007AFF;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  font-family: inherit;
+}
+
+.picker-crumb:hover {
+  background: #EEF6FF;
+}
+
+.picker-crumb.active {
+  color: #333;
+  font-weight: 600;
+  cursor: default;
+}
+
+.picker-crumb.active:hover {
+  background: none;
+}
+
+/* Botón "Guardar aquí" */
+.picker-here-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  background: #F7F7F7;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #444;
+  cursor: pointer;
+  margin-bottom: 10px;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.picker-here-btn:hover {
+  background: #EFEFEF;
+}
+
+.picker-here-btn.selected {
+  border-color: #4CAF50;
+  background: #F0FAF0;
+  color: #2E7D32;
+}
+
+/* Lista de carpetas */
+.picker-folder-list {
+  border: 1px solid #EBEBEB;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.picker-folder-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #F3F3F3;
+}
+
+.picker-folder-row:last-child {
+  border-bottom: none;
+}
+
+.picker-folder-row.selected {
+  background: #F0FAF0;
+}
+
+.picker-folder-select {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #222;
+  text-align: left;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.picker-folder-select span {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.picker-folder-select:hover {
+  background: #F5F5F5;
+}
+
+.picker-enter-btn {
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  border-left: 1px solid #F3F3F3;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  flex-shrink: 0;
+}
+
+.picker-enter-btn:hover {
+  background: #F5F5F5;
+  color: #555;
+}
+
+/* Nueva carpeta inline */
+.picker-new-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #FAFAFA;
+}
+
+.picker-new-folder-row input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #DDD;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: white;
+}
+
+.picker-new-folder-row input:focus {
+  outline: none;
+  border-color: #000;
+}
+
+.picker-new-folder-row button {
+  padding: 7px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.picker-new-folder-row button:first-of-type {
+  background: #000;
+  color: white;
+}
+
+.picker-new-folder-row button:last-of-type {
+  background: none;
+  color: #aaa;
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+/* Añadir carpeta */
+.picker-add-folder-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+  font-family: inherit;
+}
+
+.picker-add-folder-btn:hover {
+  background: #F5F5F5;
+  color: #333;
+}
+
