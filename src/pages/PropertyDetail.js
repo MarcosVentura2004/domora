@@ -1150,6 +1150,13 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{expense.name}</span>
+                        {expense.attachment_url && (
+                          <a href={expense.attachment_url} target="_blank" rel="noreferrer" title="Ver adjunto" onClick={e => e.stopPropagation()} style={{ color: '#90CAF9', lineHeight: 1, display: 'flex', alignItems: 'center' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                            </svg>
+                          </a>
+                        )}
                         {typeLabel && <span className={`frequency-badge ${expense.type}`} style={{ fontSize: 10 }}>{typeLabel}</span>}
                         {freqLabel && <span className={`frequency-badge ${expense.frequency}`}>{freqLabel}</span>}
                         {expense.type === 'recurrente_temporal' && expense.duration_payments && (
@@ -1321,6 +1328,8 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
           onUpdate={handleUpdateExpense}
           defaultExpensePct={property.ownershipPercentage || 100}
           initialExpense={editingExpense}
+          landlordEmail={landlordEmail}
+          propertyId={property.id}
         />
       )}
       {showAddTenant && <AddTenantModal onClose={() => setShowAddTenant(false)} onAdd={handleAddTenant} isFirstTenant={tenants.length === 0} />}
@@ -1463,7 +1472,7 @@ const EXPENSE_CATEGORIES = [
 ];
 
 
-function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense }) {
+function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, landlordEmail, propertyId }) {
   const today = new Date().toISOString().split('T')[0];
   const isEditing = !!initialExpense;
   const [category, setCategory] = useState(isEditing ? (initialExpense.category || '') : '');
@@ -1477,6 +1486,10 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const [durationPayments, setDurationPayments] = useState(isEditing ? (initialExpense.duration_payments ? String(initialExpense.duration_payments) : '') : '');
   const [startDate, setStartDate] = useState(isEditing ? (initialExpense.start_date || today) : today);
   const [expensePct, setExpensePct] = useState(isEditing ? (initialExpense.expense_percentage != null ? String(initialExpense.expense_percentage) : '') : (defaultExpensePct != null ? String(defaultExpensePct) : ''));
+  const fileInputRef = React.useRef(null);
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [attachmentUrl, setAttachmentUrl] = useState(isEditing ? (initialExpense.attachment_url || '') : '');
+  const [uploading, setUploading] = useState(false);
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
@@ -1491,8 +1504,25 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const freqLabel = frequency === 'trimestral' ? 'trimestre' : frequency === 'anual' ? 'año' : frequency === 'custom' ? `${customFreqMonths || '?'} meses` : 'mes';
   const monthlyEquiv = amount && repeats && frequency !== 'mensual' ? (parseFloat(amount) / freqStep).toFixed(2) : null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    let finalAttachmentUrl = attachmentUrl;
+    if (attachmentFile) {
+      setUploading(true);
+      try {
+        await supabase.storage.createBucket('gastos', { public: true });
+        const safeName = attachmentFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${landlordEmail}/${propertyId}/${Date.now()}_${safeName}`;
+        const { error: upErr } = await supabase.storage.from('gastos').upload(path, attachmentFile, { upsert: false });
+        if (upErr) throw upErr;
+        finalAttachmentUrl = supabase.storage.from('gastos').getPublicUrl(path).data.publicUrl;
+      } catch (err) {
+        alert(`Error subiendo el archivo: ${err.message}`);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
     const catObj = EXPENSE_CATEGORIES.find(c => c.key === category);
     const parts = [catObj?.label || category];
     if (subcategory) parts.push(subcategory);
@@ -1510,6 +1540,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
       start_date: startDate,
       active: true,
       expense_percentage: expensePct ? parseFloat(expensePct) : null,
+      attachment_url: finalAttachmentUrl || null,
     };
     if (isEditing) {
       onUpdate(initialExpense.id, expenseData);
@@ -1617,13 +1648,36 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="text" placeholder="Ej: recibo gas, fontanero..." value={description}
                 onChange={e => setDescription(e.target.value)} style={{ flex: 1 }} />
-              <button type="button" title="Adjuntar archivo (próximamente)"
-                style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '10px', cursor: 'pointer', color: '#aaa', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>
-                📎
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                style={{ display: 'none' }}
+                onChange={e => { setAttachmentFile(e.target.files[0] || null); }}
+              />
+              <button
+                type="button"
+                title="Adjuntar imagen o PDF"
+                onClick={() => fileInputRef.current?.click()}
+                style={{ background: attachmentFile ? '#E3F2FD' : 'none', border: '1px solid #ddd', borderRadius: 8, padding: '10px', cursor: 'pointer', color: attachmentFile ? '#1976D2' : '#aaa', lineHeight: 1, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
               </button>
             </div>
+            {attachmentFile && (
+              <p style={{ fontSize: 11, color: '#555', marginTop: 4 }}>📄 {attachmentFile.name}</p>
+            )}
+            {!attachmentFile && attachmentUrl && (
+              <p style={{ fontSize: 11, marginTop: 4 }}>
+                <a href={attachmentUrl} target="_blank" rel="noreferrer" style={{ color: '#2196F3' }}>Ver archivo adjunto actual</a>
+                <button type="button" onClick={() => setAttachmentUrl('')} style={{ marginLeft: 8, fontSize: 10, background: 'none', border: 'none', color: '#aaa', cursor: 'pointer' }}>Quitar</button>
+              </p>
+            )}
+            {uploading && <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Subiendo archivo…</p>}
           </div>
-          <button type="submit" className="submit-button">{isEditing ? 'Guardar cambios' : 'Añadir gasto'}</button>
+          <button type="submit" className="submit-button" disabled={uploading}>{isEditing ? 'Guardar cambios' : 'Añadir gasto'}</button>
         </form>
       </div>
     </div>
