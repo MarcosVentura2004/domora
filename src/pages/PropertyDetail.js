@@ -886,9 +886,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
               <span>
                 {property.status === 'alquilado' ? 'Alquilado' :
                  property.status === 'por_habitaciones' ? 'Por habitaciones' :
-                 property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío'}
+                 property.status === 'otros' ? (tenants.length > 0 ? 'Alquilado' : 'Vacío') : 'Vacío'}
               </span>
             </div>
+            {property.status === 'otros' && property.customType && (
+              <p className="contract-date">{property.customType}</p>
+            )}
             {property.status === 'alquilado' && property.contractEnd && (
               <p className="contract-date">Contrato hasta {property.contractEnd}</p>
             )}
@@ -1905,10 +1908,10 @@ function AddTenantModal({ onClose, onAdd, isFirstTenant }) {
           </div>
           {isFirstTenant && (
             <div className="form-group">
-              <label>¿Es un piso compartido?</label>
+              <label>¿Es compartido?</label>
               <div className="shared-options">
                 <button type="button" className={`shared-option ${!isShared ? 'selected' : ''}`} onClick={() => setIsShared(false)}>No, inquilino único</button>
-                <button type="button" className={`shared-option ${isShared ? 'selected' : ''}`} onClick={() => setIsShared(true)}>Sí, piso compartido</button>
+                <button type="button" className={`shared-option ${isShared ? 'selected' : ''}`} onClick={() => setIsShared(true)}>Sí, más de un inquilino</button>
               </div>
               {!isShared && (
                 <p className="payment-range-note" style={{ marginTop: '8px' }}>El inquilino pagará el alquiler completo</p>
