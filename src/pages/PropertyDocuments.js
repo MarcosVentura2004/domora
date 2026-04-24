@@ -341,15 +341,31 @@ function PropertyDocuments({ landlordEmail, onBack }) {
                   {visibleFolders.map(folder => (
                     <div key={folder.id} className="folder-card"
                       onClick={() => setCurrentPath(folder.path)}>
-                      <button className="folder-card-delete"
-                        onClick={e => handleDeleteFolder(folder, e)} title="Eliminar">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                          <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                          <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                        </svg>
-                      </button>
                       <div className="folder-card-icon"><FolderIcon size={44} /></div>
                       <span className="folder-card-name">{folder.name}</span>
+                      <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
+                        <button
+                          className="finder-action-btn finder-action-share"
+                          onClick={e => handleToggleShare({ name: folder.name, metadata: {} }, e)}
+                          title="Compartir carpeta"
+                        >
+                          <ShareIcon active={false} />
+                        </button>
+                        <button
+                          className="finder-action-btn finder-action-delete"
+                          onClick={e => handleDeleteFolder(folder, e)}
+                          title="Eliminar carpeta"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
+                              strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2"
+                              strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
