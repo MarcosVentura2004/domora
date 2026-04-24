@@ -143,6 +143,10 @@
   background: #FF9800;
 }
 
+.status-dot.otros {
+  background: #9C27B0;
+}
+
 /* Rooms grid and cards */
 .rooms-grid {
   display: grid;

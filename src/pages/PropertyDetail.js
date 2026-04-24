@@ -253,7 +253,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
   const [unreadCounts, setUnreadCounts] = useState({}); // { [tenantId]: number }
 
   useEffect(() => {
-    if (!tenants.length || property.status !== 'alquilado') return;
+    if (!tenants.length || (property.status !== 'alquilado' && property.status !== 'otros')) return;
     Promise.all(
       tenants.map(t =>
         supabase
@@ -323,7 +323,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
   };
 
   const getTenantPaymentStatus = (tenantId) => {
-    if (tenants.length === 0 || property.status !== 'alquilado') return null;
+    if (tenants.length === 0 || (property.status !== 'alquilado' && property.status !== 'otros')) return null;
 
     const supabasePayment = pendingSupabasePayments.find(p => p.tenant_id === tenantId);
     if (supabasePayment?.status === 'confirmed') return 'paid';
@@ -884,8 +884,9 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
             <div className="status-info">
               <span className={`status-dot ${property.status}`}></span>
               <span>
-                {property.status === 'alquilado' ? 'Alquilado' : 
-                 property.status === 'por_habitaciones' ? 'Por habitaciones' : 'Vacío'}
+                {property.status === 'alquilado' ? 'Alquilado' :
+                 property.status === 'por_habitaciones' ? 'Por habitaciones' :
+                 property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío'}
               </span>
             </div>
             {property.status === 'alquilado' && property.contractEnd && (
@@ -966,7 +967,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
       )}
 
       {/* Pago del alquiler */}
-      {property.status === 'alquilado' && (tenants.length > 0 || payments.some(p => p.year === currentYear && p.month === currentMonth && p.status === 'confirmed')) && (
+      {(property.status === 'alquilado' || property.status === 'otros') && (tenants.length > 0 || payments.some(p => p.year === currentYear && p.month === currentMonth && p.status === 'confirmed')) && (
         <div className="info-card payment-card">
           <div className="card-header">
             <h3>Pago del alquiler</h3>
@@ -1206,7 +1207,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
       </div>
 
       {/* Inquilinos */}
-      {property.status === 'alquilado' && (
+      {(property.status === 'alquilado' || property.status === 'otros') && (
         <div className="info-card tenant-card">
           <div className="card-header">
             <h3>Inquilinos</h3>
@@ -1303,7 +1304,8 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                   <span className={`history-status ${property.status}`}>
                     {property.status === 'por_habitaciones'
                       ? `${(property.rooms || []).filter(r => r.tenant).length}/${(property.rooms || []).length} hab.`
-                      : property.status === 'alquilado' ? 'Alquilado' : 'Vacío'}
+                      : property.status === 'alquilado' ? 'Alquilado'
+                      : property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío'}
                   </span>
                   <span className="history-income">+{item.income.toFixed(0)} €</span>
                   <span className="history-expenses">-{item.expenses.toFixed(0)} €</span>

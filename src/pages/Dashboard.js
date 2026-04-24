@@ -28,7 +28,7 @@ function getAllTenants(properties, landlordEmail) {
         isGroup: true,
       });
     }
-    if (prop.status === 'alquilado') {
+    if (prop.status === 'alquilado' || prop.status === 'otros') {
       (prop.tenants || []).forEach(t => {
         list.push({
           key: `${prop.id}_${t.id}`,
@@ -313,13 +313,37 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
               properties.filter(p => !propertySearch || p.name.toLowerCase().includes(propertySearch.toLowerCase())).map(property => (
                 <div key={property.id} className="property-card">
                   <div className="property-info" onClick={() => handleViewProperty(property)}>
-                    <h3 className="property-name">{property.name}</h3>
-                    <div className="property-status">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0,
+                        background: property.status === 'otros' ? '#EDE7F6' : '#F0F1F3',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: property.status === 'otros' ? '#6B3FA0' : '#555',
+                      }}>
+                        {property.status === 'otros' ? (
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <rect x="2" y="3" width="14" height="18" rx="1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M16 8h4a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            <line x1="6" y1="12" x2="10" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            <line x1="6" y1="16" x2="10" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        ) : (
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M9 21V12h6v9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                      <h3 className="property-name" style={{ margin: 0 }}>{property.name}</h3>
+                    </div>
+                    <div className="property-status" style={{ marginTop: '6px' }}>
                       <span className={`status-dot ${property.status}`}></span>
                       <span className="status-text">
                         {property.status === 'alquilado' ? 'Alquilado' :
                          property.status === 'por_habitaciones' ? 'Por habitaciones' :
-                         property.status === 'vacacional' ? 'Vacacional' : 'Vacío'}
+                         property.status === 'vacacional' ? 'Vacacional' :
+                         property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío'}
                       </span>
                     </div>
                     <p className="property-price">
@@ -635,6 +659,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
 function AddPropertyModal({ property, onClose, onSave, onDelete }) {
   const [name, setName] = useState(property?.name || '');
   const [status, setStatus] = useState(property?.status || 'vacio');
+  const [customType, setCustomType] = useState(property?.customType || '');
   const [saving, setSaving] = useState(false);
   const [paymentStartDay, setPaymentStartDay] = useState(property?.paymentConfig?.startDay?.toString() || '1');
   const [paymentEndDay, setPaymentEndDay] = useState(property?.paymentConfig?.endDay?.toString() || '5');
@@ -670,6 +695,7 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
       name,
       price: effectivePrice,
       status,
+      ...(status === 'otros' && { customType }),
       ownershipPercentage: parseFloat(ownershipPercentage),
       createdAt: property?.createdAt || new Date().toISOString(),
       expenses: property?.expenses || [],
@@ -695,7 +721,7 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
       propertyData.rooms = createdRooms;
     }
 
-    if (status === 'alquilado') {
+    if (status === 'alquilado' || status === 'otros') {
       propertyData.paymentConfig = {
         startDay: parseInt(paymentStartDay),
         endDay: parseInt(paymentEndDay),
@@ -802,8 +828,33 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
                 <span className="status-dot vacacional"></span>
                 Vacacional
               </button>
+              <button
+                type="button"
+                className={`status-option ${status === 'otros' ? 'selected' : ''}`}
+                onClick={() => setStatus('otros')}
+              >
+                <span className="status-dot otros"></span>
+                Otros
+              </button>
             </div>
           </div>
+
+          {/* ── CAMPO TIPO PERSONALIZADO (solo para "Otros") ── */}
+          {status === 'otros' && (
+            <div className="form-group">
+              <label>¿Qué tipo de espacio es?</label>
+              <input
+                type="text"
+                placeholder="Ej: Local comercial, Trastero, Garaje…"
+                value={customType}
+                onChange={(e) => setCustomType(e.target.value)}
+                required
+              />
+              <p className="payment-range-note" style={{ marginTop: '8px' }}>
+                Este texto aparecerá como descripción del inmueble
+              </p>
+            </div>
+          )}
 
           {/* ── SECCIÓN POR HABITACIONES ── */}
           {status === 'por_habitaciones' && !property && (
@@ -859,8 +910,8 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
             </>
           )}
 
-          {/* Rango de pago — solo si alquilado */}
-          {status === 'alquilado' && (
+          {/* Rango de pago — solo si alquilado u otros */}
+          {(status === 'alquilado' || status === 'otros') && (
             <div className="form-group">
               <label>Rango de días para pagar el alquiler</label>
               <div className="payment-range-inputs">

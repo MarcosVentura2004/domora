@@ -22,7 +22,7 @@ function getMonthlyIncome(property) {
       .filter(p => p.year === currentYear && p.month === currentMonth && p.status === 'confirmed' && p.roomId)
       .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
   }
-  if (property.status === 'alquilado') {
+  if (property.status === 'alquilado' || property.status === 'otros') {
     return (property.payments || [])
       .filter(p => p.year === currentYear && p.month === currentMonth && p.status === 'confirmed' && !p.roomId)
       .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
@@ -73,7 +73,7 @@ function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []
     const ownership = (property.ownershipPercentage || 100) / 100;
 
     // Pagos pendientes de confirmar (Supabase es fuente de verdad)
-    if (property.status === 'alquilado' || property.status === 'por_habitaciones') {
+    if (property.status === 'alquilado' || property.status === 'otros' || property.status === 'por_habitaciones') {
       const supabasePending = supabasePayments.filter(
         p => String(p.property_id) === String(property.id) && p.status === 'pending'
       );
@@ -128,8 +128,8 @@ function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []
       });
     }
 
-    // Sin pagos este mes (alquilado con inquilino)
-    if (property.status === 'alquilado' && (property.tenants || []).length > 0) {
+    // Sin pagos este mes (alquilado/otros con inquilino)
+    if ((property.status === 'alquilado' || property.status === 'otros') && (property.tenants || []).length > 0) {
       const supabaseForProperty = supabasePayments.filter(
         p => String(p.property_id) === String(property.id)
       );
@@ -322,6 +322,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
 
   const occupied = properties.filter(p =>
     p.status === 'alquilado' ||
+    p.status === 'otros' ||
     (p.status === 'por_habitaciones' && (p.rooms || []).some(r => r.tenant)) ||
     (p.status === 'vacacional' && (p.bookings || []).some(b => {
       const s = new Date(b.startDate), e = new Date(b.endDate);
@@ -607,7 +608,7 @@ function ReportModal({ properties, onClose }) {
         pendiente = (property.payments || [])
           .filter(p => p.year === selectedYear && p.month === m && p.status === 'pending' && p.roomId)
           .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
-      } else if (property.status === 'alquilado') {
+      } else if (property.status === 'alquilado' || property.status === 'otros') {
         cobrado = (property.payments || [])
           .filter(p => p.year === selectedYear && p.month === m && p.status === 'confirmed')
           .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
@@ -780,7 +781,7 @@ function ReportModal({ properties, onClose }) {
         doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
         doc.text(property.name, 18, y + 8);
         const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : 'Vivienda habitual';
-        const typeLabel = property.status === 'alquilado' ? 'Alquilado' : property.status === 'por_habitaciones' ? 'Por habitaciones' : property.status === 'vacacional' ? 'Vacacional' : 'Vacío';
+        const typeLabel = property.status === 'alquilado' ? 'Alquilado' : property.status === 'por_habitaciones' ? 'Por habitaciones' : property.status === 'vacacional' ? 'Vacacional' : property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío';
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(80);
         doc.text(`${typeLabel} · ${property.ownershipPercentage || 100}% · ${fiscalType}`, pageW - 18, y + 8, { align: 'right' });
         y += 18;
@@ -1109,7 +1110,7 @@ function RentabilityModal({ properties, supabaseExpenses, onClose }) {
       doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
       doc.text(property.name, 14, y); y += 8;
       doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
-      const statusLabel = property.status === 'alquilado' ? 'Alquilado' : property.status === 'por_habitaciones' ? 'Por habitaciones' : property.status === 'vacacional' ? 'Vacacional' : 'Vacío';
+      const statusLabel = property.status === 'alquilado' ? 'Alquilado' : property.status === 'por_habitaciones' ? 'Por habitaciones' : property.status === 'vacacional' ? 'Vacacional' : property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío';
       doc.text(statusLabel, 14, y); y += 12;
 
       const row = (label, value, color) => {
@@ -1184,7 +1185,7 @@ function RentabilityModal({ properties, supabaseExpenses, onClose }) {
     if (p.status === 'por_habitaciones') {
       return (p.rooms || []).reduce((sum, r) => sum + (Number(r.price) || 0), 0) * ownership;
     }
-    if (p.status === 'alquilado') {
+    if (p.status === 'alquilado' || p.status === 'otros') {
       const tenantsTotal = (p.tenants || []).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
       return (tenantsTotal || Number(p.price) || 0) * ownership;
     }

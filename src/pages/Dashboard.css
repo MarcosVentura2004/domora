@@ -207,6 +207,10 @@
   background: #2196F3;
 }
 
+.status-dot.otros {
+  background: #9C27B0;
+}
+
 .status-text {
   font-size: 15px;
   color: #666;
