@@ -333,72 +333,74 @@ function PropertyDocuments({ landlordEmail, onBack }) {
           </div>
         ) : (
           <div className="finder-list">
-            {/* Carpetas */}
-            {visibleFolders.map(folder => (
-              <div key={folder.id} className="finder-item finder-folder"
-                onClick={() => setCurrentPath(folder.path)}>
-                <div className="finder-item-icon">
-                  <FolderIcon size={38} />
+            {/* Carpetas — grid */}
+            {visibleFolders.length > 0 && (
+              <>
+                <p className="finder-section-label">Carpetas</p>
+                <div className="folder-grid">
+                  {visibleFolders.map(folder => (
+                    <div key={folder.id} className="folder-card"
+                      onClick={() => setCurrentPath(folder.path)}>
+                      <button className="folder-card-delete"
+                        onClick={e => handleDeleteFolder(folder, e)} title="Eliminar">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                          <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                          <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                      <div className="folder-card-icon"><FolderIcon size={44} /></div>
+                      <span className="folder-card-name">{folder.name}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="finder-item-info">
-                  <span className="finder-item-name">{folder.name}</span>
-                </div>
-                <button className="finder-action-btn finder-action-delete"
-                  onClick={e => handleDeleteFolder(folder, e)} title="Eliminar carpeta">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                <svg width="8" height="12" viewBox="0 0 8 12" fill="none" className="finder-chevron">
-                  <path d="M1 1l6 5-6 5" stroke="#C7C7CC" strokeWidth="2"
-                    strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-            ))}
+              </>
+            )}
 
-            {/* Archivos */}
-            {files.map(file => {
-              const filePath = `${storagePath}/${file.name}`;
-              const isShared = sharedPaths.has(filePath);
-              return (
-                <div key={file.id || file.name} className="finder-item finder-file"
-                  onClick={() => handleFileClick(file)}>
-                  <div className="finder-item-icon">
-                    <FileIcon mimeType={file.metadata?.mimetype} size={34} />
-                  </div>
-                  <div className="finder-item-info">
-                    <span className="finder-item-name">{file.name}</span>
-                    <span className="finder-item-meta">
-                      {file.metadata?.size ? formatFileSize(file.metadata.size) : ''}
-                      {isShared && <span className="finder-shared-badge">Compartido</span>}
-                    </span>
-                  </div>
-                  <div className="finder-file-actions" onClick={e => e.stopPropagation()}>
-                    <button
-                      className={`finder-action-btn finder-action-share${isShared ? ' active' : ''}`}
-                      onClick={e => handleToggleShare(file, e)}
-                      title={isShared ? 'Dejar de compartir con inquilino' : 'Compartir con inquilino'}
-                    >
-                      <ShareIcon active={isShared} />
-                    </button>
-                    <button className="finder-action-btn finder-action-delete"
-                      onClick={e => handleDeleteFile(file, e)} title="Eliminar">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                        <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
-                          strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
+            {/* Archivos — tarjetas */}
+            {files.length > 0 && (
+              <>
+                <p className="finder-section-label">Archivos</p>
+                <div className="file-cards">
+                  {files.map(file => {
+                    const filePath = `${storagePath}/${file.name}`;
+                    const isShared = sharedPaths.has(filePath);
+                    return (
+                      <div key={file.id || file.name} className="file-card"
+                        onClick={() => handleFileClick(file)}>
+                        <div className="file-card-icon">
+                          <FileIcon mimeType={file.metadata?.mimetype} size={36} />
+                        </div>
+                        <div className="file-card-info">
+                          <span className="file-card-name">{file.name}</span>
+                          <span className="file-card-meta">
+                            {file.metadata?.size ? formatFileSize(file.metadata.size) : '—'}
+                            {isShared && <span className="finder-shared-badge">Compartido</span>}
+                          </span>
+                        </div>
+                        <div className="file-card-actions" onClick={e => e.stopPropagation()}>
+                          <button
+                            className={`finder-action-btn finder-action-share${isShared ? ' active' : ''}`}
+                            onClick={e => handleToggleShare(file, e)}
+                            title={isShared ? 'Dejar de compartir' : 'Compartir con inquilino'}
+                          >
+                            <ShareIcon active={isShared} />
+                          </button>
+                          <button className="finder-action-btn finder-action-delete"
+                            onClick={e => handleDeleteFile(file, e)} title="Eliminar">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </>
+            )}
           </div>
         )}
       </div>
