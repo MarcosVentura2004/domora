@@ -101,7 +101,8 @@ function getDirectChildren(allFolders, currentPath) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-function PropertyDocuments({ landlordEmail, onBack }) {
+function PropertyDocuments({ landlordEmail, property, onBack }) {
+  const propertyId = property?.id;
   const [currentPath, setCurrentPath] = useState('');
   const [allFolders, setAllFolders] = useState([]);
   const [files, setFiles] = useState([]);
@@ -112,13 +113,18 @@ function PropertyDocuments({ landlordEmail, onBack }) {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const menuRef = useRef(null);
 
-  const storagePath = currentPath ? `${landlordEmail}/${currentPath}` : landlordEmail;
+  const storagePath = currentPath
+    ? `${landlordEmail}/${propertyId}/${currentPath}`
+    : `${landlordEmail}/${propertyId}`;
 
   const loadContents = useCallback(async () => {
     setLoading(true);
     try {
       const [foldersRes, storageRes, sharedRes] = await Promise.all([
-        supabase.from('folders').select('*').eq('landlord_email', landlordEmail).order('name'),
+        supabase.from('folders').select('*')
+          .eq('landlord_email', landlordEmail)
+          .eq('property_id', propertyId)
+          .order('name'),
         supabase.storage.from('documentos').list(storagePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
         supabase.from('shared_files').select('storage_path').eq('landlord_email', landlordEmail).eq('shared_with_tenant', true),
       ]);
@@ -130,7 +136,7 @@ function PropertyDocuments({ landlordEmail, onBack }) {
       console.error('[PropertyDocuments] loadContents error:', err);
     }
     setLoading(false);
-  }, [landlordEmail, storagePath]);
+  }, [landlordEmail, propertyId, storagePath]);
 
   useEffect(() => { loadContents(); }, [loadContents]);
 
@@ -159,7 +165,7 @@ function PropertyDocuments({ landlordEmail, onBack }) {
 
   const handleCreateFolder = async name => {
     const newPath = currentPath ? `${currentPath}/${name}` : name;
-    const { error } = await supabase.from('folders').insert({ landlord_email: landlordEmail, path: newPath, name });
+    const { error } = await supabase.from('folders').insert({ landlord_email: landlordEmail, property_id: propertyId, path: newPath, name });
     if (error) { alert(`Error creando carpeta: ${error.message}`); return; }
     await loadContents();
     setShowNewFolderModal(false);
@@ -224,7 +230,7 @@ function PropertyDocuments({ landlordEmail, onBack }) {
   const handleDeleteFolder = async (folder, e) => {
     e.stopPropagation();
     if (!window.confirm(`¿Eliminar la carpeta "${folder.name}" y todo su contenido?`)) return;
-    const fullPath = `${landlordEmail}/${folder.path}`;
+    const fullPath = `${landlordEmail}/${propertyId}/${folder.path}`;
     const { data: items } = await supabase.storage.from('documentos').list(fullPath, { limit: 1000 });
     if (items?.length > 0) {
       const paths = items.map(i => `${fullPath}/${i.name}`);
@@ -233,7 +239,9 @@ function PropertyDocuments({ landlordEmail, onBack }) {
         supabase.from('shared_files').delete().eq('landlord_email', landlordEmail).in('storage_path', paths),
       ]);
     }
-    await supabase.from('folders').delete().eq('landlord_email', landlordEmail)
+    await supabase.from('folders').delete()
+      .eq('landlord_email', landlordEmail)
+      .eq('property_id', propertyId)
       .or(`path.eq.${folder.path},path.like.${folder.path}/%`);
     await loadContents();
   };
