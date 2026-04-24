@@ -1,5 +1,5 @@
 /* ===================================================
-   Finder-style Document Browser
+   Documents — Finder style, modern
    =================================================== */
 
 .finder-container {
@@ -12,7 +12,9 @@
 /* ── Header ─────────────────────────────────────────── */
 
 .finder-header {
-  background: white;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding: 14px 16px;
   display: flex;
   align-items: center;
@@ -20,45 +22,42 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 1px 0 #E8E8E8;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
 }
 
 .finder-back-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: #333;
+  color: #007AFF;
   padding: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
   flex-shrink: 0;
+  transition: background 0.15s;
 }
 
-.finder-back-btn:hover {
-  background: #F0F0F0;
-}
+.finder-back-btn:hover { background: rgba(0,122,255,0.08); }
 
 .finder-title {
   flex: 1;
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 700;
   margin: 0;
   text-align: center;
+  letter-spacing: -0.2px;
 }
 
-/* ── Add button + dropdown ──────────────────────────── */
+/* ── Add button ─────────────────────────────────────── */
 
-.finder-add-wrapper {
-  position: relative;
-  flex-shrink: 0;
-}
+.finder-add-wrapper { position: relative; flex-shrink: 0; }
 
 .finder-add-btn {
-  width: 36px;
-  height: 36px;
-  background: #000;
+  width: 34px;
+  height: 34px;
+  background: #1C1C1E;
   color: white;
   border: none;
   border-radius: 10px;
@@ -66,11 +65,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.15s, transform 0.1s;
 }
 
-.finder-add-btn:hover {
-  background: #333;
-}
+.finder-add-btn:hover { background: #3A3A3C; }
+.finder-add-btn:active { transform: scale(0.94); }
 
 .finder-add-menu {
   position: absolute;
@@ -78,11 +77,17 @@
   right: 0;
   background: white;
   border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
-  min-width: 190px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08);
+  min-width: 185px;
   overflow: hidden;
   z-index: 200;
-  border: 1px solid #EBEBEB;
+  border: 1px solid rgba(0,0,0,0.06);
+  animation: menu-pop 0.15s ease;
+}
+
+@keyframes menu-pop {
+  from { opacity: 0; transform: scale(0.94) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
 }
 
 .finder-add-menu button {
@@ -90,40 +95,36 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 13px 16px;
   background: none;
   border: none;
   cursor: pointer;
   font-size: 14px;
-  color: #222;
+  font-weight: 500;
+  color: #1C1C1E;
   text-align: left;
   font-family: inherit;
+  transition: background 0.1s;
 }
 
-.finder-add-menu button:hover {
-  background: #F5F5F5;
-}
-
-.finder-add-menu button:not(:last-child) {
-  border-bottom: 1px solid #F0F0F0;
-}
+.finder-add-menu button:hover { background: #F5F5F5; }
+.finder-add-menu button:not(:last-child) { border-bottom: 1px solid #F2F2F7; }
 
 /* ── Breadcrumb ─────────────────────────────────────── */
 
 .finder-breadcrumb {
   background: white;
-  padding: 8px 16px;
+  padding: 0 16px;
+  height: 38px;
   display: flex;
   align-items: center;
   gap: 2px;
-  border-bottom: 1px solid #EBEBEB;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
-.finder-breadcrumb::-webkit-scrollbar {
-  display: none;
-}
+.finder-breadcrumb::-webkit-scrollbar { display: none; }
 
 .breadcrumb-item {
   background: none;
@@ -131,31 +132,25 @@
   font-size: 13px;
   color: #007AFF;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 3px 6px;
   border-radius: 6px;
   white-space: nowrap;
   font-family: inherit;
+  font-weight: 500;
+  transition: background 0.1s;
 }
 
-.breadcrumb-item:hover {
-  background: #EFF7FF;
-}
+.breadcrumb-item:hover { background: rgba(0,122,255,0.08); }
 
 .breadcrumb-item.active {
-  color: #333;
-  font-weight: 500;
+  color: #3A3A3C;
+  font-weight: 600;
   cursor: default;
 }
 
-.breadcrumb-item.active:hover {
-  background: none;
-}
+.breadcrumb-item.active:hover { background: none; }
 
-.breadcrumb-chevron {
-  flex-shrink: 0;
-}
-
-/* ── Content area ───────────────────────────────────── */
+/* ── Content ────────────────────────────────────────── */
 
 .finder-content {
   flex: 1;
@@ -175,43 +170,63 @@
   to   { transform: rotate(360deg); }
 }
 
-.finder-spinner {
-  animation: finder-spin 0.8s linear infinite;
-}
+.finder-spinner { animation: finder-spin 0.75s linear infinite; }
 
 .finder-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 80px 24px;
-  color: #aaa;
+  padding: 72px 24px;
 }
 
-.finder-empty p {
+.finder-empty-icon {
+  width: 80px;
+  height: 80px;
+  background: white;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  margin-bottom: 16px;
+}
+
+.finder-empty-text {
   font-size: 16px;
-  margin: 14px 0 24px;
+  font-weight: 500;
+  color: #8E8E93;
+  margin: 0 0 20px;
 }
 
 .finder-empty-cta {
-  padding: 12px 28px;
-  background: #000;
+  padding: 11px 26px;
+  background: #1C1C1E;
   color: white;
   border: none;
   border-radius: 12px;
   font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s;
 }
 
-.finder-empty-cta:hover {
-  background: #333;
-}
+.finder-empty-cta:hover { background: #3A3A3C; }
 
 /* ── Item list ──────────────────────────────────────── */
 
 .finder-list {
-  /* intentionally no padding — items stretch edge-to-edge */
+  padding: 10px 0;
+}
+
+.finder-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8E8E93;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 8px 20px 4px;
 }
 
 .finder-item {
@@ -220,24 +235,16 @@
   gap: 12px;
   padding: 10px 16px;
   background: white;
-  border-bottom: 1px solid #F0F0F0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
   cursor: pointer;
-  transition: background 0.12s;
-  min-height: 60px;
+  transition: background 0.1s;
+  min-height: 62px;
+  position: relative;
 }
 
-.finder-item:first-child {
-  border-top: 1px solid #F0F0F0;
-  margin-top: 8px;
-}
-
-.finder-item:hover {
-  background: #F7F7F7;
-}
-
-.finder-item:active {
-  background: #EFEFEF;
-}
+.finder-item:first-child { border-top: 1px solid rgba(0,0,0,0.05); }
+.finder-item:hover { background: #F9F9F9; }
+.finder-item:active { background: #F2F2F2; }
 
 .finder-item-icon {
   flex-shrink: 0;
@@ -257,24 +264,34 @@
   display: block;
   font-size: 15px;
   font-weight: 500;
-  color: #111;
+  color: #1C1C1E;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.1px;
 }
 
 .finder-item-meta {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: #999;
+  color: #8E8E93;
   margin-top: 2px;
 }
 
-/* Folder trailing chevron */
-.finder-chevron {
-  flex-shrink: 0;
-  margin-left: 2px;
+.finder-shared-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #34C759;
+  background: rgba(52,199,89,0.1);
+  padding: 1px 6px;
+  border-radius: 20px;
+  letter-spacing: 0.2px;
 }
+
+/* Folder trailing chevron */
+.finder-chevron { flex-shrink: 0; margin-left: 4px; }
 
 /* ── Action buttons ─────────────────────────────────── */
 
@@ -289,7 +306,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #C8C8C8;
+  color: #C7C7CC;
   padding: 7px;
   display: flex;
   align-items: center;
@@ -299,45 +316,58 @@
   transition: color 0.15s, background 0.15s;
 }
 
-.finder-action-share:hover {
-  color: #4CAF50;
-  background: #F0FAF0;
+.finder-action-share:hover,
+.finder-action-share.active {
+  color: #34C759;
+}
+
+.finder-action-share.active {
+  color: #34C759;
+  background: rgba(52, 199, 89, 0.1);
 }
 
 .finder-action-delete:hover {
-  color: #e74c3c;
-  background: #FFF0EE;
+  color: #FF3B30;
+  background: rgba(255, 59, 48, 0.08);
 }
 
 /* ===================================================
-   Shared modal styles (used by New Folder & Upload)
+   Modals
    =================================================== */
 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.48);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 2000;
-  padding: 0;
+  animation: overlay-in 0.2s ease;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @media (min-width: 480px) {
-  .modal-overlay {
-    align-items: center;
-    padding: 20px;
-  }
+  .modal-overlay { align-items: center; padding: 20px; }
 }
 
 .modal-content {
   background: white;
   border-radius: 20px 20px 0 0;
-  padding: 24px 20px 36px;
+  padding: 20px 20px 36px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  animation: sheet-up 0.22s ease;
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
 
 @media (min-width: 480px) {
@@ -345,6 +375,11 @@
     border-radius: 20px;
     max-width: 460px;
     padding: 24px;
+    animation: modal-scale 0.18s ease;
+  }
+  @keyframes modal-scale {
+    from { transform: scale(0.95); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
   }
 }
 
@@ -352,93 +387,88 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .modal-header h2 {
   font-size: 20px;
   font-weight: 700;
   margin: 0;
+  letter-spacing: -0.3px;
 }
 
 .modal-close {
-  background: none;
+  background: #F2F2F7;
   border: none;
-  font-size: 28px;
+  font-size: 20px;
   cursor: pointer;
-  color: #999;
-  padding: 0;
-  width: 32px;
-  height: 32px;
+  color: #8E8E93;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 50%;
+  transition: background 0.15s;
 }
 
-.modal-close:hover {
-  color: #333;
-  background: #F0F0F0;
-}
+.modal-close:hover { background: #E5E5EA; color: #3A3A3C; }
 
-.form-group {
-  margin-bottom: 20px;
-}
+.form-group { margin-bottom: 18px; }
 
 .form-group label {
   display: block;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
-  color: #444;
+  color: #3A3A3C;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .form-group input,
 .form-group textarea {
   width: 100%;
   padding: 13px 14px;
-  border: 1px solid #DDD;
+  border: 1.5px solid #E5E5EA;
   border-radius: 12px;
   font-size: 16px;
   box-sizing: border-box;
   font-family: inherit;
   background: #FAFAFA;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .form-group input:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #000;
+  border-color: #007AFF;
   background: white;
 }
 
 .submit-button {
   width: 100%;
   padding: 15px;
-  background: #000;
+  background: #1C1C1E;
   color: white;
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   margin-top: 8px;
   font-family: inherit;
+  letter-spacing: -0.1px;
+  transition: background 0.15s, transform 0.1s;
 }
 
-.submit-button:hover {
-  background: #333;
-}
+.submit-button:hover { background: #3A3A3C; }
+.submit-button:active { transform: scale(0.98); }
+.submit-button:disabled { background: #C7C7CC; cursor: not-allowed; }
 
-.submit-button:disabled {
-  background: #CCC;
-  cursor: not-allowed;
-}
-
-/* ── File upload area ───────────────────────────────── */
-
+/* File upload area */
 .file-upload-area {
-  border: 2px dashed #DDD;
+  border: 2px dashed #D1D1D6;
   border-radius: 14px;
   padding: 24px;
   cursor: pointer;
@@ -447,7 +477,7 @@
 
 .file-upload-area:hover {
   border-color: #007AFF;
-  background: #F8FBFF;
+  background: rgba(0,122,255,0.03);
 }
 
 .file-upload-placeholder {
@@ -455,20 +485,17 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  color: #999;
   text-align: center;
 }
 
 .file-upload-placeholder p {
   font-size: 15px;
+  font-weight: 500;
   margin: 0;
-  color: #555;
+  color: #3A3A3C;
 }
 
-.file-upload-placeholder span {
-  font-size: 12px;
-  color: #AAA;
-}
+.file-upload-placeholder span { font-size: 12px; color: #8E8E93; }
 
 .file-selected {
   display: flex;
@@ -480,26 +507,26 @@
   font-size: 14px;
   font-weight: 600;
   margin: 0;
-  color: #333;
+  color: #1C1C1E;
   word-break: break-all;
 }
 
-.file-selected-size {
-  font-size: 12px;
-  color: #999;
-  margin: 4px 0 0;
-}
+.file-selected-size { font-size: 12px; color: #8E8E93; margin: 3px 0 0; }
 
 .file-remove {
   margin-left: auto;
-  background: none;
+  background: #F2F2F7;
   border: none;
-  font-size: 22px;
-  color: #bbb;
+  font-size: 18px;
+  color: #8E8E93;
   cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.file-remove:hover {
-  color: #e74c3c;
-}
+.file-remove:hover { background: #E5E5EA; color: #FF3B30; }

@@ -5,9 +5,11 @@ import { supabase } from '../supabaseClient';
 
 const MONTH_NAMES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-function getPublicUrl(storagePath) {
+function getPublicUrl(storagePath, fromSharedFiles = false) {
   if (!storagePath) return null;
-  return supabase.storage.from('documents').getPublicUrl(storagePath).data.publicUrl;
+  // shared_files usa bucket "documentos"; documents legacy usa "documents"
+  const bucket = fromSharedFiles ? 'documentos' : 'documents';
+  return supabase.storage.from(bucket).getPublicUrl(storagePath).data.publicUrl;
 }
 
 function FileIcon({ fileType, size = 20 }) {
@@ -163,7 +165,7 @@ export default function InquilinoDetail({ rental, onBack }) {
     setSupabasePayment({ status: 'pending' });
   };
 
-  // Cargar documentos desde Supabase
+  // Cargar documentos desde Supabase (tabla documents + shared_files globales)
   useEffect(() => {
     const query = supabase
       .from('documents')
@@ -172,7 +174,33 @@ export default function InquilinoDetail({ rental, onBack }) {
       .order('created_at', { ascending: false });
     if (rental.roomId) query.eq('room_id', String(rental.roomId));
     query.then(({ data }) => { if (data) setDocs(data); });
-  }, [rental.propertyId, rental.roomId]);
+
+    // También cargar archivos compartidos globalmente desde shared_files
+    supabase
+      .from('shared_files')
+      .select('*')
+      .eq('landlord_email', rental.landlordEmail)
+      .eq('shared_with_tenant', true)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const mapped = data.map(sf => ({
+            id: sf.id,
+            name: sf.file_name || sf.storage_path.split('/').pop(),
+            file_name: sf.file_name,
+            file_type: sf.file_type,
+            file_size: sf.file_size,
+            storage_path: sf.storage_path,
+            uploaded_by: 'landlord',
+            shared_with_tenant: true,
+            _from_shared_files: true,
+          }));
+          setDocs(prev => {
+            const existing = new Set(prev.map(d => d.storage_path));
+            return [...prev, ...mapped.filter(m => !existing.has(m.storage_path))];
+          });
+        }
+      });
+  }, [rental.propertyId, rental.roomId, rental.landlordEmail]);
 
   // Cargar incidencias del inquilino desde Supabase
   useEffect(() => {
@@ -329,7 +357,7 @@ export default function InquilinoDetail({ rental, onBack }) {
   };
 
   const handleDownloadDoc = (doc) => {
-    const url = getPublicUrl(doc.storage_path);
+    const url = getPublicUrl(doc.storage_path, doc._from_shared_files);
     if (!url) return;
     const a = document.createElement('a');
     a.href = url;
