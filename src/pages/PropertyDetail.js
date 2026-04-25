@@ -1528,7 +1528,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
         const safeName = attachmentFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         // selectedFolderPath: null = picker no usado (fallback gastos), '' = raíz, 'X' = carpeta X
         const uploadPath = selectedFolderPath !== null
-          ? `${landlordEmail}${selectedFolderPath ? '/' + selectedFolderPath : ''}/${Date.now()}_${safeName}`
+          ? `${landlordEmail}/${propertyId}${selectedFolderPath ? '/' + selectedFolderPath : ''}/${Date.now()}_${safeName}`
           : `${landlordEmail}/gastos/${propertyId}/${Date.now()}_${safeName}`;
         const { error: upErr } = await supabase.storage.from('documentos').upload(uploadPath, attachmentFile, { upsert: false });
         if (upErr) {
@@ -1711,6 +1711,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
       {showFolderPicker && (
         <FolderPickerModal
           landlordEmail={landlordEmail}
+          propertyId={propertyId}
           onClose={() => { setShowFolderPicker(false); setPendingFile(null); }}
           onConfirm={handleFolderSelected}
         />
@@ -1719,7 +1720,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   );
 }
 
-function FolderPickerModal({ landlordEmail, onClose, onConfirm }) {
+function FolderPickerModal({ landlordEmail, propertyId, onClose, onConfirm }) {
   const [allFolders, setAllFolders] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [currentView, setCurrentView] = React.useState('');
@@ -1728,9 +1729,12 @@ function FolderPickerModal({ landlordEmail, onClose, onConfirm }) {
   const [newFolderName, setNewFolderName] = React.useState('');
 
   React.useEffect(() => {
-    supabase.from('folders').select('*').eq('landlord_email', landlordEmail)
+    setLoading(true);
+    supabase.from('folders').select('*')
+      .eq('landlord_email', landlordEmail)
+      .eq('property_id', propertyId)
       .then(({ data }) => { setAllFolders(data || []); setLoading(false); });
-  }, [landlordEmail]);
+  }, [landlordEmail, propertyId]);
 
   const getDirectChildren = (parentPath) =>
     allFolders.filter(f => {
@@ -1754,6 +1758,7 @@ function FolderPickerModal({ landlordEmail, onClose, onConfirm }) {
     const newPath = currentView ? `${currentView}/${newFolderName.trim()}` : newFolderName.trim();
     const { data, error } = await supabase.from('folders').insert({
       landlord_email: landlordEmail,
+      property_id: propertyId,
       path: newPath,
       name: newFolderName.trim(),
     }).select().single();
