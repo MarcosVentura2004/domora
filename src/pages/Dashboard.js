@@ -89,6 +89,12 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   const [tenantMeta, setTenantMeta] = useState({});
   const [metaTick, setMetaTick] = useState(0);
 
+  // Broadcast state
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [broadcastSelected, setBroadcastSelected] = useState(new Set());
+  const [broadcastText, setBroadcastText] = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
+
   // Carga unread counts + última actividad de cada conversación (batch)
   useEffect(() => {
     if (!userEmail) return;
@@ -468,16 +474,240 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
               borderBottom: '1px solid #f0f0f0',
             }}>
               <span style={{ fontWeight: 700, fontSize: '20px', color: '#111', letterSpacing: '-0.3px' }}>Mensajes</span>
-              <button
-                onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(''); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  onClick={() => {
+                    setBroadcastSelected(new Set());
+                    setBroadcastText('');
+                    setShowBroadcast(true);
+                  }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
+                  title="Difusión"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 11l19-9-9 19-2-8-8-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
             </div>
+
+            {/* Broadcast modal */}
+            {showBroadcast && (() => {
+              const individualTenants = getAllTenants(properties, userEmail).filter(t => !t.isGroup);
+              const allSelected = individualTenants.length > 0 && broadcastSelected.size === individualTenants.length;
+
+              const handleBroadcastSend = async () => {
+                if (!broadcastText.trim() || broadcastSelected.size === 0) return;
+                setBroadcastSending(true);
+                try {
+                  const targets = individualTenants.filter(t => broadcastSelected.has(t.key));
+                  await Promise.all(targets.map(t =>
+                    supabase.from('messages').insert({
+                      property_id: t.propertyId,
+                      room_id: t.roomId || null,
+                      tenant_id: t.roomId ? null : t.tenantId,
+                      landlord_email: userEmail,
+                      sender: 'landlord',
+                      sender_id: userEmail,
+                      content: broadcastText.trim(),
+                      attachment_url: null,
+                      attachment_name: null,
+                      attachment_type: null,
+                      attachment_size: null,
+                      is_group_message: false,
+                      read_by_landlord: true,
+                      read_by_tenant: false,
+                    })
+                  ));
+                  setShowBroadcast(false);
+                  setBroadcastText('');
+                  setBroadcastSelected(new Set());
+                  setMetaTick(x => x + 1);
+                } catch (err) {
+                  console.error('Error enviando difusión:', err);
+                } finally {
+                  setBroadcastSending(false);
+                }
+              };
+
+              return (
+                <div
+                  onClick={() => setShowBroadcast(false)}
+                  style={{
+                    position: 'fixed', inset: 0, zIndex: 200,
+                    background: 'rgba(0,0,0,0.45)',
+                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+                  }}
+                >
+                  <div
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      background: 'white', borderRadius: '20px 20px 0 0',
+                      width: '100%', maxWidth: '600px',
+                      padding: '20px 20px max(20px,env(safe-area-inset-bottom))',
+                      maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+                    }}
+                  >
+                    {/* Modal header */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 11l19-9-9 19-2-8-8-2z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: '16px', color: '#111' }}>Difusión</p>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#aaa' }}>Envía un mensaje a varios inquilinos</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowBroadcast(false)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: '#aaa', fontSize: '20px', lineHeight: 1 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {/* Select all */}
+                    {individualTenants.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (allSelected) {
+                            setBroadcastSelected(new Set());
+                          } else {
+                            setBroadcastSelected(new Set(individualTenants.map(t => t.key)));
+                          }
+                        }}
+                        style={{
+                          background: 'none', border: '1px solid #e5e5e5', borderRadius: '10px',
+                          padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px',
+                          cursor: 'pointer', marginBottom: '10px', width: '100%', textAlign: 'left',
+                        }}
+                      >
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                          border: `2px solid ${allSelected ? '#111' : '#ccc'}`,
+                          background: allSelected ? '#111' : 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {allSelected && (
+                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                        <span style={{ fontSize: '14px', fontWeight: 600, color: '#111' }}>
+                          Seleccionar todos ({individualTenants.length})
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Tenant list */}
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+                      {individualTenants.length === 0 ? (
+                        <p style={{ textAlign: 'center', color: '#aaa', fontSize: '14px', marginTop: '20px' }}>
+                          No hay inquilinos disponibles
+                        </p>
+                      ) : (
+                        individualTenants.map(t => {
+                          const checked = broadcastSelected.has(t.key);
+                          const initials = t.tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                          const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
+                          const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
+                          const colorIdx = t.tenantName.charCodeAt(0) % avatarColors.length;
+                          return (
+                            <button
+                              key={t.key}
+                              onClick={() => {
+                                const next = new Set(broadcastSelected);
+                                if (checked) next.delete(t.key); else next.add(t.key);
+                                setBroadcastSelected(next);
+                              }}
+                              style={{
+                                background: checked ? '#f0f0f0' : 'white',
+                                border: '1px solid #e5e5e5', borderRadius: '12px',
+                                padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '12px',
+                                cursor: 'pointer', width: '100%', textAlign: 'left',
+                              }}
+                            >
+                              <div style={{
+                                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                                background: avatarColors[colorIdx],
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '13px', fontWeight: 700, color: avatarTextColors[colorIdx],
+                              }}>
+                                {initials}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#111' }}>{t.tenantName}</p>
+                                <p style={{ margin: 0, fontSize: '12px', color: '#aaa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.propertyName}</p>
+                              </div>
+                              <div style={{
+                                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                border: `2px solid ${checked ? '#111' : '#ccc'}`,
+                                background: checked ? '#111' : 'white',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                {checked && (
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                                    <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Message input */}
+                    <textarea
+                      value={broadcastText}
+                      onChange={e => setBroadcastText(e.target.value)}
+                      placeholder="Escribe tu mensaje..."
+                      rows={3}
+                      style={{
+                        width: '100%', border: '1px solid #e5e5e5', borderRadius: '12px',
+                        padding: '12px 14px', fontSize: '14px', resize: 'none',
+                        outline: 'none', fontFamily: 'inherit', lineHeight: '1.4',
+                        boxSizing: 'border-box', marginBottom: '12px',
+                      }}
+                    />
+
+                    {/* Send button */}
+                    <button
+                      onClick={handleBroadcastSend}
+                      disabled={broadcastSending || !broadcastText.trim() || broadcastSelected.size === 0}
+                      style={{
+                        width: '100%', padding: '14px',
+                        background: (!broadcastText.trim() || broadcastSelected.size === 0) ? '#e5e5e5' : '#111',
+                        color: (!broadcastText.trim() || broadcastSelected.size === 0) ? '#aaa' : 'white',
+                        border: 'none', borderRadius: '14px',
+                        fontSize: '15px', fontWeight: 700, cursor: broadcastSending ? 'default' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 11l19-9-9 19-2-8-8-2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {broadcastSending
+                        ? 'Enviando…'
+                        : `Enviar a ${broadcastSelected.size > 0 ? broadcastSelected.size : ''} seleccionado${broadcastSelected.size !== 1 ? 's' : ''}`}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Barra búsqueda chat */}
             {showChatSearch && (

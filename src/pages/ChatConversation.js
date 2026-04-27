@@ -36,6 +36,7 @@ function formatFileSize(bytes) {
 // ─── Attachment renderer ──────────────────────────────────────────────────────
 function AttachmentView({ msg, isMe }) {
   const isImage = msg.attachment_type?.startsWith('image/');
+  const isAudio = msg.attachment_type?.startsWith('audio/');
 
   const handleDownload = () => {
     const a = document.createElement('a');
@@ -44,6 +45,24 @@ function AttachmentView({ msg, isMe }) {
     a.target = '_blank';
     a.click();
   };
+
+  if (isAudio) {
+    return (
+      <div style={{ marginTop: msg.content ? '6px' : 0, minWidth: '200px' }}>
+        <audio
+          controls
+          src={msg.attachment_url}
+          style={{
+            width: '100%',
+            height: '36px',
+            outline: 'none',
+            borderRadius: '20px',
+            display: 'block',
+          }}
+        />
+      </div>
+    );
+  }
 
   if (isImage) {
     return (
@@ -109,11 +128,17 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       })
       .catch(() => {});
   }, [landlordEmail]);
+
   const [text, setText] = useState('');
   const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
   const [sending, setSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  const supportsAudio = typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
   // Load messages on mount
   useEffect(() => {
@@ -135,12 +160,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         table: 'messages',
       }, (payload) => {
         const m = payload.new;
-        // Descartar mensajes de otras propiedades o propietarios
         if (m.property_id !== propertyId || m.landlord_email !== landlordEmail) return;
-        // Separar grupo de individual
         if (isGroup && !m.is_group_message) return;
         if (!isGroup && m.is_group_message) return;
-        // Para chats individuales, verificar room_id o tenant_id
         if (!isGroup) {
           if (roomId && m.room_id !== roomId) return;
           if (!roomId && (m.tenant_id !== tenantId || m.room_id)) return;
@@ -251,6 +273,62 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     }
   };
 
+  // ─── Audio recording ──────────────────────────────────────────────────────
+  const handleMicStart = async (e) => {
+    e.preventDefault();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Error accediendo al micrófono:', err);
+    }
+  };
+
+  const handleMicStop = async (e) => {
+    e.preventDefault();
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+    setIsRecording(false);
+
+    const mr = mediaRecorderRef.current;
+    mr.onstop = async () => {
+      mr.stream.getTracks().forEach(t => t.stop());
+      if (audioChunksRef.current.length === 0) return;
+      const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      const ts = Date.now();
+      const path = `${landlordEmail}/audios/${ts}.webm`;
+      const { error: uploadError } = await supabase.storage
+        .from('documentos')
+        .upload(path, blob, { contentType: 'audio/webm' });
+      if (uploadError) { console.error('Error subiendo audio:', uploadError); return; }
+      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+      await supabase.from('messages').insert({
+        property_id: propertyId,
+        room_id: isGroup ? null : (roomId || null),
+        tenant_id: isGroup ? null : (roomId ? null : tenantId),
+        landlord_email: landlordEmail,
+        sender: currentRole,
+        sender_id: currentRole === 'landlord' ? landlordEmail : tenantId,
+        content: null,
+        attachment_url: publicUrl,
+        attachment_type: 'audio/webm',
+        attachment_name: null,
+        attachment_size: null,
+        is_group_message: isGroup || false,
+        read_by_landlord: currentRole === 'landlord',
+        read_by_tenant: currentRole === 'tenant',
+      });
+    };
+    mr.stop();
+    mediaRecorderRef.current = null;
+  };
+
   const isMe = (sender) => sender === currentRole;
   const otherName = isGroup
     ? (currentRole === 'tenant' ? 'Chat del bloque' : 'Todos los inquilinos')
@@ -334,6 +412,8 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             else dateLabel = msgDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
           }
 
+          const isAudioMsg = msg.attachment_type?.startsWith('audio/');
+
           return (
             <div key={msg.id}>
               {isNewDay && (
@@ -376,13 +456,14 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
                     background: isMe(msg.sender) ? '#111' : 'white',
                     color: isMe(msg.sender) ? 'white' : '#111',
                     borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                    padding: msg.attachment_url && !msg.content ? '8px' : '10px 14px',
+                    padding: isAudioMsg ? '10px 12px' : (msg.attachment_url && !msg.content ? '8px' : '10px 14px'),
                     fontSize: '14px', lineHeight: '1.4',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                     wordBreak: 'break-word',
                     overflowWrap: 'anywhere',
+                    minWidth: isAudioMsg ? '220px' : undefined,
                   }}>
-                    {msg.content && <span>{msg.content}</span>}
+                    {msg.content && !isAudioMsg && <span>{msg.content}</span>}
                     {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
                   </div>
                   <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
@@ -414,10 +495,21 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         </div>
       )}
 
+      {/* Recording indicator */}
+      {isRecording && (
+        <div style={{
+          background: 'white', padding: '8px 16px', borderTop: '1px solid #eee',
+          display: 'flex', alignItems: 'center', gap: '10px',
+        }}>
+          <RecordingDot />
+          <span style={{ fontSize: '13px', color: '#e74c3c', fontWeight: 600 }}>Grabando audio… suelta para enviar</span>
+        </div>
+      )}
+
       {/* Input */}
       <div style={{
         background: 'white', padding: '10px 16px',
-        borderTop: pendingFile ? 'none' : '1px solid #eee',
+        borderTop: (pendingFile || isRecording) ? 'none' : '1px solid #eee',
         display: 'flex', gap: '8px', alignItems: 'center',
         paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
       }}>
@@ -443,6 +535,34 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             maxHeight: '120px',
           }}
         />
+
+        {/* Mic button — only when text is empty and audio is supported */}
+        {supportsAudio && !text.trim() && !pendingFile && (
+          <button
+            onMouseDown={handleMicStart}
+            onMouseUp={handleMicStop}
+            onMouseLeave={isRecording ? handleMicStop : undefined}
+            onTouchStart={handleMicStart}
+            onTouchEnd={handleMicStop}
+            style={{
+              width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
+              background: isRecording ? '#e74c3c' : '#e5e5e5',
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.15s',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect x="9" y="2" width="6" height="12" rx="3" stroke={isRecording ? 'white' : '#666'} strokeWidth="2"/>
+              <path d="M5 10a7 7 0 0 0 14 0" stroke={isRecording ? 'white' : '#666'} strokeWidth="2" strokeLinecap="round"/>
+              <line x1="12" y1="17" x2="12" y2="21" stroke={isRecording ? 'white' : '#666'} strokeWidth="2" strokeLinecap="round"/>
+              <line x1="9" y1="21" x2="15" y2="21" stroke={isRecording ? 'white' : '#666'} strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+        )}
+
         <button
           onClick={handleSend}
           disabled={!canSend}
@@ -460,6 +580,26 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Pulsing red recording indicator ─────────────────────────────────────────
+function RecordingDot() {
+  return (
+    <div style={{ position: 'relative', width: 12, height: 12, flexShrink: 0 }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        borderRadius: '50%',
+        background: '#e74c3c',
+        animation: 'recordPulse 1s ease-in-out infinite',
+      }} />
+      <style>{`
+        @keyframes recordPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.5); opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }
