@@ -6,6 +6,7 @@ import GeneralPanel from './GeneralPanel';
 import ChatConversation from './ChatConversation';
 import Settings from './Settings';
 import { supabase } from '../supabaseClient';
+import { getFile } from '../utils/fileStorage';
 
 function getAllTenants(properties, landlordEmail) {
   const list = [];
@@ -114,11 +115,20 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
       });
   }, [properties, userEmail, metaTick]); // eslint-disable-line
 
-  // Carga avatar del propietario
+  // Carga avatar del propietario (IndexedDB primero, Supabase Storage como fallback)
   useEffect(() => {
     if (!userEmail) return;
-    const { data } = supabase.storage.from('avatars').getPublicUrl(`${userEmail}/avatar`);
-    if (data?.publicUrl) setAvatarUrl(data.publicUrl + '?t=1');
+    getFile(`avatar_${userEmail}`)
+      .then(local => {
+        if (local) {
+          setAvatarUrl(local);
+          setAvatarValid(true);
+        } else {
+          const { data } = supabase.storage.from('avatars').getPublicUrl(`${userEmail}/avatar`);
+          if (data?.publicUrl) setAvatarUrl(data.publicUrl + '?t=1');
+        }
+      })
+      .catch(() => {});
   }, [userEmail]);
 
   // Carga propiedades desde Supabase al iniciar sesión

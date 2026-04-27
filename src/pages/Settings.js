@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { saveFile, getFile } from '../utils/fileStorage';
 import './Settings.css';
 
 function formatPhone(raw) {
@@ -59,15 +60,21 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
         setPlan(landlord.plan || 'free');
       }
 
-      // Avatar desde Storage — sólo mostramos si la imagen realmente existe
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(`${userEmail}/avatar`);
-      if (urlData?.publicUrl) {
-        const testImg = new window.Image();
-        testImg.onload = () => setAvatarSrc(urlData.publicUrl + '?t=' + Date.now());
-        testImg.onerror = () => {}; // no hay foto, se quedan las iniciales
-        testImg.src = urlData.publicUrl + '?t=' + Date.now();
+      // Avatar: primero IndexedDB (local, siempre disponible)
+      const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
+      if (localAvatar) {
+        setAvatarSrc(localAvatar);
+      } else {
+        // Si no hay local, intentar desde Supabase Storage
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(`${userEmail}/avatar`);
+        if (urlData?.publicUrl) {
+          const testImg = new window.Image();
+          testImg.onload = () => setAvatarSrc(urlData.publicUrl + '?t=' + Date.now());
+          testImg.onerror = () => {};
+          testImg.src = urlData.publicUrl + '?t=' + Date.now();
+        }
       }
     }
     load();
@@ -78,25 +85,32 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadError(null);
-
-    // 1. Mostrar preview local inmediatamente (funciona siempre, sin red)
-    const localPreview = URL.createObjectURL(file);
-    setAvatarSrc(localPreview);
-
-    // 2. Subir a Supabase Storage en paralelo
     setPhotoUploading(true);
+
+    // 1. Convertir a dataURL y guardar en IndexedDB — funciona siempre, sin bucket
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = ev => resolve(ev.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    await saveFile(`avatar_${userEmail}`, dataUrl).catch(() => {});
+    setAvatarSrc(dataUrl); // se ve de inmediato
+
+    // 2. Intentar subir también a Supabase Storage (para verlo en otros dispositivos)
     const { error } = await supabase.storage
       .from('avatars')
       .upload(`${userEmail}/avatar`, file, { upsert: true, contentType: file.type });
 
     if (error) {
-      console.error('Error subiendo avatar:', error);
-      setUploadError('No se pudo guardar la foto en la nube. Se muestra localmente.');
+      // Fallo silencioso — ya está guardado en local, el usuario ve la foto
+      console.warn('Supabase Storage no disponible, avatar guardado solo en local:', error.message);
     } else {
-      // Reemplazar el blob local por la URL permanente de Supabase
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(`${userEmail}/avatar`);
+      // Actualizar IndexedDB con la URL remota para futuros dispositivos
+      await saveFile(`avatar_${userEmail}`, urlData.publicUrl + '?t=' + Date.now()).catch(() => {});
       setAvatarSrc(urlData.publicUrl + '?t=' + Date.now());
     }
 
@@ -209,12 +223,6 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                 </div>
               </button>
             </div>
-
-            {uploadError && (
-              <p style={{ margin: '0 16px 8px', fontSize: '12px', color: '#e74c3c', textAlign: 'center' }}>
-                {uploadError}
-              </p>
-            )}
 
             {/* Campos */}
             <div className="settings-input-group">

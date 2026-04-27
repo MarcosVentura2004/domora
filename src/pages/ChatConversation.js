@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { getFile } from '../utils/fileStorage';
 
 // ─── Exported async helper — used by other pages for unread badges ───────────
 export async function getUnreadCount(landlordEmail, propertyId, roomId, tenantId, role) {
@@ -93,11 +94,20 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   const [landlordAvatarUrl, setLandlordAvatarUrl] = useState(null);
   const [landlordAvatarValid, setLandlordAvatarValid] = useState(false);
 
-  // Cargar avatar del propietario desde Storage
+  // Cargar avatar del propietario (IndexedDB primero, Supabase Storage como fallback)
   useEffect(() => {
     if (!landlordEmail) return;
-    const { data } = supabase.storage.from('avatars').getPublicUrl(`${landlordEmail}/avatar`);
-    if (data?.publicUrl) setLandlordAvatarUrl(data.publicUrl + '?t=1');
+    getFile(`avatar_${landlordEmail}`)
+      .then(local => {
+        if (local) {
+          setLandlordAvatarUrl(local);
+          setLandlordAvatarValid(true);
+        } else {
+          const { data } = supabase.storage.from('avatars').getPublicUrl(`${landlordEmail}/avatar`);
+          if (data?.publicUrl) setLandlordAvatarUrl(data.publicUrl + '?t=1');
+        }
+      })
+      .catch(() => {});
   }, [landlordEmail]);
   const [text, setText] = useState('');
   const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
