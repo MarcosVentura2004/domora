@@ -304,10 +304,10 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       const ts = Date.now();
       const path = `${landlordEmail}/audios/${ts}.webm`;
       const { error: uploadError } = await supabase.storage
-        .from('documentos')
+        .from('chat-attachments')
         .upload(path, blob, { contentType: 'audio/webm' });
       if (uploadError) { console.error('Error subiendo audio:', uploadError); return; }
-      const { data: { publicUrl } } = supabase.storage.from('documentos').getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
       await supabase.from('messages').insert({
         property_id: propertyId,
         room_id: isGroup ? null : (roomId || null),
