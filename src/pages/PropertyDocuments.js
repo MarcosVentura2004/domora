@@ -82,6 +82,16 @@ function ShareIcon({ active }) {
   );
 }
 
+function DotsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="5"  r="1.8" fill="currentColor"/>
+      <circle cx="12" cy="12" r="1.8" fill="currentColor"/>
+      <circle cx="12" cy="19" r="1.8" fill="currentColor"/>
+    </svg>
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatFileSize(bytes) {
@@ -106,12 +116,17 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   const [currentPath, setCurrentPath] = useState('');
   const [allFolders, setAllFolders] = useState([]);
   const [files, setFiles] = useState([]);
-  const [sharedPaths, setSharedPaths] = useState(new Set()); // storage_path values that are shared
+  const [sharedPaths, setSharedPaths] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const menuRef = useRef(null);
+
+  // Context menu & modal state
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null); // { type: 'folder'|'file', item }
+  const [moveTarget, setMoveTarget] = useState(null);     // { type: 'folder'|'file', item }
 
   const storagePath = currentPath
     ? `${landlordEmail}/${propertyId}/${currentPath}`
@@ -140,6 +155,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
   useEffect(() => { loadContents(); }, [loadContents]);
 
+  // Close the "+" add menu on outside click
   useEffect(() => {
     if (!showMenu) return;
     const handler = e => {
@@ -148,6 +164,14 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showMenu]);
+
+  // Close context menus on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handler = () => setOpenMenuId(null);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openMenuId]);
 
   // ── Navigation ───────────────────────────────────────────────────────────────
 
@@ -183,7 +207,6 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       }
       return;
     }
-    // Registrar en shared_files con shared_with_tenant = false
     await supabase.from('shared_files').upsert({
       landlord_email: landlordEmail,
       storage_path: uploadPath,
@@ -216,19 +239,18 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     });
   };
 
-  const handleDeleteFile = async (file, e) => {
-    e.stopPropagation();
+  const handleDeleteFile = async file => {
     if (!window.confirm(`¿Eliminar "${file.name}"?`)) return;
     const filePath = `${storagePath}/${file.name}`;
     await Promise.all([
       supabase.storage.from('documentos').remove([filePath]),
       supabase.from('shared_files').delete().eq('landlord_email', landlordEmail).eq('storage_path', filePath),
     ]);
+    setOpenMenuId(null);
     await loadContents();
   };
 
-  const handleDeleteFolder = async (folder, e) => {
-    e.stopPropagation();
+  const handleDeleteFolder = async folder => {
     if (!window.confirm(`¿Eliminar la carpeta "${folder.name}" y todo su contenido?`)) return;
     const fullPath = `${landlordEmail}/${propertyId}/${folder.path}`;
     const { data: items } = await supabase.storage.from('documentos').list(fullPath, { limit: 1000 });
@@ -243,6 +265,145 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       .eq('landlord_email', landlordEmail)
       .eq('property_id', propertyId)
       .or(`path.eq.${folder.path},path.like.${folder.path}/%`);
+    setOpenMenuId(null);
+    await loadContents();
+  };
+
+  // ── Rename ───────────────────────────────────────────────────────────────────
+
+  const handleRenameFolder = async (folder, newName) => {
+    const pathParts = folder.path.split('/');
+    pathParts[pathParts.length - 1] = newName;
+    const newFolderPath = pathParts.join('/');
+
+    if (newFolderPath === folder.path) { setRenameTarget(null); return; }
+
+    const oldStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
+    const newStoragePath = `${landlordEmail}/${propertyId}/${newFolderPath}`;
+
+    // Move direct files in storage
+    const { data: items } = await supabase.storage.from('documentos').list(oldStoragePath, { limit: 1000 });
+    for (const item of (items || []).filter(i => i.id !== null)) {
+      await supabase.storage.from('documentos').move(
+        `${oldStoragePath}/${item.name}`,
+        `${newStoragePath}/${item.name}`
+      );
+      await supabase.from('shared_files')
+        .update({ storage_path: `${newStoragePath}/${item.name}` })
+        .eq('landlord_email', landlordEmail)
+        .eq('storage_path', `${oldStoragePath}/${item.name}`);
+    }
+
+    // Update this folder record
+    const { error } = await supabase.from('folders')
+      .update({ name: newName, path: newFolderPath })
+      .eq('id', folder.id);
+    if (error) { alert(`Error renombrando: ${error.message}`); return; }
+
+    // Update subfolder paths
+    const subfolders = allFolders.filter(f => f.path.startsWith(folder.path + '/'));
+    for (const sub of subfolders) {
+      const newSubPath = newFolderPath + sub.path.slice(folder.path.length);
+      const oldSubStorage = `${landlordEmail}/${propertyId}/${sub.path}`;
+      const newSubStorage = `${landlordEmail}/${propertyId}/${newSubPath}`;
+      const { data: subItems } = await supabase.storage.from('documentos').list(oldSubStorage, { limit: 1000 });
+      for (const item of (subItems || []).filter(i => i.id !== null)) {
+        await supabase.storage.from('documentos').move(
+          `${oldSubStorage}/${item.name}`,
+          `${newSubStorage}/${item.name}`
+        );
+      }
+      await supabase.from('folders').update({ path: newSubPath }).eq('id', sub.id);
+    }
+
+    setRenameTarget(null);
+    await loadContents();
+  };
+
+  const handleRenameFile = async (file, newName) => {
+    if (newName === file.name) { setRenameTarget(null); return; }
+    const oldPath = `${storagePath}/${file.name}`;
+    const newPath = `${storagePath}/${newName}`;
+    const { error } = await supabase.storage.from('documentos').move(oldPath, newPath);
+    if (error) { alert(`Error renombrando: ${error.message}`); return; }
+    await supabase.from('shared_files')
+      .update({ storage_path: newPath, file_name: newName })
+      .eq('landlord_email', landlordEmail)
+      .eq('storage_path', oldPath);
+    setRenameTarget(null);
+    await loadContents();
+  };
+
+  // ── Move ─────────────────────────────────────────────────────────────────────
+
+  const handleMoveFile = async (file, destFolderPath) => {
+    const oldPath = `${storagePath}/${file.name}`;
+    const destStorage = destFolderPath
+      ? `${landlordEmail}/${propertyId}/${destFolderPath}`
+      : `${landlordEmail}/${propertyId}`;
+    const newPath = `${destStorage}/${file.name}`;
+
+    if (oldPath === newPath) { setMoveTarget(null); return; }
+
+    const { error } = await supabase.storage.from('documentos').move(oldPath, newPath);
+    if (error) { alert(`Error moviendo: ${error.message}`); return; }
+    await supabase.from('shared_files')
+      .update({ storage_path: newPath })
+      .eq('landlord_email', landlordEmail)
+      .eq('storage_path', oldPath);
+    setMoveTarget(null);
+    await loadContents();
+  };
+
+  const handleMoveFolder = async (folder, destFolderPath) => {
+    const newFolderPath = destFolderPath
+      ? `${destFolderPath}/${folder.name}`
+      : folder.name;
+
+    if (newFolderPath === folder.path || newFolderPath.startsWith(folder.path + '/')) {
+      alert('No puedes mover una carpeta dentro de sí misma.');
+      return;
+    }
+
+    const oldStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
+    const newStoragePath = `${landlordEmail}/${propertyId}/${newFolderPath}`;
+
+    // Move direct files
+    const { data: items } = await supabase.storage.from('documentos').list(oldStoragePath, { limit: 1000 });
+    for (const item of (items || []).filter(i => i.id !== null)) {
+      await supabase.storage.from('documentos').move(
+        `${oldStoragePath}/${item.name}`,
+        `${newStoragePath}/${item.name}`
+      );
+      await supabase.from('shared_files')
+        .update({ storage_path: `${newStoragePath}/${item.name}` })
+        .eq('landlord_email', landlordEmail)
+        .eq('storage_path', `${oldStoragePath}/${item.name}`);
+    }
+
+    // Update folder record
+    const { error } = await supabase.from('folders')
+      .update({ path: newFolderPath })
+      .eq('id', folder.id);
+    if (error) { alert(`Error moviendo carpeta: ${error.message}`); return; }
+
+    // Update subfolders
+    const subfolders = allFolders.filter(f => f.path.startsWith(folder.path + '/'));
+    for (const sub of subfolders) {
+      const newSubPath = newFolderPath + sub.path.slice(folder.path.length);
+      const oldSubStorage = `${landlordEmail}/${propertyId}/${sub.path}`;
+      const newSubStorage = `${landlordEmail}/${propertyId}/${newSubPath}`;
+      const { data: subItems } = await supabase.storage.from('documentos').list(oldSubStorage, { limit: 1000 });
+      for (const item of (subItems || []).filter(i => i.id !== null)) {
+        await supabase.storage.from('documentos').move(
+          `${oldSubStorage}/${item.name}`,
+          `${newSubStorage}/${item.name}`
+        );
+      }
+      await supabase.from('folders').update({ path: newSubPath }).eq('id', sub.id);
+    }
+
+    setMoveTarget(null);
     await loadContents();
   };
 
@@ -251,6 +412,55 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     const { data } = supabase.storage.from('documentos').getPublicUrl(filePath);
     if (data?.publicUrl) window.open(data.publicUrl, '_blank');
   };
+
+  // ── Context menu helper ───────────────────────────────────────────────────────
+
+  const ItemMenu = ({ menuId, onRename, onMove, onDelete }) => (
+    <div className="item-menu-wrapper">
+      <button
+        className="finder-action-btn finder-action-dots"
+        onMouseDown={e => e.stopPropagation()}
+        onClick={e => {
+          e.stopPropagation();
+          setOpenMenuId(prev => (prev === menuId ? null : menuId));
+        }}
+        title="Más opciones"
+      >
+        <DotsIcon />
+      </button>
+      {openMenuId === menuId && (
+        <div className="item-context-menu" onMouseDown={e => e.stopPropagation()}>
+          <button onClick={() => { setOpenMenuId(null); onRename(); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Renombrar
+          </button>
+          <button onClick={() => { setOpenMenuId(null); onMove(); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12h14M12 5l7 7-7 7"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Mover
+          </button>
+          <button className="ctx-delete" onClick={() => { setOpenMenuId(null); onDelete(); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Eliminar
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -353,26 +563,18 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                       <span className="folder-card-name">{folder.name}</span>
                       <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                         <button
-                          className="finder-action-btn finder-action-share"
+                          className={`finder-action-btn finder-action-share`}
                           onClick={e => handleToggleShare({ name: folder.name, metadata: {} }, e)}
                           title="Compartir carpeta"
                         >
                           <ShareIcon active={false} />
                         </button>
-                        <button
-                          className="finder-action-btn finder-action-delete"
-                          onClick={e => handleDeleteFolder(folder, e)}
-                          title="Eliminar carpeta"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                            <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
-                              strokeLinecap="round" strokeLinejoin="round"/>
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-                              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2"
-                              strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </button>
+                        <ItemMenu
+                          menuId={`folder-${folder.id}`}
+                          onRename={() => setRenameTarget({ type: 'folder', item: folder })}
+                          onMove={() => setMoveTarget({ type: 'folder', item: folder })}
+                          onDelete={() => handleDeleteFolder(folder)}
+                        />
                       </div>
                     </div>
                   ))}
@@ -409,15 +611,12 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                           >
                             <ShareIcon active={isShared} />
                           </button>
-                          <button className="finder-action-btn finder-action-delete"
-                            onClick={e => handleDeleteFile(file, e)} title="Eliminar">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
-                                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
+                          <ItemMenu
+                            menuId={`file-${file.id || file.name}`}
+                            onRename={() => setRenameTarget({ type: 'file', item: file })}
+                            onMove={() => setMoveTarget({ type: 'file', item: file })}
+                            onDelete={() => handleDeleteFile(file)}
+                          />
                         </div>
                       </div>
                     );
@@ -434,6 +633,29 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       )}
       {showUploadModal && (
         <UploadFileModal onClose={() => setShowUploadModal(false)} onUpload={handleUploadFile} />
+      )}
+      {renameTarget && (
+        <RenameModal
+          currentName={renameTarget.item.name}
+          onClose={() => setRenameTarget(null)}
+          onRename={newName =>
+            renameTarget.type === 'folder'
+              ? handleRenameFolder(renameTarget.item, newName)
+              : handleRenameFile(renameTarget.item, newName)
+          }
+        />
+      )}
+      {moveTarget && (
+        <FolderPickerModal
+          allFolders={allFolders}
+          excludePath={moveTarget.type === 'folder' ? moveTarget.item.path : null}
+          onClose={() => setMoveTarget(null)}
+          onPick={destPath =>
+            moveTarget.type === 'folder'
+              ? handleMoveFolder(moveTarget.item, destPath)
+              : handleMoveFile(moveTarget.item, destPath)
+          }
+        />
       )}
     </div>
   );
@@ -532,6 +754,98 @@ function UploadFileModal({ onClose, onUpload }) {
             {loading ? 'Subiendo…' : 'Subir archivo'}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Rename Modal ─────────────────────────────────────────────────────────────
+
+function RenameModal({ currentName, onClose, onRename }) {
+  const [name, setName] = useState(currentName);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setLoading(true);
+    await onRename(name.trim());
+    setLoading(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Renombrar</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Nuevo nombre</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            className="submit-button"
+            disabled={loading || !name.trim() || name.trim() === currentName}
+          >
+            {loading ? 'Renombrando…' : 'Renombrar'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Folder Picker Modal ──────────────────────────────────────────────────────
+
+function FolderPickerModal({ allFolders, excludePath, onClose, onPick }) {
+  const [selected, setSelected] = useState(null); // null = root
+
+  const available = excludePath
+    ? allFolders.filter(f => f.path !== excludePath && !f.path.startsWith(excludePath + '/'))
+    : allFolders;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Mover a</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="folder-picker-list">
+          <div
+            className={`folder-picker-item${selected === null ? ' selected' : ''}`}
+            onClick={() => setSelected(null)}
+          >
+            <FolderIcon size={20} />
+            <span>Raíz (inicio)</span>
+          </div>
+          {available.map(folder => {
+            const depth = folder.path.split('/').length - 1;
+            return (
+              <div
+                key={folder.id}
+                className={`folder-picker-item${selected === folder.path ? ' selected' : ''}`}
+                style={{ paddingLeft: 14 + depth * 16 }}
+                onClick={() => setSelected(folder.path)}
+              >
+                <FolderIcon size={20} />
+                <span>{folder.name}</span>
+              </div>
+            );
+          })}
+        </div>
+        <button className="submit-button" onClick={() => { onPick(selected); onClose(); }}>
+          Mover aquí
+        </button>
       </div>
     </div>
   );

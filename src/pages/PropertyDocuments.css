@@ -362,6 +362,72 @@
 .finder-action-share:hover { color: #34C759; background: rgba(52,199,89,0.08); }
 .finder-action-share.active { color: #34C759; background: rgba(52,199,89,0.1); }
 .finder-action-delete:hover { color: #FF3B30; background: rgba(255,59,48,0.08); }
+.finder-action-dots:hover { color: #555; background: rgba(0,0,0,0.06); }
+
+/* ── Item context menu ──────────────────────────────── */
+
+.item-menu-wrapper { position: relative; }
+
+.item-context-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.16), 0 1px 4px rgba(0,0,0,0.08);
+  min-width: 148px;
+  overflow: hidden;
+  z-index: 500;
+  border: 1px solid rgba(0,0,0,0.06);
+  animation: menu-pop 0.14s ease;
+}
+
+.item-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1C1C1E;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+.item-context-menu button:hover { background: #F5F5F5; }
+.item-context-menu button:not(:last-child) { border-bottom: 1px solid #F2F2F7; }
+.item-context-menu .ctx-delete { color: #FF3B30; }
+.item-context-menu .ctx-delete:hover { background: rgba(255,59,48,0.06); }
+
+/* ── Folder picker ──────────────────────────────────── */
+
+.folder-picker-list {
+  border: 1.5px solid #E5E5EA;
+  border-radius: 12px;
+  overflow-y: auto;
+  max-height: 280px;
+  margin-bottom: 18px;
+}
+
+.folder-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1C1C1E;
+  transition: background 0.1s;
+  border-bottom: 1px solid #F2F2F7;
+}
+.folder-picker-item:last-child { border-bottom: none; }
+.folder-picker-item:hover { background: #F5F5F5; }
+.folder-picker-item.selected { background: rgba(0,122,255,0.08); color: #007AFF; }
 
 /* ===================================================
    Modals
