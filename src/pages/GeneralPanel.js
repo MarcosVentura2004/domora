@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
-import ProfileMenu from '../components/ProfileMenu';
 import { supabase } from '../supabaseClient';
 
 const now = new Date();
@@ -274,8 +273,7 @@ function IncidentAttachmentView({ attachmentUrl }) {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties, onSwitchRole }) {
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings }) {
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showRentabilityModal, setShowRentabilityModal] = useState(false);
@@ -347,7 +345,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
     <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
       {/* Header */}
       <div className="dashboard-header">
-        <button className="profile-button" onClick={() => setShowProfileMenu(!showProfileMenu)}>
+        <button className="profile-button" onClick={onOpenSettings}>
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
             <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
             <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
@@ -355,7 +353,7 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
         </button>
         <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Resumen</span>
         <div style={{ position: 'relative' }}>
-          <button className="options-button" onClick={() => { setShowOptionsMenu(!showOptionsMenu); setShowProfileMenu(false); }}>⋮</button>
+          <button className="options-button" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>
           {showOptionsMenu && (
             <div className="options-menu" style={{ right: 0, left: 'auto' }}>
               <button className="option-item" onClick={() => { setShowReportModal(true); setShowOptionsMenu(false); }}>
@@ -367,15 +365,6 @@ function GeneralPanel({ properties, userEmail, onLogout, onNavigateToProperties,
             </div>
           )}
         </div>
-        {showProfileMenu && (
-          <ProfileMenu
-            userEmail={userEmail}
-            role="landlord"
-            onSwitchRole={onSwitchRole}
-            onLogout={onLogout}
-            onClose={() => setShowProfileMenu(false)}
-          />
-        )}
       </div>
 
       {showReportModal && (

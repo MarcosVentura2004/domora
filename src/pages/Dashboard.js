@@ -4,7 +4,7 @@ import PropertyDetail from './PropertyDetail';
 import VacationalDetail from './VacationalDetail';
 import GeneralPanel from './GeneralPanel';
 import ChatConversation from './ChatConversation';
-import ProfileMenu from '../components/ProfileMenu';
+import Settings from './Settings';
 import { supabase } from '../supabaseClient';
 
 function getAllTenants(properties, landlordEmail) {
@@ -74,7 +74,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
     setChatSearch('');
   };
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showPropertySearch, setShowPropertySearch] = useState(false);
   const [propertySearch, setPropertySearch] = useState('');
   const [showChatSearch, setShowChatSearch] = useState(false);
@@ -140,7 +140,6 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   };
 
   const handleViewProperty = (property) => {
-    setShowProfileMenu(false);
     setViewingProperty(property);
   };
 
@@ -186,6 +185,17 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
     }
   };
 
+  if (showSettings) {
+    return (
+      <Settings
+        userEmail={userEmail}
+        onBack={() => setShowSettings(false)}
+        onLogout={onLogout}
+        onSwitchRole={onSwitchRole}
+      />
+    );
+  }
+
   if (viewingProperty) {
     if (viewingProperty.status === 'vacacional') {
       return (
@@ -215,9 +225,8 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
         <GeneralPanel
           properties={properties}
           userEmail={userEmail}
-          onLogout={onLogout}
           onNavigateToProperties={() => switchTab('properties')}
-          onSwitchRole={onSwitchRole}
+          onOpenSettings={() => setShowSettings(true)}
         />
       )}
 
@@ -226,7 +235,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
         <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
           {/* Header */}
           <div className="dashboard-header">
-            <button className="profile-button" onClick={() => setShowProfileMenu(!showProfileMenu)}>
+            <button className="profile-button" onClick={() => setShowSettings(true)}>
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                 <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
                 <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
@@ -255,15 +264,6 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
               </button>
             </div>
 
-            {showProfileMenu && (
-              <ProfileMenu
-                userEmail={userEmail}
-                role="landlord"
-                onSwitchRole={onSwitchRole}
-                onLogout={onLogout}
-                onClose={() => setShowProfileMenu(false)}
-              />
-            )}
           </div>
 
           {/* Barra de búsqueda propiedades */}
