@@ -12,9 +12,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
   const [profileEmail, setProfileEmail] = useState(userEmail || '');
-  const [photoUrl, setPhotoUrl] = useState(null);
-  const [photoValid, setPhotoValid] = useState(false);
+  // avatarSrc: puede ser un blob: local o una URL de Supabase
+  const [avatarSrc, setAvatarSrc] = useState(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [emailChangeSent, setEmailChangeSent] = useState(false);
@@ -58,12 +59,15 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
         setPlan(landlord.plan || 'free');
       }
 
-      // Avatar público desde Storage
+      // Avatar desde Storage — sólo mostramos si la imagen realmente existe
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(`${userEmail}/avatar`);
       if (urlData?.publicUrl) {
-        setPhotoUrl(urlData.publicUrl + '?t=' + Date.now());
+        const testImg = new window.Image();
+        testImg.onload = () => setAvatarSrc(urlData.publicUrl + '?t=' + Date.now());
+        testImg.onerror = () => {}; // no hay foto, se quedan las iniciales
+        testImg.src = urlData.publicUrl + '?t=' + Date.now();
       }
     }
     load();
@@ -73,19 +77,30 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
+
+    // 1. Mostrar preview local inmediatamente (funciona siempre, sin red)
+    const localPreview = URL.createObjectURL(file);
+    setAvatarSrc(localPreview);
+
+    // 2. Subir a Supabase Storage en paralelo
     setPhotoUploading(true);
     const { error } = await supabase.storage
       .from('avatars')
       .upload(`${userEmail}/avatar`, file, { upsert: true, contentType: file.type });
-    if (!error) {
+
+    if (error) {
+      console.error('Error subiendo avatar:', error);
+      setUploadError('No se pudo guardar la foto en la nube. Se muestra localmente.');
+    } else {
+      // Reemplazar el blob local por la URL permanente de Supabase
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(`${userEmail}/avatar`);
-      setPhotoUrl(urlData.publicUrl + '?t=' + Date.now());
-      setPhotoValid(true);
+      setAvatarSrc(urlData.publicUrl + '?t=' + Date.now());
     }
+
     setPhotoUploading(false);
-    // Reset input so same file can be re-selected
     e.target.value = '';
   };
 
@@ -176,17 +191,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                 style={{ background: 'none', border: 'none', padding: 0 }}
                 aria-label="Cambiar foto de perfil"
               >
-                {photoUrl && (
-                  <img
-                    src={photoUrl}
-                    alt="Avatar"
-                    className="settings-avatar"
-                    style={{ display: photoValid ? 'block' : 'none' }}
-                    onLoad={() => setPhotoValid(true)}
-                    onError={() => setPhotoValid(false)}
-                  />
-                )}
-                {!photoValid && (
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="Avatar" className="settings-avatar" />
+                ) : (
                   <div className="settings-avatar-placeholder">{initials}</div>
                 )}
                 {photoUploading && (
@@ -202,6 +209,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                 </div>
               </button>
             </div>
+
+            {uploadError && (
+              <p style={{ margin: '0 16px 8px', fontSize: '12px', color: '#e74c3c', textAlign: 'center' }}>
+                {uploadError}
+              </p>
+            )}
 
             {/* Campos */}
             <div className="settings-input-group">
