@@ -284,14 +284,15 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     // Move direct files in storage
     const { data: items } = await supabase.storage.from('documentos').list(oldStoragePath, { limit: 1000 });
     for (const item of (items || []).filter(i => i.id !== null)) {
-      await supabase.storage.from('documentos').move(
-        `${oldStoragePath}/${item.name}`,
-        `${newStoragePath}/${item.name}`
-      );
-      await supabase.from('shared_files')
-        .update({ storage_path: `${newStoragePath}/${item.name}` })
-        .eq('landlord_email', landlordEmail)
-        .eq('storage_path', `${oldStoragePath}/${item.name}`);
+      const { data: blob } = await supabase.storage.from('documentos').download(`${oldStoragePath}/${item.name}`);
+      if (blob) {
+        await supabase.storage.from('documentos').upload(`${newStoragePath}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
+        await supabase.storage.from('documentos').remove([`${oldStoragePath}/${item.name}`]);
+        await supabase.from('shared_files')
+          .update({ storage_path: `${newStoragePath}/${item.name}` })
+          .eq('landlord_email', landlordEmail)
+          .eq('storage_path', `${oldStoragePath}/${item.name}`);
+      }
     }
 
     // Update this folder record
@@ -308,10 +309,11 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       const newSubStorage = `${landlordEmail}/${propertyId}/${newSubPath}`;
       const { data: subItems } = await supabase.storage.from('documentos').list(oldSubStorage, { limit: 1000 });
       for (const item of (subItems || []).filter(i => i.id !== null)) {
-        await supabase.storage.from('documentos').move(
-          `${oldSubStorage}/${item.name}`,
-          `${newSubStorage}/${item.name}`
-        );
+        const { data: blob } = await supabase.storage.from('documentos').download(`${oldSubStorage}/${item.name}`);
+        if (blob) {
+          await supabase.storage.from('documentos').upload(`${newSubStorage}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
+          await supabase.storage.from('documentos').remove([`${oldSubStorage}/${item.name}`]);
+        }
       }
       await supabase.from('folders').update({ path: newSubPath }).eq('id', sub.id);
     }
@@ -324,8 +326,17 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     if (newName === file.name) { setRenameTarget(null); return; }
     const oldPath = `${storagePath}/${file.name}`;
     const newPath = `${storagePath}/${newName}`;
-    const { error } = await supabase.storage.from('documentos').move(oldPath, newPath);
-    if (error) { alert(`Error renombrando: ${error.message}`); return; }
+
+    const { data: blob, error: dlErr } = await supabase.storage.from('documentos').download(oldPath);
+    if (dlErr) { alert(`Error renombrando: ${dlErr.message}`); return; }
+
+    const { error: upErr } = await supabase.storage.from('documentos').upload(newPath, blob, {
+      upsert: false,
+      contentType: blob.type || file.metadata?.mimetype || 'application/octet-stream',
+    });
+    if (upErr) { alert(`Error renombrando: ${upErr.message}`); return; }
+
+    await supabase.storage.from('documentos').remove([oldPath]);
     await supabase.from('shared_files')
       .update({ storage_path: newPath, file_name: newName })
       .eq('landlord_email', landlordEmail)
@@ -345,8 +356,16 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
     if (oldPath === newPath) { setMoveTarget(null); return; }
 
-    const { error } = await supabase.storage.from('documentos').move(oldPath, newPath);
-    if (error) { alert(`Error moviendo: ${error.message}`); return; }
+    const { data: blob, error: dlErr } = await supabase.storage.from('documentos').download(oldPath);
+    if (dlErr) { alert(`Error moviendo: ${dlErr.message}`); return; }
+
+    const { error: upErr } = await supabase.storage.from('documentos').upload(newPath, blob, {
+      upsert: false,
+      contentType: blob.type || file.metadata?.mimetype || 'application/octet-stream',
+    });
+    if (upErr) { alert(`Error moviendo: ${upErr.message}`); return; }
+
+    await supabase.storage.from('documentos').remove([oldPath]);
     await supabase.from('shared_files')
       .update({ storage_path: newPath })
       .eq('landlord_email', landlordEmail)
@@ -371,14 +390,15 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     // Move direct files
     const { data: items } = await supabase.storage.from('documentos').list(oldStoragePath, { limit: 1000 });
     for (const item of (items || []).filter(i => i.id !== null)) {
-      await supabase.storage.from('documentos').move(
-        `${oldStoragePath}/${item.name}`,
-        `${newStoragePath}/${item.name}`
-      );
-      await supabase.from('shared_files')
-        .update({ storage_path: `${newStoragePath}/${item.name}` })
-        .eq('landlord_email', landlordEmail)
-        .eq('storage_path', `${oldStoragePath}/${item.name}`);
+      const { data: blob } = await supabase.storage.from('documentos').download(`${oldStoragePath}/${item.name}`);
+      if (blob) {
+        await supabase.storage.from('documentos').upload(`${newStoragePath}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
+        await supabase.storage.from('documentos').remove([`${oldStoragePath}/${item.name}`]);
+        await supabase.from('shared_files')
+          .update({ storage_path: `${newStoragePath}/${item.name}` })
+          .eq('landlord_email', landlordEmail)
+          .eq('storage_path', `${oldStoragePath}/${item.name}`);
+      }
     }
 
     // Update folder record
@@ -395,10 +415,11 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       const newSubStorage = `${landlordEmail}/${propertyId}/${newSubPath}`;
       const { data: subItems } = await supabase.storage.from('documentos').list(oldSubStorage, { limit: 1000 });
       for (const item of (subItems || []).filter(i => i.id !== null)) {
-        await supabase.storage.from('documentos').move(
-          `${oldSubStorage}/${item.name}`,
-          `${newSubStorage}/${item.name}`
-        );
+        const { data: blob } = await supabase.storage.from('documentos').download(`${oldSubStorage}/${item.name}`);
+        if (blob) {
+          await supabase.storage.from('documentos').upload(`${newSubStorage}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
+          await supabase.storage.from('documentos').remove([`${oldSubStorage}/${item.name}`]);
+        }
       }
       await supabase.from('folders').update({ path: newSubPath }).eq('id', sub.id);
     }
