@@ -90,6 +90,15 @@ function AttachmentView({ msg, isMe }) {
 export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [landlordAvatarUrl, setLandlordAvatarUrl] = useState(null);
+  const [landlordAvatarValid, setLandlordAvatarValid] = useState(false);
+
+  // Cargar avatar del propietario desde Storage
+  useEffect(() => {
+    if (!landlordEmail) return;
+    const { data } = supabase.storage.from('avatars').getPublicUrl(`${landlordEmail}/avatar`);
+    if (data?.publicUrl) setLandlordAvatarUrl(data.publicUrl + '?t=1');
+  }, [landlordEmail]);
   const [text, setText] = useState('');
   const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
   const [sending, setSending] = useState(false);
@@ -247,7 +256,44 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         borderBottom: '1px solid #eee', position: 'sticky', top: 0, zIndex: 10,
       }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>←</button>
-        <div>
+
+        {/* Avatar en cabecera */}
+        {(() => {
+          const showLandlordPhoto = !isGroup;
+          const otherInitials = otherName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+          return (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              {showLandlordPhoto && landlordAvatarUrl && (
+                <img
+                  src={landlordAvatarUrl}
+                  alt=""
+                  style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', display: landlordAvatarValid ? 'block' : 'none' }}
+                  onLoad={() => setLandlordAvatarValid(true)}
+                  onError={() => setLandlordAvatarValid(false)}
+                />
+              )}
+              {(!showLandlordPhoto || !landlordAvatarValid) && (
+                <div style={{
+                  width: 38, height: 38, borderRadius: '50%',
+                  background: isGroup ? '#111' : '#e5e5e5',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 700, color: isGroup ? 'white' : '#555',
+                }}>
+                  {isGroup ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2"/>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : otherInitials}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontWeight: 600, fontSize: '15px', color: '#111' }}>{otherName}</p>
           <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{isGroup ? `${propertyName} · Grupo` : propertyName}</p>
         </div>
@@ -287,23 +333,52 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
                   <div style={{ flex: 1, height: '1px', background: '#e5e5e5' }} />
                 </div>
               )}
-              <div style={{ alignSelf: isMe(msg.sender) ? 'flex-end' : 'flex-start', maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: isMe(msg.sender) ? 'flex-end' : 'flex-start', marginLeft: isMe(msg.sender) ? 'auto' : 0 }}>
-                <div style={{
-                  background: isMe(msg.sender) ? '#111' : 'white',
-                  color: isMe(msg.sender) ? 'white' : '#111',
-                  borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                  padding: msg.attachment_url && !msg.content ? '8px' : '10px 14px',
-                  fontSize: '14px', lineHeight: '1.4',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                  wordBreak: 'break-word',
-                  overflowWrap: 'anywhere',
-                }}>
-                  {msg.content && <span>{msg.content}</span>}
-                  {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flexDirection: isMe(msg.sender) ? 'row-reverse' : 'row', marginLeft: isMe(msg.sender) ? 'auto' : 0, maxWidth: '80%' }}>
+                {/* Mini avatar para mensajes entrantes */}
+                {!isMe(msg.sender) && (() => {
+                  const isLandlordMsg = msg.sender === 'landlord';
+                  const otherInitials = otherName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                  return (
+                    <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+                      {isLandlordMsg && landlordAvatarUrl && (
+                        <img
+                          src={landlordAvatarUrl}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: landlordAvatarValid ? 'block' : 'none', position: 'absolute', inset: 0 }}
+                        />
+                      )}
+                      {(!isLandlordMsg || !landlordAvatarValid) && (
+                        <div style={{
+                          width: '100%', height: '100%',
+                          background: '#e5e5e5',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, fontWeight: 700, color: '#666',
+                        }}>
+                          {otherInitials}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe(msg.sender) ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
+                  <div style={{
+                    background: isMe(msg.sender) ? '#111' : 'white',
+                    color: isMe(msg.sender) ? 'white' : '#111',
+                    borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    padding: msg.attachment_url && !msg.content ? '8px' : '10px 14px',
+                    fontSize: '14px', lineHeight: '1.4',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'anywhere',
+                  }}>
+                    {msg.content && <span>{msg.content}</span>}
+                    {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
+                  </div>
+                  <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
+                    {msgDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
-                <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
-                  {msgDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                </p>
               </div>
             </div>
           );

@@ -176,14 +176,17 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                 style={{ background: 'none', border: 'none', padding: 0 }}
                 aria-label="Cambiar foto de perfil"
               >
-                {photoValid && photoUrl ? (
+                {photoUrl && (
                   <img
                     src={photoUrl}
                     alt="Avatar"
                     className="settings-avatar"
+                    style={{ display: photoValid ? 'block' : 'none' }}
+                    onLoad={() => setPhotoValid(true)}
                     onError={() => setPhotoValid(false)}
                   />
-                ) : (
+                )}
+                {!photoValid && (
                   <div className="settings-avatar-placeholder">{initials}</div>
                 )}
                 {photoUploading && (
