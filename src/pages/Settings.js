@@ -11,11 +11,13 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
   // ── Perfil ──────────────────────────────────────────────
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
+  const [profileEmail, setProfileEmail] = useState(userEmail || '');
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoValid, setPhotoValid] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [emailChangeSent, setEmailChangeSent] = useState(false);
   const fileInputRef = useRef(null);
 
   // ── Plan ────────────────────────────────────────────────
@@ -89,16 +91,27 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
 
   const handleSaveProfile = async () => {
     setProfileSaving(true);
-    await supabase.auth.updateUser({
-      data: { name: profileName.trim(), phone: profilePhone.trim() },
-    });
+    const emailTrimmed = profileEmail.trim().toLowerCase();
+    const emailChanged = emailTrimmed && emailTrimmed !== userEmail;
+
+    // Actualizar nombre, teléfono y (si cambia) email en Supabase Auth
+    const updatePayload = { data: { name: profileName.trim(), phone: profilePhone.trim() } };
+    if (emailChanged) updatePayload.email = emailTrimmed;
+    await supabase.auth.updateUser(updatePayload);
+
+    // Actualizar tabla landlords
     await supabase.from('landlords').upsert(
       { email: userEmail, name: profileName.trim(), phone: profilePhone.trim() },
       { onConflict: 'email' }
     );
+
     setProfileSaving(false);
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2500);
+    if (emailChanged) {
+      setEmailChangeSent(true);
+    } else {
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 2500);
+    }
   };
 
   const handlePasswordReset = async () => {
@@ -185,7 +198,6 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                   </svg>
                 </div>
               </button>
-              <p className="settings-profile-email">{userEmail}</p>
             </div>
 
             {/* Campos */}
@@ -201,6 +213,21 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                 />
               </div>
               <div>
+                <label className="settings-input-label">Correo electrónico</label>
+                <input
+                  className="settings-input"
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={profileEmail}
+                  onChange={e => { setProfileEmail(e.target.value); setEmailChangeSent(false); }}
+                />
+                {profileEmail.trim().toLowerCase() !== userEmail && profileEmail.trim() && (
+                  <p style={{ margin: '5px 0 0', fontSize: '12px', color: '#8e8e93', lineHeight: 1.4 }}>
+                    Se enviará un enlace de verificación al nuevo correo para confirmar el cambio.
+                  </p>
+                )}
+              </div>
+              <div>
                 <label className="settings-input-label">Teléfono</label>
                 <input
                   className="settings-input"
@@ -211,6 +238,15 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
                 />
               </div>
             </div>
+
+            {emailChangeSent && (
+              <div className="settings-confirm-msg" style={{ margin: '0 16px 16px', borderRadius: '10px', border: 'none' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path d="M20 6L9 17l-5-5" stroke="#27ae60" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Enlace de verificación enviado a {profileEmail.trim()}. Confirma el cambio desde tu nuevo correo.
+              </div>
+            )}
 
             <button
               className={`settings-save-btn${profileSaved ? ' saved' : ''}`}
