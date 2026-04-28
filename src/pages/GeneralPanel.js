@@ -139,22 +139,36 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     })).sort((a, b) => b.net - a.net);
 
   // ── Alertas importantes ──
-  const pendingPaymentsThisMonth = supabasePayments.filter(p => p.status === 'pending');
-  const pendingCount = pendingPaymentsThisMonth.length;
-  const pendingTotal = pendingPaymentsThisMonth.reduce((sum, p) => sum + (p.amount || 0), 0);
 
-  const pendingByPropertyList = (() => {
-    const map = {};
-    pendingPaymentsThisMonth.forEach(p => {
-      const prop = properties.find(pr => String(pr.id) === String(p.property_id));
-      const name = prop ? prop.name : `Propiedad ${p.property_id}`;
-      if (!map[name]) map[name] = { count: 0, total: 0 };
-      map[name].count++;
-      map[name].total += p.amount || 0;
-    });
-    return Object.entries(map).map(([name, d]) => ({ name, ...d }));
-  })();
+  // Pagos pendientes: status != 'confirmed' en Supabase + propiedades con inquilino sin ningún registro
+  const pendingMap = {};
+  supabasePayments.filter(p => p.status !== 'confirmed').forEach(p => {
+    const prop = properties.find(pr => String(pr.id) === String(p.property_id));
+    const name = prop ? prop.name : `Propiedad ${p.property_id}`;
+    if (!pendingMap[name]) pendingMap[name] = { count: 0, total: 0 };
+    pendingMap[name].count++;
+    pendingMap[name].total += p.amount || 0;
+  });
+  properties.forEach(prop => {
+    if (['uso_propio', 'vacio', 'vacacional'].includes(prop.status)) return;
+    const propPayments = supabasePayments.filter(p => String(p.property_id) === String(prop.id));
+    if ((prop.status === 'alquilado' || prop.status === 'otros') && (prop.tenants || []).length > 0 && propPayments.length === 0) {
+      if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0 };
+      pendingMap[prop.name].count++;
+    } else if (prop.status === 'por_habitaciones') {
+      (prop.rooms || []).filter(r => r.tenant).forEach(room => {
+        if (!propPayments.some(p => String(p.room_id) === String(room.id))) {
+          if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0 };
+          pendingMap[prop.name].count++;
+        }
+      });
+    }
+  });
+  const pendingByPropertyList = Object.entries(pendingMap).map(([name, d]) => ({ name, ...d }));
+  const pendingCount = pendingByPropertyList.reduce((sum, item) => sum + item.count, 0);
+  const pendingTotal = pendingByPropertyList.reduce((sum, item) => sum + item.total, 0);
 
+  // Atención financiera: nivel de gravedad
   const computeMonthTotal = (year, month) =>
     properties
       .filter(p => p.status !== 'uso_propio')
@@ -179,7 +193,18 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const showHighExpenses = avgMonthlyExpenses > 0 && expensesHighPct > 20;
 
   const negativeCashflowProps = propertyStats.filter(s => s.net < 0);
-  const hasFinancialAlerts = showHighExpenses || negativeCashflowProps.length > 0;
+  const emptyProps = properties.filter(p => p.status === 'vacio');
+
+  // 'red' = pisos con pérdidas o vacíos | 'orange' = gastos altos | 'blue' = todo bien
+  const financialLevel = (negativeCashflowProps.length > 0 || emptyProps.length > 0) ? 'red'
+    : showHighExpenses ? 'orange'
+    : 'blue';
+  const hasFinancialAlerts = financialLevel !== 'blue';
+
+  const activeRentalProps = propertyStats.filter(s => s.status !== 'vacio');
+  const avgCashflow = activeRentalProps.length > 0
+    ? activeRentalProps.reduce((sum, s) => sum + s.net, 0) / activeRentalProps.length
+    : 0;
 
   const alertBadgeCount =
     (pendingCount > 0 ? 1 : 0) +
@@ -391,7 +416,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                                     src={incident.attachment_url}
                                     alt="Adjunto"
                                     onClick={() => window.open(incident.attachment_url, '_blank')}
-                                    style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', display: 'block', cursor: 'pointer' }}
+                                    style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', display: 'block', cursor: 'pointer', borderRadius: '0 0 10px 10px' }}
                                   />
                                 ) : (
                                   <a
@@ -419,18 +444,25 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 
               {/* ── Atención financiera ── */}
               {(() => {
-                const bg = hasFinancialAlerts ? '#E3F2FD' : '#F1F8E9';
-                const color = hasFinancialAlerts ? '#1565C0' : '#2E7D32';
-                const iconColor = hasFinancialAlerts ? '#1976D2' : '#4CAF50';
-                const border = hasFinancialAlerts ? 'rgba(25,118,210,0.15)' : 'rgba(76,175,80,0.15)';
+                const levelStyles = {
+                  red:    { bg: '#FBE9E7', color: '#C62828', iconColor: '#E53935', border: 'rgba(229,57,53,0.15)',   iconBg: 'rgba(229,57,53,0.1)' },
+                  orange: { bg: '#FFF8E1', color: '#E65100', iconColor: '#FB8C00', border: 'rgba(251,140,0,0.15)',   iconBg: 'rgba(251,140,0,0.1)' },
+                  blue:   { bg: '#E3F2FD', color: '#1565C0', iconColor: '#1976D2', border: 'rgba(25,118,210,0.15)', iconBg: 'rgba(25,118,210,0.1)' },
+                };
+                const { bg, color, iconColor, border, iconBg } = levelStyles[financialLevel];
                 const isOpen = expandedCard === 'financial';
-                const subtitle = hasFinancialAlerts
-                  ? [showHighExpenses && `Gastos +${expensesHighPct}% vs media`, negativeCashflowProps.length > 0 && `${negativeCashflowProps.length} piso${negativeCashflowProps.length !== 1 ? 's' : ''} con pérdidas`].filter(Boolean).join(' · ')
-                  : 'rentabilidad dentro de lo esperado';
+                const subtitle = financialLevel === 'red'
+                  ? [
+                      negativeCashflowProps.length > 0 && `${negativeCashflowProps.length} piso${negativeCashflowProps.length !== 1 ? 's' : ''} con pérdidas`,
+                      emptyProps.length > 0 && `${emptyProps.length} piso${emptyProps.length !== 1 ? 's' : ''} vacío${emptyProps.length !== 1 ? 's' : ''}`,
+                    ].filter(Boolean).join(' · ')
+                  : financialLevel === 'orange'
+                    ? `Gastos +${expensesHighPct}% vs media últimos 6 meses`
+                    : `Cashflow medio: ${avgCashflow >= 0 ? '+' : ''}${avgCashflow.toFixed(0)} €/mes`;
                 return (
                   <div style={{ borderRadius: '14px', border: `1px solid ${border}`, overflow: 'hidden' }}>
                     <button onClick={() => toggleCard('financial')} style={{ width: '100%', background: bg, border: 'none', padding: '13px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '11px' }}>
-                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: hasFinancialAlerts ? 'rgba(25,118,210,0.1)' : 'rgba(76,175,80,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           <path d="M14 2v6h6" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -448,21 +480,53 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                     </button>
                     {isOpen && (
                       <div style={{ padding: '10px 14px 14px', background: 'white', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {!hasFinancialAlerts && (
-                          <p style={{ margin: 0, fontSize: '13px', color: '#888', textAlign: 'center', padding: '4px 0' }}>Sin alertas financieras este mes</p>
+
+                        {/* RED: pérdidas y vacíos primero, luego gastos altos si también aplica */}
+                        {financialLevel === 'red' && (
+                          <>
+                            {negativeCashflowProps.map((s, i) => (
+                              <div key={`neg-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{s.name}</p>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#C62828' }}>-{Math.abs(s.net).toFixed(0)} €/mes</p>
+                              </div>
+                            ))}
+                            {emptyProps.map((p, i) => (
+                              <div key={`empty-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{p.name}</p>
+                                <p style={{ margin: 0, fontSize: '12px', color: '#C62828' }}>vacío este mes</p>
+                              </div>
+                            ))}
+                            {showHighExpenses && (
+                              <div style={{ padding: '9px 12px', borderRadius: '10px', background: '#FFF8E1' }}>
+                                <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#E65100' }}>Gastos altos</p>
+                                <p style={{ margin: 0, fontSize: '12px', color: '#FB8C00' }}>+{expensesHighPct}% sobre la media de 6 meses</p>
+                              </div>
+                            )}
+                          </>
                         )}
-                        {showHighExpenses && (
-                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
-                            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#1565C0' }}>Gastos altos este mes</p>
-                            <p style={{ margin: 0, fontSize: '12px', color: '#1976D2' }}>+{expensesHighPct}% sobre la media de los últimos 6 meses</p>
+
+                        {/* ORANGE: solo gastos altos */}
+                        {financialLevel === 'orange' && (
+                          <div style={{ padding: '9px 12px', borderRadius: '10px', background: '#FFF8E1' }}>
+                            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#E65100' }}>Gastos altos este mes</p>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#FB8C00' }}>+{expensesHighPct}% sobre la media de los últimos 6 meses</p>
                           </div>
                         )}
-                        {negativeCashflowProps.map((s, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
-                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{s.name}</p>
-                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#C62828' }}>-{Math.abs(s.net).toFixed(0)} €/mes</p>
-                          </div>
-                        ))}
+
+                        {/* BLUE: datos positivos */}
+                        {financialLevel === 'blue' && (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
+                              <p style={{ margin: 0, fontSize: '13px', color: '#1565C0' }}>Cashflow medio por piso</p>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#1565C0' }}>{avgCashflow >= 0 ? '+' : ''}{avgCashflow.toFixed(0)} €/mes</p>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
+                              <p style={{ margin: 0, fontSize: '13px', color: '#1565C0' }}>Neto total este mes</p>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: totalNet >= 0 ? '#2E7D32' : '#C62828' }}>{totalNet >= 0 ? '+' : ''}{totalNet.toFixed(0)} €</p>
+                            </div>
+                          </>
+                        )}
+
                         {hasFinancialAlerts && (
                           <button
                             onClick={() => { setShowRentabilityModal(true); toggleCard('financial'); }}
