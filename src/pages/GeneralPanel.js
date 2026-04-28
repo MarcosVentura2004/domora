@@ -280,6 +280,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showRentabilityModal, setShowRentabilityModal] = useState(false);
+  const [rentabilityInitialPropertyId, setRentabilityInitialPropertyId] = useState(null);
   const [supabasePayments, setSupabasePayments] = useState([]);
   const [supabaseIncidents, setSupabaseIncidents] = useState([]);
   const [supabaseExpenses, setSupabaseExpenses] = useState([]);
@@ -394,7 +395,8 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
         <RentabilityModal
           properties={properties}
           supabaseExpenses={supabaseExpenses}
-          onClose={() => setShowRentabilityModal(false)}
+          initialPropertyId={rentabilityInitialPropertyId}
+          onClose={() => { setShowRentabilityModal(false); setRentabilityInitialPropertyId(null); }}
         />
       )}
 
@@ -512,34 +514,47 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                   <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: 700, color: '#bbb', letterSpacing: '0.5px' }}>ALQUILERES</p>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {propertyStats.map((stat, i) => (
-                    <div key={i} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '12px 14px', borderRadius: '12px', background: '#F9F9F9',
-                      cursor: 'pointer'
-                    }} onClick={onNavigateToProperties}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{
-                          width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center',
-                          justifyContent: 'center', fontSize: '11px', fontWeight: 700,
-                          background: i === 0 ? '#FFF8E1' : '#F3F4F6',
-                          color: i === 0 ? '#F9A825' : '#999'
-                        }}>{i + 1}</span>
-                        <div>
-                          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: '#111' }}>{stat.name}</p>
-                          <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>
-                            +{stat.income.toFixed(0)} € ingresos · -{stat.expenses.toFixed(0)} € gastos
-                          </p>
+                  {propertyStats.map((stat, i) => {
+                    const matchedProperty = properties.find(p => p.name === stat.name);
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px', borderRadius: '12px', background: '#F9F9F9',
+                        cursor: 'pointer'
+                      }} onClick={() => {
+                        if (matchedProperty) {
+                          setRentabilityInitialPropertyId(String(matchedProperty.id));
+                          setShowRentabilityModal(true);
+                        }
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{
+                            width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: '11px', fontWeight: 700,
+                            background: i === 0 ? '#FFF8E1' : '#F3F4F6',
+                            color: i === 0 ? '#F9A825' : '#999'
+                          }}>{i + 1}</span>
+                          <div>
+                            <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: '#111' }}>{stat.name}</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>
+                              +{stat.income.toFixed(0)} € ingresos · -{stat.expenses.toFixed(0)} € gastos
+                            </p>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            fontSize: '15px', fontWeight: 700,
+                            color: stat.net >= 0 ? '#2E7D32' : '#C62828'
+                          }}>
+                            {stat.net >= 0 ? '+' : ''}{stat.net.toFixed(0)} €
+                          </span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.35 }}>
+                            <path d="M9 18l6-6-6-6" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
                         </div>
                       </div>
-                      <span style={{
-                        fontSize: '15px', fontWeight: 700,
-                        color: stat.net >= 0 ? '#2E7D32' : '#C62828'
-                      }}>
-                        {stat.net >= 0 ? '+' : ''}{stat.net.toFixed(0)} €
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -1072,9 +1087,9 @@ function ReportModal({ properties, onClose }) {
 // ─────────────────────────────────────────────
 // Modal calculadora de rentabilidad
 // ─────────────────────────────────────────────
-function RentabilityModal({ properties, supabaseExpenses, onClose }) {
+function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onClose }) {
   const [selectedPropertyId, setSelectedPropertyId] = useState(
-    properties.length > 0 ? String(properties[0].id) : ''
+    initialPropertyId ?? (properties.length > 0 ? String(properties[0].id) : '')
   );
   const [investmentData, setInvestmentData] = useState({
     purchasePrice: '',
