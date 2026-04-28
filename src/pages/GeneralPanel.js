@@ -167,34 +167,30 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 
   // ── Alertas importantes ──
 
-  // Pagos pendientes: un pago está al día sólo si status === 'confirmed' (comparación exacta).
-  // Para por_habitaciones el bucle de habitaciones gestiona todo (confirmed vs sin pago vs pending),
-  // así se evita doble conteo y se muestran los detalles de habitación en todos los casos.
+  // Pagos pendientes: un inquilino está al día ÚNICAMENTE si existe un registro con
+  // status === 'confirmed' en la tabla payments para el mes/año actual.
+  // Si no existe ese registro (sea porque no hay ningún pago o porque solo hay uno
+  // con status 'pending'), el pago se considera pendiente de confirmar por el propietario.
   const pendingMap = {};
 
-  // Paso 1: pagos no confirmados para propiedades que NO son por_habitaciones
-  supabasePayments.filter(p => {
-    const prop = properties.find(pr => String(pr.id) === String(p.property_id));
-    return (p.status || '').trim() !== 'confirmed' && prop?.status !== 'por_habitaciones';
-  }).forEach(p => {
-    const prop = properties.find(pr => String(pr.id) === String(p.property_id));
-    const name = prop ? prop.name : `Propiedad ${p.property_id}`;
-    if (!pendingMap[name]) pendingMap[name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: false };
-    pendingMap[name].count++;
-    pendingMap[name].total += p.amount || 0;
-  });
-
-  // Paso 2: propiedades con inquilino pero sin ningún registro de pago (alquilado/otros)
-  //         + habitaciones sin pago confirmado (por_habitaciones)
   properties.forEach(prop => {
     if (['uso_propio', 'vacio', 'vacacional'].includes(prop.status)) return;
     const propPayments = supabasePayments.filter(p => String(p.property_id) === String(prop.id));
-    if ((prop.status === 'alquilado' || prop.status === 'otros') && (prop.tenants || []).length > 0 && propPayments.length === 0) {
-      if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: false };
-      pendingMap[prop.name].count++;
+
+    if (prop.status === 'alquilado' || prop.status === 'otros') {
+      if ((prop.tenants || []).length === 0) return;
+      const hasConfirmed = propPayments.some(
+        p => !p.room_id && (p.status || '').trim() === 'confirmed'
+      );
+      if (!hasConfirmed) {
+        if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: false };
+        pendingMap[prop.name].count++;
+        // Usar el importe del registro existente (si lo hay) aunque no esté confirmado
+        const existingPayment = propPayments.find(p => !p.room_id);
+        pendingMap[prop.name].total += existingPayment?.amount || 0;
+      }
     } else if (prop.status === 'por_habitaciones') {
       (prop.rooms || []).filter(r => r.tenant).forEach(room => {
-        // Pendiente si NO existe un pago con status exactamente 'confirmed' para esta habitación
         const hasConfirmed = propPayments.some(
           p => String(p.room_id) === String(room.id) && (p.status || '').trim() === 'confirmed'
         );
@@ -202,7 +198,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
           if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: true };
           pendingMap[prop.name].isPorHabitaciones = true;
           pendingMap[prop.name].count++;
-          // Incluir el importe si ya existe un pago pendiente para la habitación
+          // Usar el importe del registro existente (si lo hay) aunque no esté confirmado
           const roomPayment = propPayments.find(p => String(p.room_id) === String(room.id));
           pendingMap[prop.name].total += roomPayment?.amount || 0;
           pendingMap[prop.name].rooms.push({
