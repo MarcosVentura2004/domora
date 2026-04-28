@@ -33,6 +33,20 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatDuration(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+function getSupportedAudioMime() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+  for (const t of types) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+
 // ─── Attachment renderer ──────────────────────────────────────────────────────
 function AttachmentView({ msg, isMe }) {
   const isImage = msg.attachment_type?.startsWith('image/');
@@ -133,10 +147,15 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
   const [sending, setSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+  const recordingCancelledRef = useRef(false);
+  const touchStartXRef = useRef(null);
+  const audioMimeTypeRef = useRef('');
 
   const supportsAudio = typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
@@ -276,36 +295,54 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   // ─── Audio recording ──────────────────────────────────────────────────────
   const handleMicStart = async (e) => {
     e.preventDefault();
+    // Prevent double-fire from touch+mouse synthetic events
+    if (e.type === 'mousedown' && e.sourceCapabilities?.firesTouchEvents) return;
+    if (isRecording) return;
+    recordingCancelledRef.current = false;
+    if (e.touches) touchStartXRef.current = e.touches[0].clientX;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      const mr = new MediaRecorder(stream);
+      const mimeType = getSupportedAudioMime();
+      audioMimeTypeRef.current = mimeType;
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
       mr.ondataavailable = (ev) => {
         if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
       };
-      mr.start();
+      mr.start(100); // timeslice 100ms → chunks arrive continuously
       mediaRecorderRef.current = mr;
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
       setIsRecording(true);
     } catch (err) {
       console.error('Error accediendo al micrófono:', err);
+      alert('No se pudo acceder al micrófono. Comprueba los permisos de la app.');
     }
   };
 
-  const handleMicStop = async (e) => {
-    e.preventDefault();
+  const handleMicStop = (e) => {
+    if (e) e.preventDefault();
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
+    clearInterval(recordingTimerRef.current);
     setIsRecording(false);
+    setRecordingDuration(0);
+    touchStartXRef.current = null;
 
     const mr = mediaRecorderRef.current;
+    const cancelled = recordingCancelledRef.current;
     mr.onstop = async () => {
       mr.stream.getTracks().forEach(t => t.stop());
-      if (audioChunksRef.current.length === 0) return;
-      const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      if (cancelled || audioChunksRef.current.length === 0) return;
+      const mimeType = audioMimeTypeRef.current || 'audio/webm';
+      const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const blob = new Blob(audioChunksRef.current, { type: mimeType });
       const ts = Date.now();
-      const path = `${landlordEmail}/audios/${ts}.webm`;
+      const path = `${landlordEmail}/audios/${ts}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('chat-attachments')
-        .upload(path, blob, { contentType: 'audio/webm' });
+        .upload(path, blob, { contentType: mimeType });
       if (uploadError) { console.error('Error subiendo audio:', uploadError); return; }
       const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
       await supabase.from('messages').insert({
@@ -317,9 +354,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         sender_id: currentRole === 'landlord' ? landlordEmail : tenantId,
         content: null,
         attachment_url: publicUrl,
-        attachment_type: 'audio/webm',
+        attachment_type: mimeType,
         attachment_name: null,
-        attachment_size: null,
+        attachment_size: blob.size,
         is_group_message: isGroup || false,
         read_by_landlord: currentRole === 'landlord',
         read_by_tenant: currentRole === 'tenant',
@@ -327,6 +364,29 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     };
     mr.stop();
     mediaRecorderRef.current = null;
+  };
+
+  const handleCancelRecording = () => {
+    if (!mediaRecorderRef.current) return;
+    recordingCancelledRef.current = true;
+    clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setRecordingDuration(0);
+    touchStartXRef.current = null;
+    try {
+      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+      mediaRecorderRef.current.stop();
+    } catch (_) {}
+    mediaRecorderRef.current = null;
+  };
+
+  const handleMicTouchMove = (e) => {
+    if (!isRecording) return;
+    const touch = e.touches[0];
+    if (touchStartXRef.current === null) { touchStartXRef.current = touch.clientX; return; }
+    if (touch.clientX - touchStartXRef.current < -80) {
+      handleCancelRecording();
+    }
   };
 
   const isMe = (sender) => sender === currentRole;
@@ -501,8 +561,13 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
           background: 'white', padding: '8px 16px', borderTop: '1px solid #eee',
           display: 'flex', alignItems: 'center', gap: '10px',
         }}>
+          <button
+            onClick={handleCancelRecording}
+            style={{ background: 'none', border: 'none', fontSize: '18px', color: '#aaa', cursor: 'pointer', lineHeight: 1, padding: '0 4px', flexShrink: 0 }}
+          >✕</button>
           <RecordingDot />
-          <span style={{ fontSize: '13px', color: '#e74c3c', fontWeight: 600 }}>Grabando audio… suelta para enviar</span>
+          <span style={{ fontSize: '13px', color: '#e74c3c', fontWeight: 700, minWidth: '36px' }}>{formatDuration(recordingDuration)}</span>
+          <span style={{ fontSize: '12px', color: '#bbb', flex: 1 }}>← Desliza para cancelar</span>
         </div>
       )}
 
@@ -543,7 +608,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             onMouseUp={handleMicStop}
             onMouseLeave={isRecording ? handleMicStop : undefined}
             onTouchStart={handleMicStart}
+            onTouchMove={handleMicTouchMove}
             onTouchEnd={handleMicStop}
+            onContextMenu={(e) => e.preventDefault()}
             style={{
               width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
               background: isRecording ? '#e74c3c' : '#e5e5e5',
@@ -552,6 +619,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
               transition: 'background 0.15s',
               userSelect: 'none',
               WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
