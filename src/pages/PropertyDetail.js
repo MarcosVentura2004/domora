@@ -362,20 +362,46 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
   const handleConfirmPayment = async (tenantId, customAmount) => {
     const tenant = tenants.find(t => t.id === tenantId);
     const amount = customAmount !== undefined ? customAmount : tenant?.amount;
+    const confirmedAt = new Date().toISOString();
     const updatedPayments = payments.map(p =>
       p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
-        ? { ...p, status: 'confirmed', confirmedAt: new Date().toISOString(), amount, tenantName: tenant?.name }
+        ? { ...p, status: 'confirmed', confirmedAt, amount, tenantName: tenant?.name }
         : p
     );
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
-    await supabase
+
+    const payload = {
+      property_id: String(property.id),
+      tenant_id: tenantId,
+      room_id: null,
+      year: currentYear,
+      month: currentMonth,
+      status: 'confirmed',
+      confirmed_at: confirmedAt,
+    };
+    console.log('[handleConfirmPayment] Guardando en Supabase:', payload);
+
+    const { data: updateData, count: updateCount, error: updateError } = await supabase
       .from('payments')
-      .update({ status: 'confirmed', confirmed_at: new Date().toISOString(), amount })
+      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
+      .eq('property_id', String(property.id))
+      .eq('tenant_id', tenantId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at', { count: 'exact' });
+    console.log('[handleConfirmPayment] Resultado UPDATE:', { rowsUpdated: updateCount, data: updateData, error: updateError });
+
+    // Verificación: leer el registro recién guardado
+    const { data: verifyData, error: verifyError } = await supabase
+      .from('payments')
+      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at')
       .eq('property_id', String(property.id))
       .eq('tenant_id', tenantId)
       .eq('year', currentYear)
       .eq('month', currentMonth);
+    console.log('[handleConfirmPayment] Verificación DB post-escritura:', { verifyData, verifyError });
+
     setPendingSupabasePayments(prev =>
       prev.map(p => p.tenant_id === tenantId ? { ...p, status: 'confirmed' } : p)
     );
@@ -419,44 +445,49 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     setConfirmingTenant(null);
 
     // Persistir en Supabase (upsert: update si existe, insert si no)
-    const STATUS_VALUE = 'confirmed'; // valor exacto, sin espacios ni mayúsculas
-    console.log('[handleConfirmWithAmount] Intentando UPDATE en Supabase:', {
+    const payload = {
       property_id: String(property.id),
       tenant_id: tenantId,
+      room_id: null,
       year: currentYear,
       month: currentMonth,
-      status: STATUS_VALUE,
-      status_length: STATUS_VALUE.length,
-      status_charCodes: [...STATUS_VALUE].map(c => c.charCodeAt(0)),
-    });
+      status: 'confirmed',
+      confirmed_at: confirmedAt,
+    };
+    console.log('[handleConfirmWithAmount] Guardando en Supabase:', payload);
 
     const { data: updateData, count, error: updateError } = await supabase
       .from('payments')
-      .update({ status: STATUS_VALUE, confirmed_at: confirmedAt, amount })
+      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
       .eq('property_id', String(property.id))
       .eq('tenant_id', tenantId)
       .eq('year', currentYear)
       .eq('month', currentMonth)
-      .select('id, status', { count: 'exact' });
-
-    console.log('[handleConfirmWithAmount] Resultado UPDATE:', {
-      rowsUpdated: count,
-      updatedRows: updateData,
-      error: updateError,
-    });
+      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at', { count: 'exact' });
+    console.log('[handleConfirmWithAmount] Resultado UPDATE:', { rowsUpdated: count, data: updateData, error: updateError });
 
     if (!count) {
-      console.log('[handleConfirmWithAmount] No existía fila — haciendo INSERT con status:', STATUS_VALUE);
+      console.log('[handleConfirmWithAmount] No existía fila — haciendo INSERT');
       const { data: insertData, error: insertError } = await supabase
         .from('payments')
         .insert({
           property_id: String(property.id), tenant_id: tenantId,
           year: currentYear, month: currentMonth,
-          status: STATUS_VALUE, confirmed_at: confirmedAt, amount,
+          status: 'confirmed', confirmed_at: confirmedAt, amount,
         })
-        .select('id, status');
-      console.log('[handleConfirmWithAmount] Resultado INSERT:', { insertData, insertError });
+        .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
+      console.log('[handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });
     }
+
+    // Verificación: leer el registro recién guardado
+    const { data: verifyData, error: verifyError } = await supabase
+      .from('payments')
+      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at')
+      .eq('property_id', String(property.id))
+      .eq('tenant_id', tenantId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
+    console.log('[handleConfirmWithAmount] Verificación DB post-escritura:', { verifyData, verifyError });
   };
 
   const handleRejectPayment = async (tenantId) => {

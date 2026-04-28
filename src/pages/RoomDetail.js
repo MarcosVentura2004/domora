@@ -473,26 +473,54 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setShowConfirmModal(false);
 
     // Persistir en Supabase (upsert: update si existe, insert si no)
-    const { count } = await supabase
+    const payload = {
+      property_id: String(property.id),
+      tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
+      room_id: String(room.id),
+      year: currentYear,
+      month: currentMonth,
+      status: 'confirmed',
+      confirmed_at: confirmedAt,
+    };
+    console.log('[RoomDetail handleConfirmWithAmount] Guardando en Supabase:', payload);
+
+    const { data: updateData, count, error: updateError } = await supabase
       .from('payments')
       .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
       .eq('property_id', String(property.id))
       .eq('room_id', String(room.id))
       .eq('year', currentYear)
       .eq('month', currentMonth)
-      .select('id', { count: 'exact', head: true });
+      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at', { count: 'exact' });
+    console.log('[RoomDetail handleConfirmWithAmount] Resultado UPDATE:', { rowsUpdated: count, data: updateData, error: updateError });
+
     if (!count) {
-      await supabase.from('payments').insert({
-        property_id: String(property.id),
-        room_id: String(room.id),
-        tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
-        year: currentYear,
-        month: currentMonth,
-        status: 'confirmed',
-        confirmed_at: confirmedAt,
-        amount,
-      });
+      console.log('[RoomDetail handleConfirmWithAmount] No existía fila — haciendo INSERT');
+      const { data: insertData, error: insertError } = await supabase
+        .from('payments')
+        .insert({
+          property_id: String(property.id),
+          room_id: String(room.id),
+          tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
+          year: currentYear,
+          month: currentMonth,
+          status: 'confirmed',
+          confirmed_at: confirmedAt,
+          amount,
+        })
+        .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
+      console.log('[RoomDetail handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });
     }
+
+    // Verificación: leer el registro recién guardado
+    const { data: verifyData, error: verifyError } = await supabase
+      .from('payments')
+      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at')
+      .eq('property_id', String(property.id))
+      .eq('room_id', String(room.id))
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
+    console.log('[RoomDetail handleConfirmWithAmount] Verificación DB post-escritura:', { verifyData, verifyError });
   };
 
   if (showDocuments) {

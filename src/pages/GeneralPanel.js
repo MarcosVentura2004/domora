@@ -96,11 +96,25 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     const fetchPayments = () => {
       supabase
         .from('payments')
-        .select('property_id, tenant_id, room_id, status, amount')
+        .select('property_id, tenant_id, room_id, status, amount, confirmed_at')
         .in('property_id', propertyIds)
         .eq('year', currentYear)
         .eq('month', currentMonth)
-        .then(({ data }) => { if (data) setSupabasePayments(data); });
+        .then(({ data, error }) => {
+          console.log('[GeneralPanel fetchPayments] Registros del mes recibidos de Supabase:', {
+            year: currentYear, month: currentMonth,
+            count: data?.length ?? 0,
+            error,
+            records: (data || []).map(p => ({
+              property_id: p.property_id,
+              tenant_id: p.tenant_id,
+              room_id: p.room_id,
+              status: p.status,
+              confirmed_at: p.confirmed_at,
+            })),
+          });
+          if (data) setSupabasePayments(data);
+        });
     };
 
     fetchPayments();
