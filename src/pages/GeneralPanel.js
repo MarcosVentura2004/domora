@@ -686,21 +686,6 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                           </div>
                         )}
 
-                        {hasGraveAlerts && (
-                          <button
-                            onClick={() => {
-                              const worstProp = negativeCashflowProps.length > 0
-                                ? properties.find(p => p.name === negativeCashflowProps[0].name)
-                                : null;
-                              setRentabilityInitialPropertyId(worstProp ? String(worstProp.id) : null);
-                              setShowRentabilityModal(true);
-                              toggleCard('financial');
-                            }}
-                            style={{ background: 'none', border: 'none', padding: '2px 0 0', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1976D2', textAlign: 'left' }}
-                          >
-                            Ver análisis completo
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>
