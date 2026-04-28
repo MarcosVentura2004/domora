@@ -500,13 +500,15 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
         .from('payments')
         .insert({
           property_id: String(property.id),
-          room_id: String(room.id),
           tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
+          room_id: String(room.id),
           year: currentYear,
           month: currentMonth,
+          amount,
           status: 'confirmed',
           confirmed_at: confirmedAt,
-          amount,
+          marked_at: confirmedAt,
+          landlord_email: landlordEmail,
         })
         .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
       console.log('[RoomDetail handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });

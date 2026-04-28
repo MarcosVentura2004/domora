@@ -471,9 +471,16 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
       const { data: insertData, error: insertError } = await supabase
         .from('payments')
         .insert({
-          property_id: String(property.id), tenant_id: tenantId,
-          year: currentYear, month: currentMonth,
-          status: 'confirmed', confirmed_at: confirmedAt, amount,
+          property_id: String(property.id),
+          tenant_id: tenantId,
+          room_id: null,
+          year: currentYear,
+          month: currentMonth,
+          amount,
+          status: 'confirmed',
+          confirmed_at: confirmedAt,
+          marked_at: confirmedAt,
+          landlord_email: landlordEmail,
         })
         .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
       console.log('[handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });
