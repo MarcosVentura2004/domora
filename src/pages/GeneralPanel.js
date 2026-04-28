@@ -74,6 +74,8 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const [showReportModal, setShowReportModal] = useState(false);
   const [showRentabilityModal, setShowRentabilityModal] = useState(false);
   const [rentabilityInitialPropertyId, setRentabilityInitialPropertyId] = useState(null);
+  const [expandedCard, setExpandedCard] = useState(null);
+  const toggleCard = (key) => setExpandedCard(prev => prev === key ? null : key);
   const [supabasePayments, setSupabasePayments] = useState([]);
   const [supabaseIncidents, setSupabaseIncidents] = useState([]);
   const [supabaseExpenses, setSupabaseExpenses] = useState([]);
@@ -140,6 +142,18 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const pendingPaymentsThisMonth = supabasePayments.filter(p => p.status === 'pending');
   const pendingCount = pendingPaymentsThisMonth.length;
   const pendingTotal = pendingPaymentsThisMonth.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const pendingByPropertyList = (() => {
+    const map = {};
+    pendingPaymentsThisMonth.forEach(p => {
+      const prop = properties.find(pr => String(pr.id) === String(p.property_id));
+      const name = prop ? prop.name : `Propiedad ${p.property_id}`;
+      if (!map[name]) map[name] = { count: 0, total: 0 };
+      map[name].count++;
+      map[name].total += p.amount || 0;
+    });
+    return Object.entries(map).map(([name, d]) => ({ name, ...d }));
+  })();
 
   const computeMonthTotal = (year, month) =>
     properties
@@ -260,121 +274,210 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
         {/* Alertas importantes */}
         {properties.length > 0 && (
           <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#111' }}>Alertas importantes</h3>
               {alertBadgeCount > 0 && (
-                <span style={{
-                  background: '#E53935', color: 'white', borderRadius: '50%',
-                  width: '20px', height: '20px', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: '11px', fontWeight: 700, flexShrink: 0
-                }}>
+                <span style={{ background: '#E53935', color: 'white', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>
                   {alertBadgeCount}
                 </span>
               )}
             </div>
 
-            {alertBadgeCount === 0 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#4CAF50" strokeWidth="2"/>
-                  <path d="M8 12l3 3 5-5" stroke="#4CAF50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span style={{ fontSize: '14px', color: '#4CAF50', fontWeight: 500 }}>Todo en orden</span>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
-                {/* Tarjeta 1 — Pagos pendientes */}
-                {pendingCount > 0 && (
-                  <div style={{ background: '#FBE9E7', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(229,57,53,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                          <rect x="3" y="4" width="18" height="18" rx="2" stroke="#E53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <line x1="16" y1="2" x2="16" y2="6" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
-                          <line x1="8" y1="2" x2="8" y2="6" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
-                          <line x1="3" y1="10" x2="21" y2="10" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+              {/* ── Pagos pendientes ── */}
+              {(() => {
+                const hasAlert = pendingCount > 0;
+                const color = hasAlert ? '#C62828' : '#2E7D32';
+                const iconColor = hasAlert ? '#E53935' : '#4CAF50';
+                const bg = hasAlert ? '#FBE9E7' : '#F1F8E9';
+                const border = hasAlert ? 'rgba(229,57,53,0.15)' : 'rgba(76,175,80,0.15)';
+                const isOpen = expandedCard === 'payments';
+                return (
+                  <div style={{ borderRadius: '14px', border: `1px solid ${border}`, overflow: 'hidden' }}>
+                    <button onClick={() => toggleCard('payments')} style={{ width: '100%', background: bg, border: 'none', padding: '13px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '11px' }}>
+                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: hasAlert ? 'rgba(229,57,53,0.1)' : 'rgba(76,175,80,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <rect x="3" y="4" width="18" height="18" rx="2" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <line x1="16" y1="2" x2="16" y2="6" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="8" y1="2" x2="8" y2="6" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="3" y1="10" x2="21" y2="10" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
                         </svg>
                       </div>
-                      <div>
-                        <p style={{ margin: '0 0 3px', fontSize: '13px', fontWeight: 700, color: '#C62828' }}>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <p style={{ margin: '0 0 1px', fontSize: '13px', fontWeight: 700, color }}>
                           {pendingCount} pago{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}
                         </p>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>
-                          {pendingTotal > 0 ? `por valor de ${pendingTotal.toFixed(0)} €` : 'pendientes de confirmar'}
+                        <p style={{ margin: 0, fontSize: '11px', color: '#999' }}>
+                          {hasAlert ? (pendingTotal > 0 ? `por valor de ${pendingTotal.toFixed(0)} €` : 'pendientes de confirmar') : 'sin impagos este mes'}
                         </p>
                       </div>
-                    </div>
-                    <button
-                      onClick={onNavigateToProperties}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#E53935', textAlign: 'left' }}
-                    >
-                      Ver detalles
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <path d="M6 9l6 6 6-6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
                     </button>
-                  </div>
-                )}
-
-                {/* Tarjeta 2 — Incidencias abiertas */}
-                {supabaseIncidents.length > 0 && (
-                  <div style={{ background: '#FFF8E1', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(251,140,0,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <p style={{ margin: '0 0 3px', fontSize: '13px', fontWeight: 700, color: '#E65100' }}>
-                          {supabaseIncidents.length} incidencia{supabaseIncidents.length !== 1 ? 's' : ''} abierta{supabaseIncidents.length !== 1 ? 's' : ''}
-                        </p>
-                        <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>requieren tu atención</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={onNavigateToProperties}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#FB8C00', textAlign: 'left' }}
-                    >
-                      Ver incidencias
-                    </button>
-                  </div>
-                )}
-
-                {/* Tarjeta 3 — Alerta financiera */}
-                {hasFinancialAlerts && (
-                  <div style={{ background: '#E3F2FD', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(25,118,210,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M14 2v6h6" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <line x1="16" y1="13" x2="8" y2="13" stroke="#1976D2" strokeWidth="2" strokeLinecap="round"/>
-                          <line x1="16" y1="17" x2="8" y2="17" stroke="#1976D2" strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        {showHighExpenses && (
-                          <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 700, color: '#1565C0' }}>
-                            Gastos altos este mes · +{expensesHighPct}% vs media
-                          </p>
-                        )}
-                        {negativeCashflowProps.map((s, i) => (
-                          <p key={i} style={{ margin: '0 0 2px', fontSize: '12px', color: '#1565C0' }}>
-                            {s.name} — pérdidas de {Math.abs(s.net).toFixed(0)} €/mes
-                          </p>
+                    {isOpen && (
+                      <div style={{ padding: '10px 14px 14px', background: 'white', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {pendingByPropertyList.length === 0 ? (
+                          <p style={{ margin: 0, fontSize: '13px', color: '#888', textAlign: 'center', padding: '4px 0' }}>Todos los pagos están confirmados</p>
+                        ) : pendingByPropertyList.map((item, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                            <div>
+                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{item.name}</p>
+                              <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888' }}>{item.count} pago{item.count !== 1 ? 's' : ''} sin confirmar</p>
+                            </div>
+                            <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#C62828' }}>
+                              {item.total > 0 ? `${item.total.toFixed(0)} €` : '—'}
+                            </p>
+                          </div>
                         ))}
                       </div>
-                    </div>
-                    <button
-                      onClick={() => setShowRentabilityModal(true)}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1976D2', textAlign: 'left' }}
-                    >
-                      Ver análisis
-                    </button>
+                    )}
                   </div>
-                )}
+                );
+              })()}
 
-              </div>
-            )}
+              {/* ── Incidencias ── */}
+              {(() => {
+                const count = supabaseIncidents.length;
+                const hasAlert = count > 0;
+                const color = hasAlert ? '#E65100' : '#2E7D32';
+                const iconColor = hasAlert ? '#FB8C00' : '#4CAF50';
+                const bg = hasAlert ? '#FFF8E1' : '#F1F8E9';
+                const border = hasAlert ? 'rgba(251,140,0,0.15)' : 'rgba(76,175,80,0.15)';
+                const isOpen = expandedCard === 'incidents';
+                return (
+                  <div style={{ borderRadius: '14px', border: `1px solid ${border}`, overflow: 'hidden' }}>
+                    <button onClick={() => toggleCard('incidents')} style={{ width: '100%', background: bg, border: 'none', padding: '13px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '11px' }}>
+                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: hasAlert ? 'rgba(251,140,0,0.1)' : 'rgba(76,175,80,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <p style={{ margin: '0 0 1px', fontSize: '13px', fontWeight: 700, color }}>
+                          {count} incidencia{count !== 1 ? 's' : ''} abierta{count !== 1 ? 's' : ''}
+                        </p>
+                        <p style={{ margin: 0, fontSize: '11px', color: '#999' }}>
+                          {hasAlert ? 'requieren tu atención' : 'sin incidencias activas'}
+                        </p>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <path d="M6 9l6 6 6-6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    {isOpen && (
+                      <div style={{ padding: '10px 14px 14px', background: 'white', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {supabaseIncidents.length === 0 ? (
+                          <p style={{ margin: 0, fontSize: '13px', color: '#888', textAlign: 'center', padding: '4px 0' }}>No hay incidencias abiertas</p>
+                        ) : supabaseIncidents.map(incident => {
+                          const isImage = incident.attachment_url && /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(incident.attachment_url);
+                          return (
+                            <div key={incident.id} style={{ borderRadius: '10px', background: '#FFF8E1', overflow: 'hidden' }}>
+                              <div style={{ padding: '10px 12px' }}>
+                                <p style={{ margin: '0 0 3px', fontSize: '13px', fontWeight: 600, color: '#333' }}>
+                                  {incident.property_name} — {incident.tenant_name}
+                                </p>
+                                <p style={{ margin: '0 0 5px', fontSize: '12px', color: '#555', lineHeight: '1.5' }}>
+                                  {incident.description}
+                                </p>
+                                <p style={{ margin: 0, fontSize: '11px', color: '#aaa' }}>
+                                  {new Date(incident.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                              {incident.attachment_url && (
+                                isImage ? (
+                                  <img
+                                    src={incident.attachment_url}
+                                    alt="Adjunto"
+                                    onClick={() => window.open(incident.attachment_url, '_blank')}
+                                    style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', display: 'block', cursor: 'pointer' }}
+                                  />
+                                ) : (
+                                  <a
+                                    href={incident.attachment_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(0,0,0,0.04)', textDecoration: 'none', borderTop: '1px solid rgba(0,0,0,0.06)' }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      <path d="M14 2v6h6" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                    <span style={{ fontSize: '12px', color: '#555' }}>Ver archivo adjunto</span>
+                                  </a>
+                                )
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── Atención financiera ── */}
+              {(() => {
+                const bg = hasFinancialAlerts ? '#E3F2FD' : '#F1F8E9';
+                const color = hasFinancialAlerts ? '#1565C0' : '#2E7D32';
+                const iconColor = hasFinancialAlerts ? '#1976D2' : '#4CAF50';
+                const border = hasFinancialAlerts ? 'rgba(25,118,210,0.15)' : 'rgba(76,175,80,0.15)';
+                const isOpen = expandedCard === 'financial';
+                const subtitle = hasFinancialAlerts
+                  ? [showHighExpenses && `Gastos +${expensesHighPct}% vs media`, negativeCashflowProps.length > 0 && `${negativeCashflowProps.length} piso${negativeCashflowProps.length !== 1 ? 's' : ''} con pérdidas`].filter(Boolean).join(' · ')
+                  : 'rentabilidad dentro de lo esperado';
+                return (
+                  <div style={{ borderRadius: '14px', border: `1px solid ${border}`, overflow: 'hidden' }}>
+                    <button onClick={() => toggleCard('financial')} style={{ width: '100%', background: bg, border: 'none', padding: '13px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '11px' }}>
+                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: hasFinancialAlerts ? 'rgba(25,118,210,0.1)' : 'rgba(76,175,80,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <line x1="16" y1="13" x2="8" y2="13" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="16" y1="17" x2="8" y2="17" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <p style={{ margin: '0 0 1px', fontSize: '13px', fontWeight: 700, color }}>Atención financiera</p>
+                        <p style={{ margin: 0, fontSize: '11px', color: '#999' }}>{subtitle}</p>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                        <path d="M6 9l6 6 6-6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    {isOpen && (
+                      <div style={{ padding: '10px 14px 14px', background: 'white', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {!hasFinancialAlerts && (
+                          <p style={{ margin: 0, fontSize: '13px', color: '#888', textAlign: 'center', padding: '4px 0' }}>Sin alertas financieras este mes</p>
+                        )}
+                        {showHighExpenses && (
+                          <div style={{ padding: '10px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
+                            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#1565C0' }}>Gastos altos este mes</p>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#1976D2' }}>+{expensesHighPct}% sobre la media de los últimos 6 meses</p>
+                          </div>
+                        )}
+                        {negativeCashflowProps.map((s, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{s.name}</p>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#C62828' }}>-{Math.abs(s.net).toFixed(0)} €/mes</p>
+                          </div>
+                        ))}
+                        {hasFinancialAlerts && (
+                          <button
+                            onClick={() => { setShowRentabilityModal(true); toggleCard('financial'); }}
+                            style={{ background: 'none', border: 'none', padding: '2px 0 0', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1976D2', textAlign: 'left' }}
+                          >
+                            Ver análisis completo
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+            </div>
           </div>
         )}
 
