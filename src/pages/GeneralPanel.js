@@ -70,6 +70,8 @@ function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []
   const alerts = [];
 
   properties.forEach(property => {
+    if (property.status === 'uso_propio') return;
+
     const ownership = (property.ownershipPercentage || 100) / 100;
 
     // Pagos pendientes de confirmar (Supabase es fuente de verdad)
@@ -333,6 +335,8 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const alerts = generateAlerts(properties, supabasePayments, supabaseExpenses);
   const tips = generateTips(properties, supabaseExpenses);
 
+  const usoPropioProperties = properties.filter(p => p.status === 'uso_propio');
+
   // Datos por propiedad para el ranking (uso_propio excluido del resumen financiero)
   const propertyStats = properties
     .filter(p => p.status !== 'uso_propio')
@@ -497,39 +501,73 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
         )}
 
         {/* Ranking inmuebles */}
-        {propertyStats.length > 0 && (
+        {(propertyStats.length > 0 || usoPropioProperties.length > 0) && (
           <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
             <h3 style={{ margin: '0 0 14px', fontSize: '15px', fontWeight: 600, color: '#111' }}>Inmuebles este mes</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {propertyStats.map((stat, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', borderRadius: '12px', background: '#F9F9F9',
-                  cursor: 'pointer'
-                }} onClick={onNavigateToProperties}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{
-                      width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', fontSize: '11px', fontWeight: 700,
-                      background: i === 0 ? '#FFF8E1' : '#F3F4F6',
-                      color: i === 0 ? '#F9A825' : '#999'
-                    }}>{i + 1}</span>
-                    <div>
-                      <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: '#111' }}>{stat.name}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>
-                        +{stat.income.toFixed(0)} € ingresos · -{stat.expenses.toFixed(0)} € gastos
-                      </p>
+
+            {/* Alquileres */}
+            {propertyStats.length > 0 && (
+              <>
+                {usoPropioProperties.length > 0 && (
+                  <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: 700, color: '#bbb', letterSpacing: '0.5px' }}>ALQUILERES</p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {propertyStats.map((stat, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 14px', borderRadius: '12px', background: '#F9F9F9',
+                      cursor: 'pointer'
+                    }} onClick={onNavigateToProperties}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', fontSize: '11px', fontWeight: 700,
+                          background: i === 0 ? '#FFF8E1' : '#F3F4F6',
+                          color: i === 0 ? '#F9A825' : '#999'
+                        }}>{i + 1}</span>
+                        <div>
+                          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: '#111' }}>{stat.name}</p>
+                          <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>
+                            +{stat.income.toFixed(0)} € ingresos · -{stat.expenses.toFixed(0)} € gastos
+                          </p>
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: '15px', fontWeight: 700,
+                        color: stat.net >= 0 ? '#2E7D32' : '#C62828'
+                      }}>
+                        {stat.net >= 0 ? '+' : ''}{stat.net.toFixed(0)} €
+                      </span>
                     </div>
-                  </div>
-                  <span style={{
-                    fontSize: '15px', fontWeight: 700,
-                    color: stat.net >= 0 ? '#2E7D32' : '#C62828'
-                  }}>
-                    {stat.net >= 0 ? '+' : ''}{stat.net.toFixed(0)} €
-                  </span>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
+
+            {/* Uso propio */}
+            {usoPropioProperties.length > 0 && (
+              <>
+                {propertyStats.length > 0 && (
+                  <div style={{ borderTop: '1px solid #f0f0f0', margin: '14px 0 10px' }} />
+                )}
+                <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: 700, color: '#bbb', letterSpacing: '0.5px' }}>USO PROPIO</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {usoPropioProperties.map((p, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 14px', borderRadius: '12px', background: '#EEF3FB',
+                      cursor: 'pointer'
+                    }} onClick={onNavigateToProperties}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#3F6BAA', flexShrink: 0 }} />
+                        <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: '#111' }}>{p.name}</p>
+                      </div>
+                      <span style={{ fontSize: '12px', color: '#3F6BAA', fontWeight: 600 }}>Uso propio</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 

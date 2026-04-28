@@ -866,8 +866,8 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
               <>
                 <div className="net-income">{netIncome >= 0 ? '+' : ''}{netIncome.toFixed(2)} €</div>
                 <div className="income-label">/mes</div>
-                <div className="income-sublabel" style={{ color: '#999' }}>
-                  Neto
+                <div className="income-sublabel" style={{ color: netIncome < 0 && monthlyIncome === 0 && property.status !== 'uso_propio' ? '#F44336' : '#999' }}>
+                  {netIncome < 0 && monthlyIncome === 0 && property.status !== 'uso_propio' ? 'Pago sin confirmar' : 'Neto'}
                 </div>
               </>
             )}

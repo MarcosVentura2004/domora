@@ -358,9 +358,9 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{
                         width: '38px', height: '38px', borderRadius: '10px', flexShrink: 0,
-                        background: property.status === 'otros' ? '#EDE7F6' : '#F0F1F3',
+                        background: property.status === 'otros' ? '#EDE7F6' : property.status === 'uso_propio' ? '#E8F0FE' : '#F0F1F3',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: property.status === 'otros' ? '#6B3FA0' : '#555',
+                        color: property.status === 'otros' ? '#6B3FA0' : property.status === 'uso_propio' ? '#3F6BAA' : '#555',
                       }}>
                         {property.status === 'otros' ? (
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -369,6 +369,12 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                             <line x1="6" y1="8" x2="10" y2="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                             <line x1="6" y1="12" x2="10" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                             <line x1="6" y1="16" x2="10" y2="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        ) : property.status === 'uso_propio' ? (
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="12" cy="13" r="2" stroke="currentColor" strokeWidth="1.5"/>
+                            <path d="M9 21v-.5a3 3 0 0 1 6 0v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                           </svg>
                         ) : (
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
