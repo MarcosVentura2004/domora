@@ -154,7 +154,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
   const recordingCancelledRef = useRef(false);
-  const touchStartXRef = useRef(null);
   const audioMimeTypeRef = useRef('');
 
   const supportsAudio = typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
@@ -293,13 +292,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   };
 
   // ─── Audio recording ──────────────────────────────────────────────────────
-  const handleMicStart = async (e) => {
-    e.preventDefault();
-    // Prevent double-fire from touch+mouse synthetic events
-    if (e.type === 'mousedown' && e.sourceCapabilities?.firesTouchEvents) return;
+  const handleMicClick = async () => {
     if (isRecording) return;
     recordingCancelledRef.current = false;
-    if (e.touches) touchStartXRef.current = e.touches[0].clientX;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
@@ -309,7 +304,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       mr.ondataavailable = (ev) => {
         if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
       };
-      mr.start(100); // timeslice 100ms → chunks arrive continuously
+      mr.start(250); // chunk cada 250ms
       mediaRecorderRef.current = mr;
       setRecordingDuration(0);
       recordingTimerRef.current = setInterval(() => {
@@ -318,34 +313,38 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       setIsRecording(true);
     } catch (err) {
       console.error('Error accediendo al micrófono:', err);
-      alert('No se pudo acceder al micrófono. Comprueba los permisos de la app.');
+      alert('No se pudo acceder al micrófono. Comprueba los permisos.');
     }
   };
 
-  const handleMicStop = (e) => {
-    if (e) e.preventDefault();
+  const handleSendAudio = () => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
     clearInterval(recordingTimerRef.current);
     setIsRecording(false);
     setRecordingDuration(0);
-    touchStartXRef.current = null;
 
     const mr = mediaRecorderRef.current;
-    const cancelled = recordingCancelledRef.current;
+    mediaRecorderRef.current = null;
+
+    // Pedir último chunk antes de parar
+    mr.requestData();
+
     mr.onstop = async () => {
       mr.stream.getTracks().forEach(t => t.stop());
-      if (cancelled || audioChunksRef.current.length === 0) return;
+      if (recordingCancelledRef.current) return;
+      const chunks = audioChunksRef.current;
+      if (chunks.length === 0) { alert('La grabación estaba vacía. Inténtalo de nuevo.'); return; }
       const mimeType = audioMimeTypeRef.current || 'audio/webm';
       const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
-      const blob = new Blob(audioChunksRef.current, { type: mimeType });
+      const blob = new Blob(chunks, { type: mimeType });
       const ts = Date.now();
       const path = `${landlordEmail}/audios/${ts}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('chat-attachments')
         .upload(path, blob, { contentType: mimeType });
-      if (uploadError) { console.error('Error subiendo audio:', uploadError); return; }
+      if (uploadError) { console.error('Error subiendo audio:', uploadError); alert('Error al subir el audio.'); return; }
       const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
-      await supabase.from('messages').insert({
+      const { error: insertError } = await supabase.from('messages').insert({
         property_id: propertyId,
         room_id: isGroup ? null : (roomId || null),
         tenant_id: isGroup ? null : (roomId ? null : tenantId),
@@ -361,9 +360,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         read_by_landlord: currentRole === 'landlord',
         read_by_tenant: currentRole === 'tenant',
       });
+      if (insertError) console.error('Error insertando mensaje de audio:', insertError);
     };
     mr.stop();
-    mediaRecorderRef.current = null;
   };
 
   const handleCancelRecording = () => {
@@ -372,21 +371,11 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     clearInterval(recordingTimerRef.current);
     setIsRecording(false);
     setRecordingDuration(0);
-    touchStartXRef.current = null;
     try {
       mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
       mediaRecorderRef.current.stop();
     } catch (_) {}
     mediaRecorderRef.current = null;
-  };
-
-  const handleMicTouchMove = (e) => {
-    if (!isRecording) return;
-    const touch = e.touches[0];
-    if (touchStartXRef.current === null) { touchStartXRef.current = touch.clientX; return; }
-    if (touch.clientX - touchStartXRef.current < -80) {
-      handleCancelRecording();
-    }
   };
 
   const isMe = (sender) => sender === currentRole;
@@ -601,50 +590,41 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
           }}
         />
 
-        {/* Mic button — only when text is empty and audio is supported */}
-        {supportsAudio && !text.trim() && !pendingFile && (
+        {/* Mic button — solo cuando no hay texto ni archivo y no se está grabando */}
+        {supportsAudio && !text.trim() && !pendingFile && !isRecording && (
           <button
-            onMouseDown={handleMicStart}
-            onMouseUp={handleMicStop}
-            onMouseLeave={isRecording ? handleMicStop : undefined}
-            onTouchStart={handleMicStart}
-            onTouchMove={handleMicTouchMove}
-            onTouchEnd={handleMicStop}
-            onContextMenu={(e) => e.preventDefault()}
+            onClick={handleMicClick}
             style={{
               width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-              background: isRecording ? '#e74c3c' : '#e5e5e5',
+              background: '#e5e5e5',
               border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.15s',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none',
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="2" width="6" height="12" rx="3" stroke={isRecording ? 'white' : '#666'} strokeWidth="2"/>
-              <path d="M5 10a7 7 0 0 0 14 0" stroke={isRecording ? 'white' : '#666'} strokeWidth="2" strokeLinecap="round"/>
-              <line x1="12" y1="17" x2="12" y2="21" stroke={isRecording ? 'white' : '#666'} strokeWidth="2" strokeLinecap="round"/>
-              <line x1="9" y1="21" x2="15" y2="21" stroke={isRecording ? 'white' : '#666'} strokeWidth="2" strokeLinecap="round"/>
+              <rect x="9" y="2" width="6" height="12" rx="3" stroke="#666" strokeWidth="2"/>
+              <path d="M5 10a7 7 0 0 0 14 0" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="12" y1="17" x2="12" y2="21" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
+              <line x1="9" y1="21" x2="15" y2="21" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
             </svg>
           </button>
         )}
 
+        {/* Botón enviar — envía texto/archivo normal, o el audio si se está grabando */}
         <button
-          onClick={handleSend}
-          disabled={!canSend}
+          onClick={isRecording ? handleSendAudio : handleSend}
+          disabled={!isRecording && !canSend}
           style={{
             width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-            background: canSend ? '#111' : '#e5e5e5',
-            border: 'none', cursor: canSend ? 'pointer' : 'default',
+            background: (isRecording || canSend) ? '#111' : '#e5e5e5',
+            border: 'none', cursor: (isRecording || canSend) ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'background 0.2s',
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M22 2L11 13" stroke={canSend ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M22 2L15 22 11 13 2 9l20-7z" stroke={canSend ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M22 2L11 13" stroke={(isRecording || canSend) ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M22 2L15 22 11 13 2 9l20-7z" stroke={(isRecording || canSend) ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       </div>
