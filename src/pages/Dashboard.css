@@ -211,6 +211,10 @@
   background: #9C27B0;
 }
 
+.status-dot.uso_propio {
+  background: #3F6BAA;
+}
+
 .status-text {
   font-size: 15px;
   color: #666;

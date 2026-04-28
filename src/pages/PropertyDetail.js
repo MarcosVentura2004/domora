@@ -2005,15 +2005,40 @@ function EditTenantModal({ tenant, paymentConfig, onClose, onSave, onDelete }) {
 
 function EditPropertyModal({ property, onClose, onSave }) {
   const [name, setName] = useState(property.name);
-  const [price, setPrice] = useState(property.price.toString());
+  const [price, setPrice] = useState(
+    (property.status === 'uso_propio' || property.status === 'vacio') ? '' : property.price.toString()
+  );
   const [status, setStatus] = useState(property.status);
   const [ownershipPercentage, setOwnershipPercentage] = useState(property.ownershipPercentage?.toString() || '100');
-  
-  const handleSubmit = (e) => { 
-    e.preventDefault(); 
-    onSave({ name, price: parseInt(price), status, ownershipPercentage: parseFloat(ownershipPercentage) }); 
+
+  const showPrice = ['alquilado', 'por_habitaciones', 'vacacional', 'otros'].includes(status);
+
+  const handleStatusChange = (newStatus) => {
+    setStatus(newStatus);
+    if (newStatus === 'uso_propio' || newStatus === 'vacio') {
+      setPrice('');
+    }
   };
-  
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({
+      name,
+      price: showPrice ? (parseInt(price) || 0) : 0,
+      status,
+      ownershipPercentage: parseFloat(ownershipPercentage),
+    });
+  };
+
+  const STATUS_OPTIONS = [
+    ['vacio', 'Vacío'],
+    ['alquilado', 'Alquilado'],
+    ['por_habitaciones', 'Por habitaciones'],
+    ['vacacional', 'Vacacional'],
+    ['otros', 'Otros'],
+    ['uso_propio', 'Uso propio'],
+  ];
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -2023,21 +2048,23 @@ function EditPropertyModal({ property, onClose, onSave }) {
             <label>Nombre/Dirección</label>
             <input type="text" placeholder="Ej: Calle Mayor 12 · 2°B" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
-          <div className="form-group">
-            <label>Precio mensual (€)</label>
-            <input type="number" placeholder="850" value={price} onChange={(e) => setPrice(e.target.value)} required />
-          </div>
+          {showPrice && (
+            <div className="form-group">
+              <label>Precio mensual (€)</label>
+              <input type="number" placeholder="850" value={price} onChange={(e) => setPrice(e.target.value)} required />
+            </div>
+          )}
           <div className="form-group">
             <label>Mi porcentaje de propiedad (%)</label>
             <input type="number" placeholder="100" min="1" max="100" value={ownershipPercentage} onChange={(e) => setOwnershipPercentage(e.target.value)} required />
           </div>
           <div className="form-group">
             <label>Estado</label>
-            <div className="status-options">
-              {['vacio', 'alquilado'].map(s => (
-                <button key={s} type="button" className={`status-option ${status === s ? 'selected' : ''}`} onClick={() => setStatus(s)}>
+            <div className="status-options-grid">
+              {STATUS_OPTIONS.map(([s, label]) => (
+                <button key={s} type="button" className={`status-option ${status === s ? 'selected' : ''}`} onClick={() => handleStatusChange(s)}>
                   <span className={`status-dot ${s}`}></span>
-                  {s === 'vacio' ? 'Vacío' : 'Alquilado'}
+                  {label}
                 </button>
               ))}
             </div>

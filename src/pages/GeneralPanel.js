@@ -56,6 +56,7 @@ function getMonthlyEquivalentGP(expense) {
 }
 
 function getMonthlyExpenses(property, supabaseExpenses) {
+  if (property.status === 'uso_propio') return 0;
   const propertyExpenses = (supabaseExpenses || []).filter(e => String(e.property_id) === String(property.id));
   const active = getExpensesForMonth(propertyExpenses, currentYear, currentMonth);
   const ownership = property.ownershipPercentage || 100;
@@ -198,7 +199,7 @@ function generateTips(properties, supabaseExpenses = []) {
   // Inmueble menos rentable
   const withIncome = properties
     .map(p => ({ p, net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses) }))
-    .filter(({ p }) => p.status !== 'vacio');
+    .filter(({ p }) => p.status !== 'vacio' && p.status !== 'uso_propio');
 
   if (withIncome.length > 1) {
     const worst = withIncome.sort((a, b) => a.net - b.net)[0];
@@ -332,14 +333,16 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const alerts = generateAlerts(properties, supabasePayments, supabaseExpenses);
   const tips = generateTips(properties, supabaseExpenses);
 
-  // Datos por propiedad para el ranking
-  const propertyStats = properties.map(p => ({
-    name: p.name,
-    status: p.status,
-    income: getMonthlyIncome(p),
-    expenses: getMonthlyExpenses(p, supabaseExpenses),
-    net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses),
-  })).sort((a, b) => b.net - a.net);
+  // Datos por propiedad para el ranking (uso_propio excluido del resumen financiero)
+  const propertyStats = properties
+    .filter(p => p.status !== 'uso_propio')
+    .map(p => ({
+      name: p.name,
+      status: p.status,
+      income: getMonthlyIncome(p),
+      expenses: getMonthlyExpenses(p, supabaseExpenses),
+      net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses),
+    })).sort((a, b) => b.net - a.net);
 
   return (
     <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
@@ -571,16 +574,17 @@ const CATEGORY_LABELS = {
 
 function ReportModal({ properties, onClose }) {
   const currentYear = now.getFullYear();
+  const reportableProperties = properties.filter(p => p.status !== 'uso_propio');
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [ownerName, setOwnerName] = useState('');
   const [ownerNif, setOwnerNif] = useState('');
   // tipo fiscal por propiedad: 'vivienda' | 'turistico'
   const [fiscalTypes, setFiscalTypes] = useState(() =>
-    Object.fromEntries(properties.map(p => [p.id, p.status === 'vacacional' ? 'turistico' : 'vivienda']))
+    Object.fromEntries(reportableProperties.map(p => [p.id, p.status === 'vacacional' ? 'turistico' : 'vivienda']))
   );
 
   const years = [];
-  const minYear = properties.reduce((min, p) => {
+  const minYear = reportableProperties.reduce((min, p) => {
     const y = new Date(p.createdAt || now).getFullYear();
     return y < min ? y : min;
   }, currentYear);
@@ -669,7 +673,7 @@ function ReportModal({ properties, onClose }) {
   const generateExcel = () => {
     import('xlsx').then(XLSX => {
       const rows = [];
-      properties.forEach(property => {
+      reportableProperties.forEach(property => {
         const data = getYearlyData(property);
         // Ingresos
         data.monthsData.forEach(({ month, cobrado, pendiente }) => {
@@ -728,7 +732,7 @@ function ReportModal({ properties, onClose }) {
       }
 
       // ── PÁGINA 1: Resumen global ──
-      const allData = properties.map(p => ({ p, d: getYearlyData(p) }));
+      const allData = reportableProperties.map(p => ({ p, d: getYearlyData(p) }));
       const globalCobrado = allData.reduce((s, { d }) => s + d.totalCobrado, 0);
       const globalPendiente = allData.reduce((s, { d }) => s + d.totalPendiente, 0);
       const globalExpenses = allData.reduce((s, { d }) => s + d.totalExpenses, 0);
@@ -747,7 +751,7 @@ function ReportModal({ properties, onClose }) {
       doc.setFont('helvetica', 'bold');
       doc.text(`Rendimiento neto: ${globalNet >= 0 ? '+' : ''}${globalNet.toFixed(2)} €`, 110, y + 26);
       doc.setFont('helvetica', 'normal'); doc.setTextColor(100);
-      doc.text(`${properties.length} inmueble${properties.length !== 1 ? 's' : ''}`, 20, y + 33);
+      doc.text(`${reportableProperties.length} inmueble${reportableProperties.length !== 1 ? 's' : ''}`, 20, y + 33);
       y += 44;
 
       // Gastos globales por categoría
@@ -987,10 +991,10 @@ function ReportModal({ properties, onClose }) {
           </div>
 
           {/* Tipo fiscal por propiedad */}
-          {properties.length > 0 && (
+          {reportableProperties.length > 0 && (
             <div className="form-group">
               <label>Tipo fiscal por inmueble</label>
-              {properties.map(p => (
+              {reportableProperties.map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span style={{ fontSize: '13px', color: '#333', flex: 1 }}>{p.name}</span>
                   <div style={{ display: 'flex', gap: '6px' }}>

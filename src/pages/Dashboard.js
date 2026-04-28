@@ -385,7 +385,8 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                         {property.status === 'alquilado' ? 'Alquilado' :
                          property.status === 'por_habitaciones' ? 'Por habitaciones' :
                          property.status === 'vacacional' ? 'Vacacional' :
-                         property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío'}
+                         property.status === 'otros' ? (property.customType || 'Otros') :
+                         property.status === 'uso_propio' ? 'Uso propio' : 'Vacío'}
                       </span>
                     </div>
                     <p className="property-price">
@@ -396,6 +397,8 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                               new Date(b.startDate).getMonth() === now.getMonth() &&
                               new Date(b.startDate).getFullYear() === now.getFullYear();
                           }).length} reservas este mes`
+                        : property.status === 'uso_propio'
+                        ? 'Sin ingresos'
                         : `${property.price} €/mes`}
                     </p>
                   </div>
@@ -1031,8 +1034,8 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
             />
           </div>
 
-          {/* Precio mensual — solo si NO es por habitaciones */}
-          {status !== 'por_habitaciones' && (
+          {/* Precio mensual — solo si NO es por habitaciones ni uso propio */}
+          {status !== 'por_habitaciones' && status !== 'uso_propio' && (
             <div className="form-group">
               <label>{status === 'vacacional' ? 'Ingresos de referencia (€/mes)' : 'Precio mensual (€)'}</label>
               <input
@@ -1110,6 +1113,14 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
               >
                 <span className="status-dot otros"></span>
                 Otros
+              </button>
+              <button
+                type="button"
+                className={`status-option ${status === 'uso_propio' ? 'selected' : ''}`}
+                onClick={() => setStatus('uso_propio')}
+              >
+                <span className="status-dot uso_propio"></span>
+                Uso propio
               </button>
             </div>
           </div>
