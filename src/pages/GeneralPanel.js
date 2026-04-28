@@ -76,6 +76,15 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const [rentabilityInitialPropertyId, setRentabilityInitialPropertyId] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
   const toggleCard = (key) => setExpandedCard(prev => prev === key ? null : key);
+  const [expandedProperty, setExpandedProperty] = useState(null);
+  const toggleProperty = (name) => setExpandedProperty(prev => prev === name ? null : name);
+  const [expandedIncidentPhoto, setExpandedIncidentPhoto] = useState({});
+  const toggleIncidentPhoto = (id) => setExpandedIncidentPhoto(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const handleResolveIncident = async (incidentId) => {
+    await supabase.from('incidents').update({ status: 'resolved' }).eq('id', incidentId);
+    setSupabaseIncidents(prev => prev.filter(i => i.id !== incidentId));
+  };
   const [supabasePayments, setSupabasePayments] = useState([]);
   const [supabaseIncidents, setSupabaseIncidents] = useState([]);
   const [supabaseExpenses, setSupabaseExpenses] = useState([]);
@@ -145,7 +154,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   supabasePayments.filter(p => p.status !== 'confirmed').forEach(p => {
     const prop = properties.find(pr => String(pr.id) === String(p.property_id));
     const name = prop ? prop.name : `Propiedad ${p.property_id}`;
-    if (!pendingMap[name]) pendingMap[name] = { count: 0, total: 0 };
+    if (!pendingMap[name]) pendingMap[name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: prop?.status === 'por_habitaciones' };
     pendingMap[name].count++;
     pendingMap[name].total += p.amount || 0;
   });
@@ -153,13 +162,18 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     if (['uso_propio', 'vacio', 'vacacional'].includes(prop.status)) return;
     const propPayments = supabasePayments.filter(p => String(p.property_id) === String(prop.id));
     if ((prop.status === 'alquilado' || prop.status === 'otros') && (prop.tenants || []).length > 0 && propPayments.length === 0) {
-      if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0 };
+      if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: false };
       pendingMap[prop.name].count++;
     } else if (prop.status === 'por_habitaciones') {
       (prop.rooms || []).filter(r => r.tenant).forEach(room => {
         if (!propPayments.some(p => String(p.room_id) === String(room.id))) {
-          if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0 };
+          if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: true };
+          pendingMap[prop.name].isPorHabitaciones = true;
           pendingMap[prop.name].count++;
+          pendingMap[prop.name].rooms.push({
+            roomName: room.name || 'Habitación',
+            tenantName: (room.tenant && room.tenant.name) ? room.tenant.name : '',
+          });
         }
       });
     }
@@ -346,14 +360,40 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                         {pendingByPropertyList.length === 0 ? (
                           <p style={{ margin: 0, fontSize: '13px', color: '#888', textAlign: 'center', padding: '4px 0' }}>Todos los pagos están confirmados</p>
                         ) : pendingByPropertyList.map((item, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
-                            <div>
-                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{item.name}</p>
-                              <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888' }}>{item.count} pago{item.count !== 1 ? 's' : ''} sin confirmar</p>
-                            </div>
-                            <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#C62828' }}>
-                              {item.total > 0 ? `${item.total.toFixed(0)} €` : '—'}
-                            </p>
+                          <div key={i}>
+                            <button
+                              onClick={() => item.isPorHabitaciones ? toggleProperty(item.name) : undefined}
+                              style={{
+                                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '9px 12px', borderRadius: expandedProperty === item.name ? '10px 10px 0 0' : '10px',
+                                background: '#FBE9E7', border: 'none', cursor: item.isPorHabitaciones ? 'pointer' : 'default', textAlign: 'left',
+                              }}
+                            >
+                              <div>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{item.name}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888' }}>{item.count} pago{item.count !== 1 ? 's' : ''} sin confirmar</p>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#C62828' }}>
+                                  {item.total > 0 ? `${item.total.toFixed(0)} €` : '—'}
+                                </p>
+                                {item.isPorHabitaciones && (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ transform: expandedProperty === item.name ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
+                                    <path d="M6 9l6 6 6-6" stroke="#C62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                            {item.isPorHabitaciones && expandedProperty === item.name && (
+                              <div style={{ background: '#fff0ee', borderRadius: '0 0 10px 10px', padding: '4px 12px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {item.rooms.map((r, ri) => (
+                                  <div key={ri} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', borderRadius: '8px', background: 'rgba(229,57,53,0.06)' }}>
+                                    <p style={{ margin: 0, fontSize: '12px', color: '#555' }}>{r.roomName}{r.tenantName ? ` — ${r.tenantName}` : ''}</p>
+                                    <p style={{ margin: 0, fontSize: '11px', color: '#C62828', fontWeight: 600 }}>sin pago</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -396,42 +436,66 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                         {supabaseIncidents.length === 0 ? (
                           <p style={{ margin: 0, fontSize: '13px', color: '#888', textAlign: 'center', padding: '4px 0' }}>No hay incidencias abiertas</p>
                         ) : supabaseIncidents.map(incident => {
-                          const isImage = incident.attachment_url && /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(incident.attachment_url);
+                          const hasImage = incident.attachment_url && /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(incident.attachment_url);
+                          const hasFile = incident.attachment_url && !hasImage;
+                          const photoOpen = !!expandedIncidentPhoto[incident.id];
                           return (
                             <div key={incident.id} style={{ borderRadius: '10px', background: '#FFF8E1', overflow: 'hidden' }}>
                               <div style={{ padding: '10px 12px' }}>
                                 <p style={{ margin: '0 0 3px', fontSize: '13px', fontWeight: 600, color: '#333' }}>
                                   {incident.property_name} — {incident.tenant_name}
                                 </p>
-                                <p style={{ margin: '0 0 5px', fontSize: '12px', color: '#555', lineHeight: '1.5' }}>
+                                <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#555', lineHeight: '1.5' }}>
                                   {incident.description}
                                 </p>
-                                <p style={{ margin: 0, fontSize: '11px', color: '#aaa' }}>
-                                  {new Date(incident.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                              {incident.attachment_url && (
-                                isImage ? (
-                                  <img
-                                    src={incident.attachment_url}
-                                    alt="Adjunto"
-                                    onClick={() => window.open(incident.attachment_url, '_blank')}
-                                    style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', display: 'block', cursor: 'pointer', borderRadius: '0 0 10px 10px' }}
-                                  />
-                                ) : (
-                                  <a
-                                    href={incident.attachment_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(0,0,0,0.04)', textDecoration: 'none', borderTop: '1px solid rgba(0,0,0,0.06)' }}
+                                {/* Fila inferior: fecha + adjunto (si hay) + resolver */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <p style={{ margin: 0, fontSize: '11px', color: '#aaa', flex: 1 }}>
+                                    {new Date(incident.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                  {hasImage && (
+                                    <button
+                                      onClick={() => toggleIncidentPhoto(incident.id)}
+                                      title="Ver foto adjunta"
+                                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: photoOpen ? 'rgba(251,140,0,0.12)' : 'rgba(0,0,0,0.06)', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer' }}
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" stroke={photoOpen ? '#FB8C00' : '#666'} strokeWidth="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5" fill={photoOpen ? '#FB8C00' : '#666'}/>
+                                        <path d="M21 15l-5-5L5 21" stroke={photoOpen ? '#FB8C00' : '#666'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                      <span style={{ fontSize: '11px', color: photoOpen ? '#FB8C00' : '#555', fontWeight: 600 }}>Foto</span>
+                                    </button>
+                                  )}
+                                  {hasFile && (
+                                    <a
+                                      href={incident.attachment_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(0,0,0,0.06)', borderRadius: '6px', padding: '4px 8px', textDecoration: 'none' }}
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M14 2v6h6" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                      <span style={{ fontSize: '11px', color: '#555', fontWeight: 600 }}>Archivo</span>
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={() => handleResolveIncident(incident.id)}
+                                    style={{ background: '#4CAF50', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
                                   >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M14 2v6h6" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    <span style={{ fontSize: '12px', color: '#555' }}>Ver archivo adjunto</span>
-                                  </a>
-                                )
+                                    Resolver
+                                  </button>
+                                </div>
+                              </div>
+                              {hasImage && photoOpen && (
+                                <img
+                                  src={incident.attachment_url}
+                                  alt="Adjunto"
+                                  onClick={() => window.open(incident.attachment_url, '_blank')}
+                                  style={{ width: '100%', maxHeight: '120px', objectFit: 'cover', display: 'block', cursor: 'pointer', borderRadius: '0 0 10px 10px' }}
+                                />
                               )}
                             </div>
                           );
@@ -529,7 +593,15 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 
                         {hasFinancialAlerts && (
                           <button
-                            onClick={() => { setShowRentabilityModal(true); toggleCard('financial'); }}
+                            onClick={() => {
+                              // Preseleccionar el peor piso (mayor pérdida) en el modal de rentabilidad
+                              const worstProp = negativeCashflowProps.length > 0
+                                ? properties.find(p => p.name === negativeCashflowProps[0].name)
+                                : null;
+                              setRentabilityInitialPropertyId(worstProp ? String(worstProp.id) : null);
+                              setShowRentabilityModal(true);
+                              toggleCard('financial');
+                            }}
                             style={{ background: 'none', border: 'none', padding: '2px 0 0', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1976D2', textAlign: 'left' }}
                           >
                             Ver análisis completo
