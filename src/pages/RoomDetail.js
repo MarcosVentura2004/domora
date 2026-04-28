@@ -456,20 +456,43 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setShowConfirmModal(true);
   };
 
-  const handleConfirmWithAmount = (amount) => {
+  const handleConfirmWithAmount = async (amount) => {
+    const confirmedAt = new Date().toISOString();
     const newPayment = {
       year: currentYear,
       month: currentMonth,
       roomId: room.id,
       status: 'confirmed',
-      markedAt: new Date().toISOString(),
-      confirmedAt: new Date().toISOString(),
+      markedAt: confirmedAt,
+      confirmedAt,
       amount,
       tenantName: room.tenant?.name
     };
     const updatedPayments = [...payments, newPayment];
     onUpdate({ ...property, payments: updatedPayments });
     setShowConfirmModal(false);
+
+    // Persistir en Supabase (upsert: update si existe, insert si no)
+    const { count } = await supabase
+      .from('payments')
+      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
+      .eq('property_id', String(property.id))
+      .eq('room_id', String(room.id))
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .select('id', { count: 'exact', head: true });
+    if (!count) {
+      await supabase.from('payments').insert({
+        property_id: String(property.id),
+        room_id: String(room.id),
+        tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
+        year: currentYear,
+        month: currentMonth,
+        status: 'confirmed',
+        confirmed_at: confirmedAt,
+        amount,
+      });
+    }
   };
 
   if (showDocuments) {
