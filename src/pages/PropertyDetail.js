@@ -290,13 +290,14 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
   }, [property.id]);
 
   useEffect(() => {
+    if (viewingRoomId !== null) return; // re-fetch when returning from room view, not while inside it
     supabase
       .from('expenses')
       .select('*')
       .eq('property_id', String(property.id))
       .order('created_at', { ascending: false })
       .then(({ data }) => { if (data) setExpenses(data); });
-  }, [property.id]);
+  }, [property.id, viewingRoomId]); // eslint-disable-line
 
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -1210,11 +1211,20 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                 const expPct = expense.expense_percentage != null ? expense.expense_percentage : ownershipPct;
                 const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', manual: 'Manual', custom: `Cada ${expense.custom_frequency_months}m`, mensual: null }[expense.frequency] || null;
                 const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[expense.type] || null;
+                const sourceRoom = expense.room_id ? rooms.find(r => String(r.id) === String(expense.room_id)) : null;
                 return (
                   <div key={expense.id} className="expense-item" style={{ opacity: expense.active === false ? 0.5 : 1 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span>{expense.name}</span>
+                        {sourceRoom && (
+                          <span style={{
+                            fontSize: 10, background: '#E3F2FD', color: '#1565C0',
+                            padding: '2px 6px', borderRadius: 8, fontWeight: 600, flexShrink: 0,
+                          }}>
+                            {sourceRoom.name}
+                          </span>
+                        )}
                         {expense.attachment_url && (
                           <a href={expense.attachment_url} target="_blank" rel="noreferrer" title="Ver adjunto" onClick={e => e.stopPropagation()} style={{ color: '#90CAF9', lineHeight: 1, display: 'flex', alignItems: 'center' }}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
