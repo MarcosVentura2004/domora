@@ -33,19 +33,6 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDuration(s) {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
-
-function getSupportedAudioMime() {
-  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-  for (const t of types) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
-  }
-  return '';
-}
 
 // ─── Attachment renderer ──────────────────────────────────────────────────────
 function AttachmentView({ msg, isMe }) {
@@ -146,17 +133,8 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   const [text, setText] = useState('');
   const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
   const [sending, setSending] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
   const bottomRef = useRef(null);
   const fileRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const recordingTimerRef = useRef(null);
-  const recordingCancelledRef = useRef(false);
-  const audioMimeTypeRef = useRef('');
-
-  const supportsAudio = typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
   // Load messages on mount
   useEffect(() => {
@@ -289,93 +267,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     } finally {
       setSending(false);
     }
-  };
-
-  // ─── Audio recording ──────────────────────────────────────────────────────
-  const handleMicClick = async () => {
-    if (isRecording) return;
-    recordingCancelledRef.current = false;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const mimeType = getSupportedAudioMime();
-      audioMimeTypeRef.current = mimeType;
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-      mr.ondataavailable = (ev) => {
-        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
-      };
-      mr.start(250); // chunk cada 250ms
-      mediaRecorderRef.current = mr;
-      setRecordingDuration(0);
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingDuration(prev => prev + 1);
-      }, 1000);
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Error accediendo al micrófono:', err);
-      alert('No se pudo acceder al micrófono. Comprueba los permisos.');
-    }
-  };
-
-  const handleSendAudio = () => {
-    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') return;
-    clearInterval(recordingTimerRef.current);
-    setIsRecording(false);
-    setRecordingDuration(0);
-
-    const mr = mediaRecorderRef.current;
-    mediaRecorderRef.current = null;
-
-    // Pedir último chunk antes de parar
-    mr.requestData();
-
-    mr.onstop = async () => {
-      mr.stream.getTracks().forEach(t => t.stop());
-      if (recordingCancelledRef.current) return;
-      const chunks = audioChunksRef.current;
-      if (chunks.length === 0) { alert('La grabación estaba vacía. Inténtalo de nuevo.'); return; }
-      const mimeType = audioMimeTypeRef.current || 'audio/webm';
-      const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
-      const blob = new Blob(chunks, { type: mimeType });
-      const ts = Date.now();
-      const path = `${landlordEmail}/audios/${ts}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from('chat-attachments')
-        .upload(path, blob, { contentType: mimeType });
-      if (uploadError) { console.error('Error subiendo audio:', uploadError); alert('Error al subir el audio.'); return; }
-      const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
-      const { error: insertError } = await supabase.from('messages').insert({
-        property_id: propertyId,
-        room_id: isGroup ? null : (roomId || null),
-        tenant_id: isGroup ? null : (roomId ? null : tenantId),
-        landlord_email: landlordEmail,
-        sender: currentRole,
-        sender_id: currentRole === 'landlord' ? landlordEmail : tenantId,
-        content: null,
-        attachment_url: publicUrl,
-        attachment_type: mimeType,
-        attachment_name: null,
-        attachment_size: blob.size,
-        is_group_message: isGroup || false,
-        read_by_landlord: currentRole === 'landlord',
-        read_by_tenant: currentRole === 'tenant',
-      });
-      if (insertError) console.error('Error insertando mensaje de audio:', insertError);
-    };
-    mr.stop();
-  };
-
-  const handleCancelRecording = () => {
-    if (!mediaRecorderRef.current) return;
-    recordingCancelledRef.current = true;
-    clearInterval(recordingTimerRef.current);
-    setIsRecording(false);
-    setRecordingDuration(0);
-    try {
-      mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-      mediaRecorderRef.current.stop();
-    } catch (_) {}
-    mediaRecorderRef.current = null;
   };
 
   const isMe = (sender) => sender === currentRole;
@@ -544,26 +435,10 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         </div>
       )}
 
-      {/* Recording indicator */}
-      {isRecording && (
-        <div style={{
-          background: 'white', padding: '8px 16px', borderTop: '1px solid #eee',
-          display: 'flex', alignItems: 'center', gap: '10px',
-        }}>
-          <button
-            onClick={handleCancelRecording}
-            style={{ background: 'none', border: 'none', fontSize: '18px', color: '#aaa', cursor: 'pointer', lineHeight: 1, padding: '0 4px', flexShrink: 0 }}
-          >✕</button>
-          <RecordingDot />
-          <span style={{ fontSize: '13px', color: '#e74c3c', fontWeight: 700, minWidth: '36px' }}>{formatDuration(recordingDuration)}</span>
-          <span style={{ fontSize: '12px', color: '#bbb', flex: 1 }}>← Desliza para cancelar</span>
-        </div>
-      )}
-
       {/* Input */}
       <div style={{
         background: 'white', padding: '10px 16px',
-        borderTop: (pendingFile || isRecording) ? 'none' : '1px solid #eee',
+        borderTop: pendingFile ? 'none' : '1px solid #eee',
         display: 'flex', gap: '8px', alignItems: 'center',
         paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
       }}>
@@ -590,64 +465,23 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
           }}
         />
 
-        {/* Mic button — solo cuando no hay texto ni archivo y no se está grabando */}
-        {supportsAudio && !text.trim() && !pendingFile && !isRecording && (
-          <button
-            onClick={handleMicClick}
-            style={{
-              width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-              background: '#e5e5e5',
-              border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="2" width="6" height="12" rx="3" stroke="#666" strokeWidth="2"/>
-              <path d="M5 10a7 7 0 0 0 14 0" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="12" y1="17" x2="12" y2="21" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="9" y1="21" x2="15" y2="21" stroke="#666" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-        )}
-
-        {/* Botón enviar — envía texto/archivo normal, o el audio si se está grabando */}
         <button
-          onClick={isRecording ? handleSendAudio : handleSend}
-          disabled={!isRecording && !canSend}
+          onClick={handleSend}
+          disabled={!canSend}
           style={{
             width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
-            background: (isRecording || canSend) ? '#111' : '#e5e5e5',
-            border: 'none', cursor: (isRecording || canSend) ? 'pointer' : 'default',
+            background: canSend ? '#111' : '#e5e5e5',
+            border: 'none', cursor: canSend ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'background 0.2s',
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M22 2L11 13" stroke={(isRecording || canSend) ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M22 2L15 22 11 13 2 9l20-7z" stroke={(isRecording || canSend) ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M22 2L11 13" stroke={canSend ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M22 2L15 22 11 13 2 9l20-7z" stroke={canSend ? 'white' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       </div>
-    </div>
-  );
-}
-
-// ─── Pulsing red recording indicator ─────────────────────────────────────────
-function RecordingDot() {
-  return (
-    <div style={{ position: 'relative', width: 12, height: 12, flexShrink: 0 }}>
-      <div style={{
-        position: 'absolute', inset: 0,
-        borderRadius: '50%',
-        background: '#e74c3c',
-        animation: 'recordPulse 1s ease-in-out infinite',
-      }} />
-      <style>{`
-        @keyframes recordPulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.5); opacity: 0.5; }
-        }
-      `}</style>
     </div>
   );
 }
