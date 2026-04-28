@@ -227,7 +227,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const pendingCount = pendingByPropertyList.reduce((sum, item) => sum + item.count, 0);
   const pendingTotal = pendingByPropertyList.reduce((sum, item) => sum + item.total, 0);
 
-  // Atención financiera: nivel de gravedad
+  // Atención financiera
   const computeMonthTotal = (year, month) =>
     properties
       .filter(p => p.status !== 'uso_propio')
@@ -254,21 +254,37 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   const negativeCashflowProps = propertyStats.filter(s => s.net < 0);
   const emptyProps = properties.filter(p => p.status === 'vacio');
 
-  // 'red' = pisos con pérdidas o vacíos | 'orange' = gastos altos | 'blue' = todo bien
-  const financialLevel = (negativeCashflowProps.length > 0 || emptyProps.length > 0) ? 'red'
-    : showHighExpenses ? 'orange'
-    : 'blue';
-  const hasFinancialAlerts = financialLevel !== 'blue';
+  // Habitaciones sin inquilino en propiedades por_habitaciones
+  const emptyRooms = [];
+  properties.forEach(prop => {
+    if (prop.status === 'por_habitaciones') {
+      (prop.rooms || []).filter(r => !r.tenant).forEach(room => {
+        emptyRooms.push({ roomName: room.name || 'Habitación', propName: prop.name });
+      });
+    }
+  });
+
+  // Alertas graves: pérdidas o vacíos (pisos o habitaciones)
+  const hasGraveAlerts = negativeCashflowProps.length > 0 || emptyProps.length > 0 || emptyRooms.length > 0;
 
   const activeRentalProps = propertyStats.filter(s => s.status !== 'vacio');
   const avgCashflow = activeRentalProps.length > 0
     ? activeRentalProps.reduce((sum, s) => sum + s.net, 0) / activeRentalProps.length
     : 0;
 
+  // Propiedades sin ningún gasto registrado (excluidas vacías y uso_propio)
+  const propsWithoutExpenses = propertyStats.filter(s =>
+    !['vacio', 'uso_propio'].includes(s.status) && s.expenses === 0
+  );
+
+  // Tasa de ocupación (excluye uso_propio)
+  const rentableCount = properties.filter(p => p.status !== 'uso_propio').length;
+  const occupationRate = rentableCount > 0 ? Math.round(occupied / rentableCount * 100) : 0;
+
   const alertBadgeCount =
     (pendingCount > 0 ? 1 : 0) +
     (supabaseIncidents.length > 0 ? 1 : 0) +
-    (hasFinancialAlerts ? 1 : 0);
+    (hasGraveAlerts ? 1 : 0);
 
   return (
     <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
@@ -553,34 +569,36 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 
               {/* ── Atención financiera ── */}
               {(() => {
-                const levelStyles = {
-                  red:    { bg: '#FBE9E7', color: '#C62828', iconColor: '#E53935', border: 'rgba(229,57,53,0.15)',   iconBg: 'rgba(229,57,53,0.1)' },
-                  orange: { bg: '#FFF8E1', color: '#E65100', iconColor: '#FB8C00', border: 'rgba(251,140,0,0.15)',   iconBg: 'rgba(251,140,0,0.1)' },
-                  blue:   { bg: '#E3F2FD', color: '#1565C0', iconColor: '#1976D2', border: 'rgba(25,118,210,0.15)', iconBg: 'rgba(25,118,210,0.1)' },
-                };
-                const { bg, color, iconColor, border, iconBg } = levelStyles[financialLevel];
                 const isOpen = expandedCard === 'financial';
-                const subtitle = financialLevel === 'red'
+                const subtitle = hasGraveAlerts
                   ? [
                       negativeCashflowProps.length > 0 && `${negativeCashflowProps.length} piso${negativeCashflowProps.length !== 1 ? 's' : ''} con pérdidas`,
                       emptyProps.length > 0 && `${emptyProps.length} piso${emptyProps.length !== 1 ? 's' : ''} vacío${emptyProps.length !== 1 ? 's' : ''}`,
+                      emptyRooms.length > 0 && `${emptyRooms.length} habitación${emptyRooms.length !== 1 ? 'es' : ''} vacía${emptyRooms.length !== 1 ? 's' : ''}`,
                     ].filter(Boolean).join(' · ')
-                  : financialLevel === 'orange'
-                    ? `Gastos +${expensesHighPct}% vs media últimos 6 meses`
-                    : `Cashflow medio: ${avgCashflow >= 0 ? '+' : ''}${avgCashflow.toFixed(0)} €/mes`;
+                  : `Cashflow medio: ${avgCashflow >= 0 ? '+' : ''}${avgCashflow.toFixed(0)} €/mes`;
                 return (
-                  <div style={{ borderRadius: '14px', border: `1px solid ${border}`, overflow: 'hidden' }}>
-                    <button onClick={() => toggleCard('financial')} style={{ width: '100%', background: bg, border: 'none', padding: '13px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '11px' }}>
-                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ borderRadius: '14px', border: '1px solid rgba(25,118,210,0.15)', overflow: 'hidden' }}>
+                    <button onClick={() => toggleCard('financial')} style={{ width: '100%', background: '#E3F2FD', border: 'none', padding: '13px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '11px' }}>
+                      <div style={{ flexShrink: 0, width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(25,118,210,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M14 2v6h6" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <line x1="16" y1="13" x2="8" y2="13" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
-                          <line x1="16" y1="17" x2="8" y2="17" stroke={iconColor} strokeWidth="2" strokeLinecap="round"/>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <line x1="16" y1="13" x2="8" y2="13" stroke="#1976D2" strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="16" y1="17" x2="8" y2="17" stroke="#1976D2" strokeWidth="2" strokeLinecap="round"/>
                         </svg>
                       </div>
                       <div style={{ flex: 1, textAlign: 'left' }}>
-                        <p style={{ margin: '0 0 1px', fontSize: '13px', fontWeight: 700, color }}>Atención financiera</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '1px' }}>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#1565C0' }}>Atención financiera</p>
+                          {hasGraveAlerts && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#E53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="rgba(229,57,53,0.1)"/>
+                              <line x1="12" y1="9" x2="12" y2="13" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="12" y1="17" x2="12.01" y2="17" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          )}
+                        </div>
                         <p style={{ margin: 0, fontSize: '11px', color: '#999' }}>{subtitle}</p>
                       </div>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -590,56 +608,87 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                     {isOpen && (
                       <div style={{ padding: '10px 14px 14px', background: 'white', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
-                        {/* RED: pérdidas y vacíos primero, luego gastos altos si también aplica */}
-                        {financialLevel === 'red' && (
-                          <>
-                            {negativeCashflowProps.map((s, i) => (
-                              <div key={`neg-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
-                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{s.name}</p>
-                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#C62828' }}>-{Math.abs(s.net).toFixed(0)} €/mes</p>
-                              </div>
-                            ))}
-                            {emptyProps.map((p, i) => (
-                              <div key={`empty-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
-                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{p.name}</p>
-                                <p style={{ margin: 0, fontSize: '12px', color: '#C62828' }}>vacío este mes</p>
-                              </div>
-                            ))}
-                            {showHighExpenses && (
-                              <div style={{ padding: '9px 12px', borderRadius: '10px', background: '#FFF8E1' }}>
-                                <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#E65100' }}>Gastos altos</p>
-                                <p style={{ margin: 0, fontSize: '12px', color: '#FB8C00' }}>+{expensesHighPct}% sobre la media de 6 meses</p>
-                              </div>
-                            )}
-                          </>
-                        )}
+                        {/* Alertas graves en rojo */}
+                        {negativeCashflowProps.map((s, i) => (
+                          <div key={`neg-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{s.name} — los gastos superan los ingresos</p>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#C62828', flexShrink: 0, marginLeft: '8px' }}>−{Math.abs(s.net).toFixed(0)} €/mes</p>
+                          </div>
+                        ))}
+                        {emptyProps.map((p, i) => (
+                          <div key={`eprop-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{p.name} — piso vacío este mes</p>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginLeft: '8px' }}>
+                              <circle cx="12" cy="12" r="10" stroke="#E53935" strokeWidth="2"/>
+                              <line x1="15" y1="9" x2="9" y2="15" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="9" y1="9" x2="15" y2="15" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </div>
+                        ))}
+                        {emptyRooms.map((r, i) => (
+                          <div key={`eroom-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#FBE9E7' }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#333' }}>{r.roomName} ({r.propName}) — habitación vacía este mes</p>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginLeft: '8px' }}>
+                              <circle cx="12" cy="12" r="10" stroke="#E53935" strokeWidth="2"/>
+                              <line x1="15" y1="9" x2="9" y2="15" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="9" y1="9" x2="15" y2="15" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </div>
+                        ))}
 
-                        {/* ORANGE: solo gastos altos */}
-                        {financialLevel === 'orange' && (
-                          <div style={{ padding: '9px 12px', borderRadius: '10px', background: '#FFF8E1' }}>
-                            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: 600, color: '#E65100' }}>Gastos altos este mes</p>
-                            <p style={{ margin: 0, fontSize: '12px', color: '#FB8C00' }}>+{expensesHighPct}% sobre la media de los últimos 6 meses</p>
+                        {/* Consejos en azul/gris */}
+                        {avgCashflow > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <polyline points="22 4 12 14.01 9 11.01" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#1565C0' }}>Buen rendimiento general, cashflow medio de <strong>+{avgCashflow.toFixed(0)} €/mes</strong></p>
+                          </div>
+                        )}
+                        {propsWithoutExpenses.length > 0 && propsWithoutExpenses.map((s, i) => (
+                          <div key={`noexp-${i}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#F3F4F6' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <circle cx="12" cy="12" r="10" stroke="#888" strokeWidth="2"/>
+                              <line x1="12" y1="8" x2="12" y2="12" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="12" y1="16" x2="12.01" y2="16" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#555' }}><strong>{s.name}</strong> no tiene gastos registrados, considera añadir hipoteca o comunidad</p>
+                          </div>
+                        ))}
+                        {showHighExpenses && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#FFF8E1' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <line x1="12" y1="9" x2="12" y2="13" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="12" y1="17" x2="12.01" y2="17" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#E65100' }}>Gastos <strong>+{expensesHighPct}%</strong> sobre la media de los últimos 6 meses</p>
+                          </div>
+                        )}
+                        {occupationRate >= 80 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <polyline points="22 4 12 14.01 9 11.01" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#1565C0' }}>Ocupación al <strong>{occupationRate}%</strong>, muy por encima de la media</p>
+                          </div>
+                        )}
+                        {!hasGraveAlerts && !showHighExpenses && propsWithoutExpenses.length === 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '10px', background: '#F3F4F6' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                              <circle cx="12" cy="12" r="10" stroke="#888" strokeWidth="2"/>
+                              <line x1="12" y1="8" x2="12" y2="12" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="12" y1="16" x2="12.01" y2="16" stroke="#888" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#555' }}>Revisa los gastos deducibles antes de la declaración de IRPF</p>
                           </div>
                         )}
 
-                        {/* BLUE: datos positivos */}
-                        {financialLevel === 'blue' && (
-                          <>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
-                              <p style={{ margin: 0, fontSize: '13px', color: '#1565C0' }}>Cashflow medio por piso</p>
-                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#1565C0' }}>{avgCashflow >= 0 ? '+' : ''}{avgCashflow.toFixed(0)} €/mes</p>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: '10px', background: '#E3F2FD' }}>
-                              <p style={{ margin: 0, fontSize: '13px', color: '#1565C0' }}>Neto total este mes</p>
-                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: totalNet >= 0 ? '#2E7D32' : '#C62828' }}>{totalNet >= 0 ? '+' : ''}{totalNet.toFixed(0)} €</p>
-                            </div>
-                          </>
-                        )}
-
-                        {hasFinancialAlerts && (
+                        {hasGraveAlerts && (
                           <button
                             onClick={() => {
-                              // Preseleccionar el peor piso (mayor pérdida) en el modal de rentabilidad
                               const worstProp = negativeCashflowProps.length > 0
                                 ? properties.find(p => p.name === negativeCashflowProps[0].name)
                                 : null;
