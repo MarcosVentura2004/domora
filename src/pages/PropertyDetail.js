@@ -419,20 +419,43 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
     setConfirmingTenant(null);
 
     // Persistir en Supabase (upsert: update si existe, insert si no)
-    const { count } = await supabase
+    const STATUS_VALUE = 'confirmed'; // valor exacto, sin espacios ni mayúsculas
+    console.log('[handleConfirmWithAmount] Intentando UPDATE en Supabase:', {
+      property_id: String(property.id),
+      tenant_id: tenantId,
+      year: currentYear,
+      month: currentMonth,
+      status: STATUS_VALUE,
+      status_length: STATUS_VALUE.length,
+      status_charCodes: [...STATUS_VALUE].map(c => c.charCodeAt(0)),
+    });
+
+    const { data: updateData, count, error: updateError } = await supabase
       .from('payments')
-      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
+      .update({ status: STATUS_VALUE, confirmed_at: confirmedAt, amount })
       .eq('property_id', String(property.id))
       .eq('tenant_id', tenantId)
       .eq('year', currentYear)
       .eq('month', currentMonth)
-      .select('id', { count: 'exact', head: true });
+      .select('id, status', { count: 'exact' });
+
+    console.log('[handleConfirmWithAmount] Resultado UPDATE:', {
+      rowsUpdated: count,
+      updatedRows: updateData,
+      error: updateError,
+    });
+
     if (!count) {
-      await supabase.from('payments').insert({
-        property_id: String(property.id), tenant_id: tenantId,
-        year: currentYear, month: currentMonth,
-        status: 'confirmed', confirmed_at: confirmedAt, amount,
-      });
+      console.log('[handleConfirmWithAmount] No existía fila — haciendo INSERT con status:', STATUS_VALUE);
+      const { data: insertData, error: insertError } = await supabase
+        .from('payments')
+        .insert({
+          property_id: String(property.id), tenant_id: tenantId,
+          year: currentYear, month: currentMonth,
+          status: STATUS_VALUE, confirmed_at: confirmedAt, amount,
+        })
+        .select('id, status');
+      console.log('[handleConfirmWithAmount] Resultado INSERT:', { insertData, insertError });
     }
   };
 
