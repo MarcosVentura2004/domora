@@ -66,213 +66,6 @@ function getMonthlyExpenses(property, supabaseExpenses) {
   }, 0);
 }
 
-function generateAlerts(properties, supabasePayments = [], supabaseExpenses = []) {
-  const alerts = [];
-
-  properties.forEach(property => {
-    if (property.status === 'uso_propio') return;
-
-    const ownership = (property.ownershipPercentage || 100) / 100;
-
-    // Pagos pendientes de confirmar (Supabase es fuente de verdad)
-    if (property.status === 'alquilado' || property.status === 'otros' || property.status === 'por_habitaciones') {
-      const supabasePending = supabasePayments.filter(
-        p => String(p.property_id) === String(property.id) && p.status === 'pending'
-      );
-      const localPending = (property.payments || []).filter(
-        p => p.year === currentYear && p.month === currentMonth && p.status === 'pending'
-      );
-      const pendingCount = supabasePending.length || localPending.length;
-      if (pendingCount > 0) {
-        alerts.push({
-          type: 'warning',
-          text: `${property.name} — ${pendingCount} pago${pendingCount > 1 ? 's' : ''} pendiente${pendingCount > 1 ? 's' : ''} de confirmar`,
-          property: property.name,
-        });
-      }
-    }
-
-    // Habitaciones con inquilino sin ningún pago este mes
-    if (property.status === 'por_habitaciones') {
-      const roomsWithTenant = (property.rooms || []).filter(r => r.tenant);
-      roomsWithTenant.forEach(room => {
-        const hasPayment = (property.payments || []).some(
-          p => p.year === currentYear && p.month === currentMonth && p.roomId === room.id
-        );
-        if (!hasPayment) {
-          alerts.push({
-            type: 'warning',
-            text: `${property.name} — ${room.name}: ${room.tenant.name} no ha registrado el pago de este mes`,
-            property: property.name,
-          });
-        }
-      });
-    }
-
-    // Habitaciones vacías
-    if (property.status === 'por_habitaciones') {
-      const emptyRooms = (property.rooms || []).filter(r => !r.tenant);
-      if (emptyRooms.length > 0) {
-        alerts.push({
-          type: 'info',
-          text: `${property.name} — ${emptyRooms.length} habitación${emptyRooms.length > 1 ? 'es' : ''} vacía${emptyRooms.length > 1 ? 's' : ''}`,
-          property: property.name,
-        });
-      }
-    }
-
-    // Piso vacío
-    if (property.status === 'vacio') {
-      alerts.push({
-        type: 'info',
-        text: `${property.name} — sin inquilino`,
-        property: property.name,
-      });
-    }
-
-    // Sin pagos este mes (alquilado/otros con inquilino)
-    if ((property.status === 'alquilado' || property.status === 'otros') && (property.tenants || []).length > 0) {
-      const supabaseForProperty = supabasePayments.filter(
-        p => String(p.property_id) === String(property.id)
-      );
-      const hasSupabasePayment = supabaseForProperty.length > 0;
-      const hasLocalPayment = (property.payments || []).some(
-        p => p.year === currentYear && p.month === currentMonth
-      );
-      if (!hasSupabasePayment && !hasLocalPayment) {
-        alerts.push({
-          type: 'warning',
-          text: `${property.name} — sin registro de pago este mes`,
-          property: property.name,
-        });
-      }
-    }
-
-    // Vacacional sin reservas este mes
-    if (property.status === 'vacacional') {
-      const thisMonthBookings = (property.bookings || []).filter(b => {
-        const s = new Date(b.startDate);
-        return s.getFullYear() === currentYear && s.getMonth() === currentMonth;
-      });
-      if (thisMonthBookings.length === 0) {
-        alerts.push({
-          type: 'info',
-          text: `${property.name} — sin reservas este mes`,
-          property: property.name,
-        });
-      }
-    }
-
-    // Gastos recurrentes variables pendientes de importe
-    const propertyExpenses = supabaseExpenses.filter(e => String(e.property_id) === String(property.id));
-    propertyExpenses
-      .filter(e => e.type === 'recurrente_variable' && e.frequency !== 'manual' && e.active !== false && !e.amount)
-      .forEach(e => {
-        const isDue = getExpensesForMonth([e], currentYear, currentMonth).length > 0;
-        if (isDue) {
-          alerts.push({
-            type: 'warning',
-            text: `${property.name} — "${e.name}": pendiente de introducir importe`,
-            property: property.name,
-          });
-        }
-      });
-
-    // Rentabilidad negativa
-    const income = getMonthlyIncome(property);
-    const expenses = getMonthlyExpenses(property, supabaseExpenses);
-    if (expenses > 0 && income < expenses) {
-      alerts.push({
-        type: 'danger',
-        text: `${property.name} — gastos superan ingresos este mes (${(expenses - income).toFixed(0)} € de pérdida)`,
-        property: property.name,
-      });
-    }
-
-  });
-
-  return alerts;
-}
-
-function generateTips(properties, supabaseExpenses = []) {
-  const tips = [];
-  if (properties.length === 0) return tips;
-
-  // Inmueble menos rentable
-  const withIncome = properties
-    .map(p => ({ p, net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses) }))
-    .filter(({ p }) => p.status !== 'vacio' && p.status !== 'uso_propio');
-
-  if (withIncome.length > 1) {
-    const worst = withIncome.sort((a, b) => a.net - b.net)[0];
-    if (worst.net !== 0) {
-      tips.push(`La rentabilidad más baja este mes es la de ${worst.p.name} (${worst.net >= 0 ? '+' : ''}${worst.net.toFixed(0)} € neto).`);
-    }
-  }
-
-  // Vacacional con baja ocupación
-  const vacacionales = properties.filter(p => p.status === 'vacacional');
-  vacacionales.forEach(p => {
-    const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-    const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-    const nextBookings = (p.bookings || []).filter(b => {
-      const s = new Date(b.startDate);
-      return s.getFullYear() === nextYear && s.getMonth() === nextMonth;
-    });
-    if (nextBookings.length === 0) {
-      const monthName = new Date(nextYear, nextMonth).toLocaleDateString('es-ES', { month: 'long' });
-      tips.push(`${p.name} no tiene reservas para ${monthName}. Puede ser buen momento para publicar disponibilidad.`);
-    }
-  });
-
-  // Muchos gastos
-  properties.forEach(p => {
-    const expenses = getMonthlyExpenses(p, supabaseExpenses);
-    const income = getMonthlyIncome(p);
-    if (income > 0 && expenses / income > 0.4) {
-      tips.push(`Los gastos de ${p.name} representan el ${Math.round(expenses / income * 100)}% de los ingresos. Puede que haya margen de optimización.`);
-    }
-  });
-
-  return tips.slice(0, 3);
-}
-
-// ─────────────────────────────────────────────
-// Vista adjunto incidencia (URL de Supabase Storage)
-// ─────────────────────────────────────────────
-function IncidentAttachmentView({ attachmentUrl }) {
-  if (!attachmentUrl) return null;
-  const isImage = /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(attachmentUrl);
-
-  if (isImage) {
-    return (
-      <div style={{ marginTop: 8 }}>
-        <img
-          src={attachmentUrl}
-          alt="Adjunto"
-          onClick={() => window.open(attachmentUrl, '_blank')}
-          style={{ maxWidth: '100%', maxHeight: '160px', borderRadius: 8, cursor: 'pointer', objectFit: 'cover', display: 'block' }}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <a
-      href={attachmentUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ marginTop: 8, background: 'rgba(0,0,0,0.06)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M14 2v6h6" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-      <span style={{ fontSize: 12, color: '#555' }}>Ver archivo adjunto</span>
-    </a>
-  );
-}
-
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
@@ -290,7 +83,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     if (propertyIds.length === 0) return;
     supabase
       .from('payments')
-      .select('property_id, tenant_id, room_id, status')
+      .select('property_id, tenant_id, room_id, status, amount')
       .in('property_id', propertyIds)
       .eq('year', currentYear)
       .eq('month', currentMonth)
@@ -313,11 +106,6 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       .then(({ data }) => { if (data) setSupabaseIncidents(data); });
   }, [userEmail]);
 
-  const handleResolveIncident = async (incidentId) => {
-    await supabase.from('incidents').update({ status: 'resolved' }).eq('id', incidentId);
-    setSupabaseIncidents(prev => prev.filter(i => i.id !== incidentId));
-  };
-
   const totalIncome = properties.reduce((sum, p) => sum + getMonthlyIncome(p), 0);
   const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p, supabaseExpenses), 0);
   const totalNet = totalIncome - totalExpenses;
@@ -333,8 +121,6 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   ).length;
 
   const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-  const alerts = generateAlerts(properties, supabasePayments, supabaseExpenses);
-  const tips = generateTips(properties, supabaseExpenses);
 
   const usoPropioProperties = properties.filter(p => p.status === 'uso_propio');
 
@@ -343,11 +129,48 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     .filter(p => p.status !== 'uso_propio')
     .map(p => ({
       name: p.name,
+      id: p.id,
       status: p.status,
       income: getMonthlyIncome(p),
       expenses: getMonthlyExpenses(p, supabaseExpenses),
       net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses),
     })).sort((a, b) => b.net - a.net);
+
+  // ── Alertas importantes ──
+  const pendingPaymentsThisMonth = supabasePayments.filter(p => p.status === 'pending');
+  const pendingCount = pendingPaymentsThisMonth.length;
+  const pendingTotal = pendingPaymentsThisMonth.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const computeMonthTotal = (year, month) =>
+    properties
+      .filter(p => p.status !== 'uso_propio')
+      .reduce((sum, p) => {
+        const pExp = supabaseExpenses.filter(e => String(e.property_id) === String(p.id));
+        const active = getExpensesForMonth(pExp, year, month);
+        const ownership = p.ownershipPercentage || 100;
+        return sum + active.reduce((s, e) => {
+          const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
+          return s + getMonthlyEquivalentGP(e) * pct / 100;
+        }, 0);
+      }, 0);
+
+  const prevSixExpenses = Array.from({ length: 6 }, (_, i) => {
+    let m = currentMonth - i - 1;
+    let y = currentYear;
+    if (m < 0) { m += 12; y -= 1; }
+    return computeMonthTotal(y, m);
+  });
+  const avgMonthlyExpenses = prevSixExpenses.reduce((s, v) => s + v, 0) / prevSixExpenses.length;
+  const expensesHighPct = avgMonthlyExpenses > 0 ? Math.round((totalExpenses / avgMonthlyExpenses - 1) * 100) : 0;
+  const showHighExpenses = avgMonthlyExpenses > 0 && expensesHighPct > 20;
+
+  const negativeCashflowProps = propertyStats.filter(s => s.net < 0);
+  const hasFinancialAlerts = showHighExpenses || negativeCashflowProps.length > 0;
+
+  const alertBadgeCount =
+    (pendingCount > 0 ? 1 : 0) +
+    (supabaseIncidents.length > 0 ? 1 : 0) +
+    (hasFinancialAlerts ? 1 : 0);
 
   return (
     <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
@@ -434,71 +257,124 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
           </div>
         </div>
 
-        {/* Incidencias */}
-        {supabaseIncidents.length > 0 && (
-          <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)', borderLeft: '4px solid #F44336' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '15px', fontWeight: 600, color: '#C62828', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#C62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <line x1="12" y1="9" x2="12" y2="13" stroke="#C62828" strokeWidth="2" strokeLinecap="round"/>
-                <line x1="12" y1="17" x2="12.01" y2="17" stroke="#C62828" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              Incidencias
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {supabaseIncidents.map((incident) => (
-                <div key={incident.id} style={{ padding: '10px 12px', borderRadius: '12px', background: '#FBE9E7' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <div style={{ flexShrink: 0, width: '10px', height: '10px', marginTop: '6px', background: '#F44336', borderRadius: '50%' }} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#333', lineHeight: '1.4' }}>
-                        <strong>{incident.property_name}</strong> — {incident.tenant_name}
-                      </p>
-                      <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#555', lineHeight: '1.4' }}>
-                        {incident.description.length > 80 ? incident.description.slice(0, 80) + '...' : incident.description}
-                      </p>
-                      <p style={{ margin: 0, fontSize: '11px', color: '#aaa' }}>
-                        {new Date(incident.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </p>
+        {/* Alertas importantes */}
+        {properties.length > 0 && (
+          <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#111' }}>Alertas importantes</h3>
+              {alertBadgeCount > 0 && (
+                <span style={{
+                  background: '#E53935', color: 'white', borderRadius: '50%',
+                  width: '20px', height: '20px', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: '11px', fontWeight: 700, flexShrink: 0
+                }}>
+                  {alertBadgeCount}
+                </span>
+              )}
+            </div>
+
+            {alertBadgeCount === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="#4CAF50" strokeWidth="2"/>
+                  <path d="M8 12l3 3 5-5" stroke="#4CAF50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ fontSize: '14px', color: '#4CAF50', fontWeight: 500 }}>Todo en orden</span>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' }}>
+
+                {/* Tarjeta 1 — Pagos pendientes */}
+                {pendingCount > 0 && (
+                  <div style={{ background: '#FBE9E7', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(229,57,53,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                          <rect x="3" y="4" width="18" height="18" rx="2" stroke="#E53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <line x1="16" y1="2" x2="16" y2="6" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="8" y1="2" x2="8" y2="6" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="3" y1="10" x2="21" y2="10" stroke="#E53935" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p style={{ margin: '0 0 3px', fontSize: '13px', fontWeight: 700, color: '#C62828' }}>
+                          {pendingCount} pago{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}
+                        </p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>
+                          {pendingTotal > 0 ? `por valor de ${pendingTotal.toFixed(0)} €` : 'pendientes de confirmar'}
+                        </p>
+                      </div>
                     </div>
                     <button
-                      onClick={() => handleResolveIncident(incident.id)}
-                      style={{ flexShrink: 0, fontSize: '11px', fontWeight: 600, background: '#4CAF50', color: 'white', border: 'none', borderRadius: '8px', padding: '5px 10px', cursor: 'pointer' }}
+                      onClick={onNavigateToProperties}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#E53935', textAlign: 'left' }}
                     >
-                      Resolver
+                      Ver detalles
                     </button>
                   </div>
-                  {incident.attachment_url && (
-                    <div style={{ paddingLeft: '20px', marginTop: 4 }}>
-                      <IncidentAttachmentView attachmentUrl={incident.attachment_url} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                )}
 
-        {/* Alertas */}
-        {alerts.filter(a => !a.incident).length > 0 && (
-          <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '15px', fontWeight: 600, color: '#111' }}>Alertas</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {alerts.filter(a => !a.incident).map((alert, i) => (
-                <div key={i} style={{
-                  padding: '10px 12px', borderRadius: '12px',
-                  background: alert.type === 'danger' ? '#FBE9E7' : alert.type === 'warning' ? '#FFF8E1' : '#F3F4F6',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <div style={{ flexShrink: 0, width: '10px', height: '10px', marginTop: '3px',
-                      background: alert.type === 'danger' ? '#F44336' : alert.type === 'warning' ? '#FFA726' : '#BDBDBD',
-                      borderRadius: '50%'
-                    }} />
-                    <p style={{ margin: 0, fontSize: '13px', color: '#333', lineHeight: '1.4' }}>{alert.text}</p>
+                {/* Tarjeta 2 — Incidencias abiertas */}
+                {supabaseIncidents.length > 0 && (
+                  <div style={{ background: '#FFF8E1', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(251,140,0,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p style={{ margin: '0 0 3px', fontSize: '13px', fontWeight: 700, color: '#E65100' }}>
+                          {supabaseIncidents.length} incidencia{supabaseIncidents.length !== 1 ? 's' : ''} abierta{supabaseIncidents.length !== 1 ? 's' : ''}
+                        </p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>requieren tu atención</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={onNavigateToProperties}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#FB8C00', textAlign: 'left' }}
+                    >
+                      Ver incidencias
+                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+
+                {/* Tarjeta 3 — Alerta financiera */}
+                {hasFinancialAlerts && (
+                  <div style={{ background: '#E3F2FD', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ flexShrink: 0, width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(25,118,210,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke="#1976D2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <line x1="16" y1="13" x2="8" y2="13" stroke="#1976D2" strokeWidth="2" strokeLinecap="round"/>
+                          <line x1="16" y1="17" x2="8" y2="17" stroke="#1976D2" strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        {showHighExpenses && (
+                          <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 700, color: '#1565C0' }}>
+                            Gastos altos este mes · +{expensesHighPct}% vs media
+                          </p>
+                        )}
+                        {negativeCashflowProps.map((s, i) => (
+                          <p key={i} style={{ margin: '0 0 2px', fontSize: '12px', color: '#1565C0' }}>
+                            {s.name} — pérdidas de {Math.abs(s.net).toFixed(0)} €/mes
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowRentabilityModal(true)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#1976D2', textAlign: 'left' }}
+                    >
+                      Ver análisis
+                    </button>
+                  </div>
+                )}
+
+              </div>
+            )}
           </div>
         )}
 
@@ -583,23 +459,6 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                 </div>
               </>
             )}
-          </div>
-        )}
-
-        {/* Consejos */}
-        {tips.length > 0 && (
-          <div style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '15px', fontWeight: 600, color: '#111' }}>Consejos</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {tips.map((tip, i) => (
-                <div key={i} style={{
-                  padding: '12px 14px', borderRadius: '12px',
-                  background: '#F0F7FF', borderLeft: '3px solid #2196F3'
-                }}>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#333', lineHeight: '1.5' }}>{tip}</p>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 
