@@ -3,26 +3,11 @@ import { supabase } from '../supabaseClient';
 import { saveFile, getFile } from '../utils/fileStorage';
 import './Settings.css';
 
-const RESEND_API_KEY = 're_REPLACE_WITH_YOUR_RESEND_KEY'; // Sustituye con tu clave de Resend
-
-async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount }) {
-  try {
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Domio <soporte@trydomio.com>',
-        to: [gestorEmail],
-        subject: 'Te han invitado a gestionar propiedades en Domio',
-        html: `<p>Hola ${gestorName},</p><p><strong>${landlordName}</strong> te ha dado acceso a <strong>${propertyCount} ${propertyCount === 1 ? 'propiedad' : 'propiedades'}</strong> en Domio.</p><p>Entra en <a href="https://trydomio.com">trydomio.com</a> para acceder. Si no tienes cuenta, créala con este correo electrónico (${gestorEmail}).</p><p>El equipo de Domio</p>`,
-      }),
-    });
-  } catch (err) {
-    console.warn('Error enviando email de invitación:', err);
-  }
+async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount }, supabaseClient) {
+  const { error } = await supabaseClient.functions.invoke('send-gestor-invite', {
+    body: { gestorEmail, gestorName, landlordName, propertyCount },
+  });
+  if (error) console.warn('[send-gestor-invite] Error:', error);
 }
 
 function formatPhone(raw) {
@@ -138,7 +123,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
         gestorName: inviteName.trim(),
         landlordName,
         propertyCount: invitePropertyIds.size,
-      });
+      }, supabase);
 
       setInviteSent(true);
       setTimeout(() => {
