@@ -523,6 +523,69 @@ input[type="number"] {
   color: #000;
 }
 
+/* ── Category grid (nivel 1) ── */
+.category-grid-wrapper {
+  padding: 24px 16px 32px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.category-card {
+  background: white;
+  border: none;
+  border-radius: 22px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  cursor: pointer;
+  padding: 28px 16px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  text-align: center;
+}
+
+.category-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.11);
+}
+
+.category-card:active {
+  transform: scale(0.96);
+}
+
+.category-card-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.category-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.category-card-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: #aaa;
+  margin: 0;
+}
+
 /* ── Property grid (new card design) ── */
 .properties-grid-wrapper {
   padding: 20px 16px 32px;

@@ -59,8 +59,8 @@ function getAllTenants(properties, landlordEmail) {
   return list;
 }
 
-function getPropertyIcon(status) {
-  const s = 48;
+function getPropertyIcon(status, size = 48) {
+  const s = size;
   if (status === 'alquilado') return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
       <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -106,6 +106,41 @@ function getPropertyIcon(status) {
   );
 }
 
+const CATEGORIES = [
+  {
+    key: 'en_alquiler',
+    title: 'En alquiler',
+    statuses: ['alquilado', 'por_habitaciones', 'vacacional'],
+    representativeStatus: 'alquilado',
+    color: '#16A34A',
+    bgColor: '#F0FDF4',
+  },
+  {
+    key: 'vacias',
+    title: 'Vacías',
+    statuses: ['vacio'],
+    representativeStatus: 'vacio',
+    color: '#DC2626',
+    bgColor: '#FEF2F2',
+  },
+  {
+    key: 'uso_propio',
+    title: 'Uso propio',
+    statuses: ['uso_propio'],
+    representativeStatus: 'uso_propio',
+    color: '#2563EB',
+    bgColor: '#EFF6FF',
+  },
+  {
+    key: 'otros',
+    title: 'Otros',
+    statuses: ['otros'],
+    representativeStatus: 'otros',
+    color: '#7C3AED',
+    bgColor: '#F5F3FF',
+  },
+];
+
 function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   const [properties, setProperties] = useState(() => {
     const saved = localStorage.getItem(`properties_${userEmail}`);
@@ -116,11 +151,13 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
 
   const switchTab = (tab) => {
     setActiveTab(tab);
+    setSelectedCategory(null);
     setShowPropertySearch(false);
     setPropertySearch('');
     setShowChatSearch(false);
     setChatSearch('');
   };
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
@@ -309,123 +346,91 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
       {/* Panel Propiedades */}
       {activeTab === 'properties' && (
         <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
-          {/* Header */}
-          <div className="dashboard-header">
-            <button className="profile-button" onClick={() => setShowSettings(true)}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {avatarUrl && (
-                  <img
-                    src={avatarUrl}
-                    alt=""
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: avatarValid ? 'block' : 'none' }}
-                    onLoad={() => setAvatarValid(true)}
-                    onError={() => setAvatarValid(false)}
-                  />
-                )}
-                {!avatarValid && (
-                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
-                    <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
-                  </svg>
-                )}
-              </div>
-            </button>
-            <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Propiedades</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={() => { setShowPropertySearch(!showPropertySearch); setPropertySearch(''); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-              <button
-                onClick={handleAddProperty}
-                style={{
-                  background: '#111', color: 'white', border: 'none', borderRadius: '20px',
-                  padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                + Añadir
-              </button>
-            </div>
 
-          </div>
-
-          {/* Barra de búsqueda propiedades */}
-          {showPropertySearch && (
+          {selectedCategory === null ? (
+            /* ── NIVEL 1: cuadrícula de categorías ── */
             <>
-              <div
-                onClick={() => { setShowPropertySearch(false); setPropertySearch(''); }}
-                style={{ position: 'fixed', inset: 0, zIndex: 90 }}
-              />
-              <div style={{ padding: '10px 20px', background: 'white', borderBottom: '1px solid #f0f0f0', position: 'relative', zIndex: 91 }}>
-                <div style={{ position: 'relative', maxWidth: '600px', margin: '0 auto' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa' }}>
-                    <circle cx="11" cy="11" r="7" stroke="#aaa" strokeWidth="2"/>
-                    <path d="M20 20l-3-3" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
+              {/* Header nivel 1 */}
+              <div className="dashboard-header">
+                <button className="profile-button" onClick={() => setShowSettings(true)}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {avatarUrl && (
+                      <img
+                        src={avatarUrl}
+                        alt=""
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: avatarValid ? 'block' : 'none' }}
+                        onLoad={() => setAvatarValid(true)}
+                        onError={() => setAvatarValid(false)}
+                      />
+                    )}
+                    {!avatarValid && (
+                      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
+                        <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
+                      </svg>
+                    )}
+                  </div>
+                </button>
+                <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Propiedades</span>
+                <button
+                  onClick={() => { setShowPropertySearch(!showPropertySearch); setPropertySearch(''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Buscar inmueble..."
-                    value={propertySearch}
-                    onChange={e => setPropertySearch(e.target.value)}
-                    style={{
-                      width: '100%', padding: '10px 12px 10px 36px', border: '1px solid #e5e5e5',
-                      borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box', outline: 'none',
-                      background: '#f7f7f7',
-                    }}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Lista de propiedades agrupada */}
-          <div className="properties-grid-wrapper">
-            {loadingProperties ? (
-              <div className="empty-state">
-                <p>Cargando propiedades…</p>
-              </div>
-            ) : properties.length === 0 ? (
-              <div className="empty-state">
-                <p>Aún no hay inmuebles añadidos</p>
-                <button className="add-first-property" onClick={handleAddProperty}>
-                  Añadir primera propiedad
                 </button>
               </div>
-            ) : (() => {
-              const filtered = properties.filter(p =>
-                !propertySearch || p.name.toLowerCase().includes(propertySearch.toLowerCase())
-              );
-              const SECTIONS = [
-                { key: 'en_alquiler', title: 'En alquiler', statuses: ['alquilado', 'por_habitaciones', 'vacacional'] },
-                { key: 'vacias',      title: 'Vacías',      statuses: ['vacio'] },
-                { key: 'uso_propio',  title: 'Uso propio',  statuses: ['uso_propio'] },
-                { key: 'otros',       title: 'Otros',       statuses: ['otros'] },
-              ];
-              const visible = SECTIONS.map(s => ({
-                ...s,
-                items: filtered.filter(p => s.statuses.includes(p.status)),
-              })).filter(s => s.items.length > 0);
-              if (visible.length === 0) {
-                return <div className="empty-state"><p>Sin resultados</p></div>;
-              }
-              return visible.map(section => (
-                <div key={section.key} className="property-section">
-                  <p className="property-section-label">{section.title}</p>
-                  <div className="properties-grid">
-                    {section.items.map(property => {
+
+              {/* Barra de búsqueda (nivel 1 — busca en todas las categorías) */}
+              {showPropertySearch && (
+                <>
+                  <div
+                    onClick={() => { setShowPropertySearch(false); setPropertySearch(''); }}
+                    style={{ position: 'fixed', inset: 0, zIndex: 90 }}
+                  />
+                  <div style={{ padding: '10px 20px', background: 'white', borderBottom: '1px solid #f0f0f0', position: 'relative', zIndex: 91 }}>
+                    <div style={{ position: 'relative', maxWidth: '600px', margin: '0 auto' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
+                        <circle cx="11" cy="11" r="7" stroke="#aaa" strokeWidth="2"/>
+                        <path d="M20 20l-3-3" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Buscar en todas las propiedades..."
+                        value={propertySearch}
+                        onChange={e => setPropertySearch(e.target.value)}
+                        style={{
+                          width: '100%', padding: '10px 12px 10px 36px', border: '1px solid #e5e5e5',
+                          borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box', outline: 'none',
+                          background: '#f7f7f7',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {propertySearch.trim() ? (
+                /* Resultados de búsqueda — lista plana, todas las categorías */
+                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {(() => {
+                    const results = properties.filter(p =>
+                      p.name.toLowerCase().includes(propertySearch.toLowerCase())
+                    );
+                    if (results.length === 0) {
+                      return <div className="empty-state"><p>Sin resultados</p></div>;
+                    }
+                    return results.map(property => {
+                      const cat = CATEGORIES.find(c => c.statuses.includes(property.status));
                       const statusLabel =
-                        property.status === 'alquilado'       ? 'Alquilado' :
-                        property.status === 'por_habitaciones' ? 'Por habitaciones' :
-                        property.status === 'vacacional'       ? 'Vacacional' :
-                        property.status === 'otros'            ? (property.customType || 'Otros') :
-                        property.status === 'uso_propio'       ? 'Uso propio' : 'Vacío';
+                        property.status === 'alquilado'        ? 'Alquilado' :
+                        property.status === 'por_habitaciones'  ? 'Por habitaciones' :
+                        property.status === 'vacacional'        ? 'Vacacional' :
+                        property.status === 'otros'             ? (property.customType || 'Otros') :
+                        property.status === 'uso_propio'        ? 'Uso propio' : 'Vacío';
                       const priceLabel =
                         property.status === 'vacacional'
                           ? `${(property.bookings || []).filter(b => {
@@ -434,38 +439,158 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
                                 new Date(b.startDate).getMonth() === now.getMonth() &&
                                 new Date(b.startDate).getFullYear() === now.getFullYear();
                             }).length} reservas este mes`
-                          : property.status === 'uso_propio'
-                          ? 'Uso propio'
+                          : property.status === 'uso_propio' ? 'Uso propio'
                           : `${property.price} €/mes`;
-                      const iconColor =
-                        property.status === 'otros'     ? '#7C3AED' :
-                        property.status === 'uso_propio'? '#2563EB' :
-                        property.status === 'vacio'     ? '#EF4444' :
-                        property.status === 'vacacional'? '#0EA5E9' :
-                        property.status === 'por_habitaciones' ? '#F59E0B' : '#16A34A';
                       return (
-                        <button
-                          key={property.id}
-                          className="property-grid-card"
-                          onClick={() => handleViewProperty(property)}
-                        >
-                          <div className="property-grid-icon-wrap" style={{ color: iconColor }}>
-                            {getPropertyIcon(property.status)}
+                        <div key={property.id} className="property-card" onClick={() => handleViewProperty(property)} style={{ cursor: 'pointer' }}>
+                          <div className="property-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                              <div style={{
+                                width: 38, height: 38, borderRadius: '10px', flexShrink: 0,
+                                background: cat?.bgColor || '#F0F1F3',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: cat?.color || '#555',
+                              }}>
+                                {getPropertyIcon(property.status, 20)}
+                              </div>
+                              <h3 className="property-name" style={{ margin: 0 }}>{property.name}</h3>
+                            </div>
+                            <div className="property-status">
+                              <span className={`status-dot ${property.status}`}></span>
+                              <span className="status-text">{statusLabel}</span>
+                            </div>
+                            <p className="property-price">{priceLabel}</p>
                           </div>
-                          <p className="property-grid-name">{property.name}</p>
-                          <div className="property-grid-status">
-                            <span className={`status-dot ${property.status}`}></span>
-                            <span className="property-grid-status-text">{statusLabel}</span>
+                          <button className="property-arrow" onClick={() => handleViewProperty(property)}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                              <path d="M9 6l6 6-6 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              ) : (
+                /* Cuadrícula 2×2 de categorías */
+                <div className="category-grid-wrapper">
+                  {loadingProperties ? (
+                    <div className="empty-state"><p>Cargando propiedades…</p></div>
+                  ) : (
+                    <div className="category-grid">
+                      {CATEGORIES.map(cat => {
+                        const count = properties.filter(p => cat.statuses.includes(p.status)).length;
+                        return (
+                          <button
+                            key={cat.key}
+                            className="category-card"
+                            style={{ opacity: count === 0 ? 0.42 : 1 }}
+                            onClick={() => setSelectedCategory(cat)}
+                          >
+                            <div className="category-card-icon" style={{ color: cat.color, background: cat.bgColor }}>
+                              {getPropertyIcon(cat.representativeStatus)}
+                            </div>
+                            <p className="category-card-title">{cat.title}</p>
+                            <p className="category-card-count">
+                              {count} {count === 1 ? 'propiedad' : 'propiedades'}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            /* ── NIVEL 2: lista de propiedades de la categoría ── */
+            <>
+              {/* Header nivel 2 */}
+              <div className="dashboard-header">
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px 4px 0', display: 'flex', alignItems: 'center', color: '#111' }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>{selectedCategory.title}</span>
+                <button
+                  onClick={handleAddProperty}
+                  style={{
+                    background: '#111', color: 'white', border: 'none', borderRadius: '20px',
+                    padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  + Añadir
+                </button>
+              </div>
+
+              {/* Lista de propiedades de la categoría */}
+              {(() => {
+                const catProperties = properties.filter(p => selectedCategory.statuses.includes(p.status));
+                if (catProperties.length === 0) {
+                  return (
+                    <div className="empty-state">
+                      <p>No tienes propiedades en esta categoría</p>
+                      <button className="add-first-property" onClick={handleAddProperty}>+ Añadir</button>
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {catProperties.map(property => {
+                      const statusLabel =
+                        property.status === 'alquilado'        ? 'Alquilado' :
+                        property.status === 'por_habitaciones'  ? 'Por habitaciones' :
+                        property.status === 'vacacional'        ? 'Vacacional' :
+                        property.status === 'otros'             ? (property.customType || 'Otros') :
+                        property.status === 'uso_propio'        ? 'Uso propio' : 'Vacío';
+                      const priceLabel =
+                        property.status === 'vacacional'
+                          ? `${(property.bookings || []).filter(b => {
+                              const now = new Date();
+                              return b.status === 'confirmed' &&
+                                new Date(b.startDate).getMonth() === now.getMonth() &&
+                                new Date(b.startDate).getFullYear() === now.getFullYear();
+                            }).length} reservas este mes`
+                          : property.status === 'uso_propio' ? 'Uso propio'
+                          : `${property.price} €/mes`;
+                      return (
+                        <div key={property.id} className="property-card" onClick={() => handleViewProperty(property)} style={{ cursor: 'pointer' }}>
+                          <div className="property-info">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                              <div style={{
+                                width: 38, height: 38, borderRadius: '10px', flexShrink: 0,
+                                background: selectedCategory.bgColor,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: selectedCategory.color,
+                              }}>
+                                {getPropertyIcon(property.status, 20)}
+                              </div>
+                              <h3 className="property-name" style={{ margin: 0 }}>{property.name}</h3>
+                            </div>
+                            <div className="property-status">
+                              <span className={`status-dot ${property.status}`}></span>
+                              <span className="status-text">{statusLabel}</span>
+                            </div>
+                            <p className="property-price">{priceLabel}</p>
                           </div>
-                          <p className="property-grid-price">{priceLabel}</p>
-                        </button>
+                          <button className="property-arrow" onClick={e => { e.stopPropagation(); handleViewProperty(property); }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                              <path d="M9 6l6 6-6 6" stroke="#999" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
-                </div>
-              ));
-            })()}
-          </div>
+                );
+              })()}
+            </>
+          )}
 
           {showAddModal && (
             <AddPropertyModal
