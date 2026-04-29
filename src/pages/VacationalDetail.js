@@ -100,7 +100,7 @@ function exportVacationalToPDF(name, historyMonths, accumulated) {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-function VacationalDetail({ property, onBack, onUpdate, landlordEmail }) {
+function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly = false }) { // eslint-disable-line no-unused-vars
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());

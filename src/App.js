@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import Welcome from './pages/Welcome';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
+import GestorDashboard from './pages/GestorDashboard';
 import CodeEntry from './pages/CodeEntry';
 import InquilinoHome from './pages/InquilinoHome';
 import './App.css';
@@ -26,11 +27,22 @@ function App() {
       return;
     }
 
-    const restoreFromUser = (user) => {
+    const restoreFromUser = async (user) => {
       setUserEmail(user.email);
-      setUserType('propietario');
-      localStorage.setItem('userType', 'propietario');
-      setPage('dashboard');
+      const { data: accessData } = await supabase
+        .from('property_access')
+        .select('id')
+        .eq('gestor_email', user.email)
+        .limit(1);
+      if (accessData && accessData.length > 0) {
+        setUserType('gestor');
+        localStorage.setItem('userType', 'gestor');
+        setPage('gestor-dashboard');
+      } else {
+        setUserType('propietario');
+        localStorage.setItem('userType', 'propietario');
+        setPage('dashboard');
+      }
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -66,9 +78,21 @@ function App() {
 
   const handleLogin = async (user) => {
     setUserEmail(user.email);
-    localStorage.setItem('userType', 'propietario');
-    await supabase.auth.updateUser({ data: { userType: 'propietario' } });
-    setPage('dashboard');
+    const { data: accessData } = await supabase
+      .from('property_access')
+      .select('id')
+      .eq('gestor_email', user.email)
+      .limit(1);
+    if (accessData && accessData.length > 0) {
+      setUserType('gestor');
+      localStorage.setItem('userType', 'gestor');
+      setPage('gestor-dashboard');
+    } else {
+      setUserType('propietario');
+      localStorage.setItem('userType', 'propietario');
+      await supabase.auth.updateUser({ data: { userType: 'propietario' } });
+      setPage('dashboard');
+    }
   };
 
   const handleCodeValid = (code) => {
@@ -84,7 +108,7 @@ function App() {
   };
 
   const handleLogout = async () => {
-    if (userType === 'propietario') {
+    if (userType === 'propietario' || userType === 'gestor') {
       await supabase.auth.signOut();
     }
     localStorage.removeItem('userType');
@@ -127,6 +151,13 @@ function App() {
           userEmail={userEmail}
           onLogout={handleLogout}
           onSwitchRole={handleSwitchRole}
+        />
+      )}
+
+      {currentPage === 'gestor-dashboard' && (
+        <GestorDashboard
+          userEmail={userEmail}
+          onLogout={handleLogout}
         />
       )}
 

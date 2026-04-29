@@ -3,6 +3,28 @@ import { supabase } from '../supabaseClient';
 import { saveFile, getFile } from '../utils/fileStorage';
 import './Settings.css';
 
+const RESEND_API_KEY = 're_REPLACE_WITH_YOUR_RESEND_KEY'; // Sustituye con tu clave de Resend
+
+async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount }) {
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Domio <soporte@trydomio.com>',
+        to: [gestorEmail],
+        subject: 'Te han invitado a gestionar propiedades en Domio',
+        html: `<p>Hola ${gestorName},</p><p><strong>${landlordName}</strong> te ha dado acceso a <strong>${propertyCount} ${propertyCount === 1 ? 'propiedad' : 'propiedades'}</strong> en Domio.</p><p>Entra en <a href="https://trydomio.com">trydomio.com</a> para acceder. Si no tienes cuenta, créala con este correo electrónico (${gestorEmail}).</p><p>El equipo de Domio</p>`,
+      }),
+    });
+  } catch (err) {
+    console.warn('Error enviando email de invitación:', err);
+  }
+}
+
 function formatPhone(raw) {
   const digits = (raw || '').replace(/\D/g, '').slice(0, 9);
   return digits.match(/.{1,3}/g)?.join(' ') ?? '';
@@ -37,8 +59,118 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
   const [deleteText, setDeleteText] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  // ── Gestores ─────────────────────────────────────────────
+  const [gestores, setGestores] = useState([]);       // [{ email, name, permisos, properties: [id] }]
+  const [ownerProperties, setOwnerProperties] = useState([]);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [invitePropertyIds, setInvitePropertyIds] = useState(new Set());
+  const [invitePermission, setInvitePermission] = useState('lectura');
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSent, setInviteSent] = useState(false);
+  const [revokingEmail, setRevokingEmail] = useState(null);
+
+  // ── Carga gestores ────────────────────────────────────────
+  const loadGestores = async () => {
+    // Propiedades del propietario
+    const { data: propsData } = await supabase
+      .from('properties')
+      .select('id, data')
+      .eq('landlord_email', userEmail);
+    setOwnerProperties((propsData || []).map(r => ({ id: r.id, name: r.data?.name || r.id })));
+
+    // Accesos concedidos
+    const { data: accessRows } = await supabase
+      .from('property_access')
+      .select('gestor_email, property_id, permisos')
+      .eq('landlord_email', userEmail);
+    if (!accessRows || accessRows.length === 0) { setGestores([]); return; }
+
+    // Nombres de gestores
+    const emails = [...new Set(accessRows.map(r => r.gestor_email))];
+    const { data: gestorRows } = await supabase
+      .from('gestores')
+      .select('email, name')
+      .in('email', emails);
+    const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.name]));
+
+    // Agrupar por gestor
+    const grouped = emails.map(email => ({
+      email,
+      name: nameMap[email] || email,
+      permisos: accessRows.find(r => r.gestor_email === email)?.permisos || 'lectura',
+      propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
+    }));
+    setGestores(grouped);
+  };
+
+  // ── Handlers gestores ─────────────────────────────────────
+  const handleInvite = async () => {
+    if (!inviteEmail.trim() || !inviteName.trim() || invitePropertyIds.size === 0) {
+      setInviteError('Completa todos los campos y selecciona al menos una propiedad.');
+      return;
+    }
+    setInviteSending(true);
+    setInviteError('');
+    try {
+      // 1. Insertar / actualizar en tabla gestores
+      await supabase.from('gestores').upsert(
+        { email: inviteEmail.trim().toLowerCase(), name: inviteName.trim() },
+        { onConflict: 'email' }
+      );
+
+      // 2. Insertar registros en property_access (uno por propiedad)
+      const rows = [...invitePropertyIds].map(pid => ({
+        gestor_email: inviteEmail.trim().toLowerCase(),
+        landlord_email: userEmail,
+        property_id: pid,
+        permisos: invitePermission,
+      }));
+      await supabase.from('property_access').upsert(rows, { onConflict: 'gestor_email,property_id' });
+
+      // 3. Enviar email de invitación
+      const landlordRow = await supabase.from('landlords').select('name').eq('email', userEmail).single();
+      const landlordName = landlordRow?.data?.name || userEmail;
+      await sendGestorInviteEmail({
+        gestorEmail: inviteEmail.trim().toLowerCase(),
+        gestorName: inviteName.trim(),
+        landlordName,
+        propertyCount: invitePropertyIds.size,
+      });
+
+      setInviteSent(true);
+      setTimeout(() => {
+        setShowInviteModal(false);
+        setInviteEmail('');
+        setInviteName('');
+        setInvitePropertyIds(new Set());
+        setInvitePermission('lectura');
+        setInviteSent(false);
+        loadGestores();
+      }, 1800);
+    } catch (err) {
+      setInviteError('Error al enviar la invitación. Inténtalo de nuevo.');
+    } finally {
+      setInviteSending(false);
+    }
+  };
+
+  const handleRevoke = async (gestorEmail) => {
+    setRevokingEmail(gestorEmail);
+    await supabase
+      .from('property_access')
+      .delete()
+      .eq('gestor_email', gestorEmail)
+      .eq('landlord_email', userEmail);
+    setRevokingEmail(null);
+    loadGestores();
+  };
+
   // ── Carga inicial ─────────────────────────────────────────
   useEffect(() => {
+    loadGestores();
     async function load() {
       // Datos del usuario autenticado
       const { data: { user } } = await supabase.auth.getUser();
@@ -365,6 +497,90 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
         </div>
 
         {/* ════════════════════════════════════════
+            SECCIÓN 2b — Gestores
+        ════════════════════════════════════════ */}
+        <div>
+          <p className="settings-section-label">Gestores</p>
+          <div className="settings-card">
+
+            {/* Lista de gestores actuales */}
+            {gestores.length === 0 ? (
+              <div className="settings-card-row" style={{ opacity: 0.5, pointerEvents: 'none' }}>
+                <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <rect x="2" y="7" width="20" height="14" rx="2" stroke="#aaa" strokeWidth="2"/>
+                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content">
+                  <p className="settings-row-title" style={{ color: '#aaa' }}>Sin gestores</p>
+                  <p className="settings-row-subtitle">Invita a alguien para delegar</p>
+                </div>
+              </div>
+            ) : (
+              gestores.map(g => (
+                <div key={g.email} className="settings-card-row" style={{ alignItems: 'flex-start' }}>
+                  <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="7" r="4" stroke="#555" strokeWidth="2"/>
+                    </svg>
+                  </div>
+                  <div className="settings-row-content" style={{ flex: 1 }}>
+                    <p className="settings-row-title">{g.name}</p>
+                    <p className="settings-row-subtitle">{g.email}</p>
+                    <p className="settings-row-subtitle" style={{ marginTop: 2 }}>
+                      {g.propertyIds.length} {g.propertyIds.length === 1 ? 'propiedad' : 'propiedades'} ·{' '}
+                      <span style={{ color: g.permisos === 'gestion' ? '#16a34a' : '#555' }}>
+                        {g.permisos === 'gestion' ? 'Gestión completa' : 'Solo lectura'}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRevoke(g.email)}
+                    disabled={revokingEmail === g.email}
+                    style={{
+                      background: 'none', border: '1px solid #ffcdd2', borderRadius: '8px',
+                      color: '#c0392b', fontSize: '12px', fontWeight: 600, padding: '5px 10px',
+                      cursor: 'pointer', flexShrink: 0, marginTop: 2,
+                      opacity: revokingEmail === g.email ? 0.5 : 1,
+                    }}
+                  >
+                    {revokingEmail === g.email ? 'Revocando…' : 'Revocar'}
+                  </button>
+                </div>
+              ))
+            )}
+
+            {/* Separador */}
+            {gestores.length > 0 && <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />}
+
+            {/* Botón invitar */}
+            <button
+              className="settings-card-row"
+              style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+              onClick={() => { setShowInviteModal(true); setInviteError(''); setInviteSent(false); }}
+            >
+              <div className="settings-row-icon" style={{ background: '#111' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2"/>
+                  <line x1="19" y1="8" x2="19" y2="14" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                  <line x1="16" y1="11" x2="22" y2="11" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div className="settings-row-content">
+                <p className="settings-row-title">Invitar gestor</p>
+                <p className="settings-row-subtitle">Da acceso a alguien de confianza</p>
+              </div>
+              <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════
             SECCIÓN 3 — Plan
         ════════════════════════════════════════ */}
         <div>
@@ -552,6 +768,151 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
           </button>
         </div>
       </div>
+
+      {/* ════════════════════════════════════════
+          MODAL — Invitar gestor
+      ════════════════════════════════════════ */}
+      {showInviteModal && (
+        <div className="settings-modal-overlay" onClick={() => !inviteSending && setShowInviteModal(false)}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
+            <p className="settings-modal-title">Invitar gestor</p>
+
+            {inviteSent ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <p style={{ margin: 0, fontWeight: 700, color: '#111' }}>Invitación enviada</p>
+                <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#888' }}>Se ha notificado a {inviteEmail}</p>
+              </div>
+            ) : (
+              <>
+                {/* Email */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 5 }}>Email del gestor</label>
+                  <input
+                    className="settings-modal-input"
+                    type="email"
+                    placeholder="gestor@ejemplo.com"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    disabled={inviteSending}
+                  />
+                </div>
+
+                {/* Nombre */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 5 }}>Nombre del gestor</label>
+                  <input
+                    className="settings-modal-input"
+                    type="text"
+                    placeholder="Nombre completo"
+                    value={inviteName}
+                    onChange={e => setInviteName(e.target.value)}
+                    disabled={inviteSending}
+                  />
+                </div>
+
+                {/* Propiedades */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Propiedades con acceso</label>
+                  {ownerProperties.length === 0 ? (
+                    <p style={{ fontSize: '13px', color: '#aaa', margin: 0 }}>No tienes propiedades aún.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {ownerProperties.map(prop => {
+                        const checked = invitePropertyIds.has(prop.id);
+                        return (
+                          <button
+                            key={prop.id}
+                            type="button"
+                            onClick={() => {
+                              const next = new Set(invitePropertyIds);
+                              if (checked) next.delete(prop.id); else next.add(prop.id);
+                              setInvitePropertyIds(next);
+                            }}
+                            disabled={inviteSending}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              background: checked ? '#f0f0f0' : 'white',
+                              border: `1px solid ${checked ? '#ccc' : '#e5e5e5'}`,
+                              borderRadius: 10, padding: '9px 12px', cursor: 'pointer', textAlign: 'left',
+                            }}
+                          >
+                            <div style={{
+                              width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                              border: `2px solid ${checked ? '#111' : '#ccc'}`,
+                              background: checked ? '#111' : 'white',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              {checked && (
+                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                                  <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: '#111' }}>{prop.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Permisos */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Permisos</label>
+                  <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e5e5' }}>
+                    {[
+                      { value: 'lectura', label: 'Solo lectura' },
+                      { value: 'gestion', label: 'Gestión completa' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setInvitePermission(opt.value)}
+                        disabled={inviteSending}
+                        style={{
+                          flex: 1, padding: '10px 4px', border: 'none', cursor: 'pointer',
+                          fontSize: '12px', fontWeight: 600,
+                          background: invitePermission === opt.value ? '#111' : 'white',
+                          color: invitePermission === opt.value ? 'white' : '#555',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {inviteError && (
+                  <p style={{ color: '#c0392b', fontSize: '13px', margin: '0 0 12px', textAlign: 'center' }}>{inviteError}</p>
+                )}
+
+                <button
+                  className="settings-modal-btn-primary"
+                  onClick={handleInvite}
+                  disabled={inviteSending || ownerProperties.length === 0}
+                >
+                  {inviteSending ? (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <div className="settings-spinner" />
+                      Enviando…
+                    </span>
+                  ) : 'Enviar invitación'}
+                </button>
+                {!inviteSending && (
+                  <button className="settings-modal-btn-cancel" onClick={() => setShowInviteModal(false)}>
+                    Cancelar
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════════════════════════
           MODAL — Cambiar a inquilino

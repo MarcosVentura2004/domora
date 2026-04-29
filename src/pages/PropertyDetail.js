@@ -228,7 +228,7 @@ function ExpenseMenu({ expenseId, openMenuId, setOpenMenuId, onEdit, onDelete })
   );
 }
 
-function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
+function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = false }) {
   const [expenses, setExpenses] = useState([]);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -853,8 +853,8 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
       <div className="detail-header">
         <button className="back-button" onClick={onBack}>←</button>
         <h1 className="detail-title">{property.name}</h1>
-        <button className="detail-options" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>
-        {showOptionsMenu && (
+        {!readOnly && <button className="detail-options" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>}
+        {!readOnly && showOptionsMenu && (
           <div className="detail-options-menu">
             <button onClick={() => { setShowEditModal(true); setShowOptionsMenu(false); }} className="detail-option-item">Editar propiedad</button>
             {tenants.map(t => (
@@ -1108,7 +1108,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
                       </div>
                     )}
 
-                    {(tenantStatus === 'pending' || tenantStatus === 'overdue' || tenantStatus === 'not_yet') && (
+                    {!readOnly && (tenantStatus === 'pending' || tenantStatus === 'overdue' || tenantStatus === 'not_yet') && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small full-width" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: tenant.amount })}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -1272,10 +1272,10 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail }) {
             {visibleExpenses.length > 0 && (
               <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
             )}
-            <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
+            {!readOnly && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
           </div>
         )}
-        {!showExpenses && (
+        {!showExpenses && !readOnly && (
           <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
         )}
       </div>
