@@ -9,7 +9,7 @@ function Welcome({ onSelectUserType }) {
           <img src="/images/house-logo.png" alt="Logo" className="house-icon" />
         </div>
 
-        <h1 className="app-name">Domora</h1>
+        <h1 className="app-name">Domio</h1>
         <p className="tagline">Gestiona tus alquileres sin complicaciones.</p>
 
         <div className="user-type-cards">

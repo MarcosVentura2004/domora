@@ -933,7 +933,7 @@ function ReportModal({ properties, onClose }) {
       const addPage = () => {
         // Nota legal en cada página
         doc.setFontSize(6.5); doc.setTextColor(180); doc.setFont('helvetica', 'italic');
-        doc.text('Documento informativo generado por Domora. No constituye asesoramiento fiscal ni tiene validez legal ante la Agencia Tributaria.', 14, 291);
+        doc.text('Documento informativo generado por Domio. No constituye asesoramiento fiscal ni tiene validez legal ante la Agencia Tributaria.', 14, 291);
         doc.addPage(); y = 20;
       };
       const checkSpace = (needed) => { if (y + needed > 280) addPage(); };
@@ -943,7 +943,7 @@ function ReportModal({ properties, onClose }) {
         doc.rect(0, 0, pageW, 38, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-        doc.text('Domora', 14, 16);
+        doc.text('Domio', 14, 16);
         doc.setFontSize(10); doc.setFont('helvetica', 'normal');
         doc.text(`Reporte Fiscal ${selectedYear}`, 14, 26);
         doc.setFontSize(8); doc.setTextColor(170, 170, 170);
@@ -1190,7 +1190,7 @@ function ReportModal({ properties, onClose }) {
 
       // Nota legal final
       doc.setFontSize(6.5); doc.setTextColor(170); doc.setFont('helvetica', 'italic');
-      doc.text('Documento informativo generado por Domora. No constituye asesoramiento fiscal ni tiene validez legal ante la Agencia Tributaria.', 14, 291);
+      doc.text('Documento informativo generado por Domio. No constituye asesoramiento fiscal ni tiene validez legal ante la Agencia Tributaria.', 14, 291);
 
       doc.save(`reporte_fiscal_${selectedYear}.pdf`);
     });
@@ -1335,7 +1335,7 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onC
       doc.rect(0, 0, pageW, 38, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-      doc.text('Domora', 14, 16);
+      doc.text('Domio', 14, 16);
       doc.setFontSize(10); doc.setFont('helvetica', 'normal');
       doc.text('Informe de Rentabilidad', 14, 26);
       doc.setFontSize(8); doc.setTextColor(170, 170, 170);
@@ -1409,7 +1409,7 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onC
 
       // Nota legal
       doc.setFontSize(6.5); doc.setTextColor(170); doc.setFont('helvetica', 'italic');
-      doc.text('Documento informativo generado por Domora. No constituye asesoramiento financiero.', 14, 291);
+      doc.text('Documento informativo generado por Domio. No constituye asesoramiento financiero.', 14, 291);
 
       doc.save(`rentabilidad_${(property.name || 'propiedad').replace(/\s+/g, '_')}.pdf`);
     });

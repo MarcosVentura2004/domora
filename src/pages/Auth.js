@@ -169,7 +169,7 @@ function Auth({ onLogin, onBack }) {
         <button className="back-arrow" onClick={backTarget[step]}>
           ← Volver
         </button>
-        <h1 className="auth-logo">Domora</h1>
+        <h1 className="auth-logo">Domio</h1>
 
         <div className="auth-form">
           {error && <p className="auth-error">{error}</p>}
