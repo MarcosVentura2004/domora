@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './Dashboard.css';
 import { supabase } from '../supabaseClient';
 import PropertyDetail from './PropertyDetail';
@@ -6,6 +6,7 @@ import VacationalDetail from './VacationalDetail';
 import GeneralPanel from './GeneralPanel';
 import ChatConversation from './ChatConversation';
 import Settings from './Settings';
+import Dashboard from './Dashboard';
 import { getFile } from '../utils/fileStorage';
 
 // ── Iconos de estado ───────────────────────────────────────────────────────
@@ -189,9 +190,14 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   const [tenantMeta, setTenantMeta] = useState({});
   const [metaTick, setMetaTick] = useState(0);
 
+  const [hasOwnProperties, setHasOwnProperties] = useState(null); // null = aún cargando
+  const [mainTab, setMainTab] = useState('gestion'); // 'gestion' | 'mis_propiedades'
+
   const [gestorAvatarUrl, setGestorAvatarUrl] = useState(null);
-  const [gestorAvatarValid, setGestorAvatarValid] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  const tabHeaderRef = useRef(null);
+  const [tabHeaderHeight, setTabHeaderHeight] = useState(106);
 
   const [showPropertySearch, setShowPropertySearch] = useState(false);
   const [propertySearch, setPropertySearch] = useState('');
@@ -219,6 +225,26 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setActiveTab('general');
   };
 
+  const switchMainTab = (tab) => {
+    setMainTab(tab);
+    setSelectedLandlord(null);
+    setViewingEntry(null);
+    setChatWith(null);
+    setSelectedCategory(null);
+    setActiveTab('general');
+  };
+
+  // Medir la altura real del header con pestañas para posicionar el contenedor de Dashboard
+  useEffect(() => {
+    if (!tabHeaderRef.current) return;
+    const observer = new ResizeObserver(() => {
+      if (tabHeaderRef.current) setTabHeaderHeight(tabHeaderRef.current.offsetHeight);
+    });
+    observer.observe(tabHeaderRef.current);
+    setTabHeaderHeight(tabHeaderRef.current.offsetHeight);
+    return () => observer.disconnect();
+  }, [hasOwnProperties, mainTab]);
+
   // ── Carga inicial ────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
@@ -234,11 +260,18 @@ export default function GestorDashboard({ userEmail, onLogout }) {
       const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
       if (localAvatar) {
         setGestorAvatarUrl(localAvatar);
-        setGestorAvatarValid(true);
       } else {
         const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(`${userEmail}/avatar`);
         if (urlData?.publicUrl) setGestorAvatarUrl(urlData.publicUrl + '?t=1');
       }
+
+      // Comprobar si el gestor también tiene propiedades propias como propietario
+      const { data: ownPropsData } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('landlord_email', userEmail)
+        .limit(1);
+      setHasOwnProperties((ownPropsData || []).length > 0);
 
       const { data: accessRows, error } = await supabase
         .from('property_access')
@@ -397,35 +430,115 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     );
   }
 
+  // ── Modo "Mis propiedades" — Dashboard completo del propietario ──────────
+  if (mainTab === 'mis_propiedades' && hasOwnProperties) {
+    return (
+      <div>
+        {/* Header fijo con pestañas */}
+        <div
+          ref={tabHeaderRef}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000,
+            background: 'white', borderBottom: '1px solid #f0f0f0',
+          }}
+        >
+          <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>{gestorName || userEmail}</p>
+              <p style={{ margin: 0, fontSize: 12, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
+            </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+              aria-label="Ajustes"
+            >
+              <LandlordAvatar email={userEmail} name={gestorName} avatarUrl={gestorAvatarUrl} size={36} />
+            </button>
+          </div>
+          <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
+            <button
+              onClick={() => switchMainTab('mis_propiedades')}
+              style={{
+                flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, color: '#111',
+                borderBottom: '2px solid #111',
+              }}
+            >
+              Mis propiedades
+            </button>
+            <button
+              onClick={() => switchMainTab('gestion')}
+              style={{
+                flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 500, color: '#aaa',
+                borderBottom: '2px solid transparent',
+              }}
+            >
+              Gestión
+            </button>
+          </div>
+        </div>
+
+        {/* Dashboard en contenedor desplazable que empieza bajo el header */}
+        <div style={{
+          position: 'fixed', top: tabHeaderHeight, left: 0, right: 0, bottom: 0,
+          overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+        }}>
+          <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} />
+        </div>
+      </div>
+    );
+  }
+
   // ── Pantalla de selección de propietario ─────────────────────────────────
   if (!selectedLandlord) {
     return (
       <div style={{ minHeight: '100vh', background: '#f7f8fa' }}>
         {/* Header */}
         <div style={{
-          background: 'white', padding: '16px 20px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: 'white',
           borderBottom: '1px solid #f0f0f0',
           position: 'sticky', top: 0, zIndex: 100,
         }}>
-          <div>
-            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>
-              {gestorName || userEmail}
-            </p>
-            <p style={{ margin: 0, fontSize: 12, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
+          <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>
+                {gestorName || userEmail}
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
+            </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+              aria-label="Ajustes"
+            >
+              <LandlordAvatar email={userEmail} name={gestorName} avatarUrl={gestorAvatarUrl} size={38} />
+            </button>
           </div>
-          <button
-            onClick={() => setShowSettings(true)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
-            aria-label="Ajustes"
-          >
-            <LandlordAvatar
-              email={userEmail}
-              name={gestorName}
-              avatarUrl={gestorAvatarUrl}
-              size={38}
-            />
-          </button>
+          {hasOwnProperties && (
+            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
+              <button
+                onClick={() => switchMainTab('mis_propiedades')}
+                style={{
+                  flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 500, color: '#aaa',
+                  borderBottom: '2px solid transparent',
+                }}
+              >
+                Mis propiedades
+              </button>
+              <button
+                onClick={() => switchMainTab('gestion')}
+                style={{
+                  flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 700, color: '#111',
+                  borderBottom: '2px solid #111',
+                }}
+              >
+                Gestión
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Título */}
