@@ -15,7 +15,7 @@ function formatPhone(raw) {
   return digits.match(/.{1,3}/g)?.join(' ') ?? '';
 }
 
-export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) {
+export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, role = 'landlord' }) {
   // ── Perfil ──────────────────────────────────────────────
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
@@ -155,7 +155,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
 
   // ── Carga inicial ─────────────────────────────────────────
   useEffect(() => {
-    loadGestores();
+    if (role !== 'gestor') loadGestores();
     async function load() {
       // Datos del usuario autenticado
       const { data: { user } } = await supabase.auth.getUser();
@@ -164,17 +164,27 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
         setProfilePhone(formatPhone(user.user_metadata.phone || ''));
       }
 
-      // Datos de la tabla landlords (plan, nombre, teléfono)
-      const { data: landlord } = await supabase
-        .from('landlords')
-        .select('name, phone, plan')
-        .eq('email', userEmail)
-        .single();
+      if (role === 'gestor') {
+        // Datos de la tabla gestores
+        const { data: gestor } = await supabase
+          .from('gestores')
+          .select('name')
+          .eq('email', userEmail)
+          .single();
+        if (gestor?.name) setProfileName(gestor.name);
+      } else {
+        // Datos de la tabla landlords (plan, nombre, teléfono)
+        const { data: landlord } = await supabase
+          .from('landlords')
+          .select('name, phone, plan')
+          .eq('email', userEmail)
+          .single();
 
-      if (landlord) {
-        if (landlord.name) setProfileName(landlord.name);
-        if (landlord.phone) setProfilePhone(formatPhone(landlord.phone));
-        setPlan(landlord.plan || 'free');
+        if (landlord) {
+          if (landlord.name) setProfileName(landlord.name);
+          if (landlord.phone) setProfilePhone(formatPhone(landlord.phone));
+          setPlan(landlord.plan || 'free');
+        }
       }
 
       // Avatar: primero IndexedDB (local, siempre disponible)
@@ -245,11 +255,18 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
     if (emailChanged) updatePayload.email = emailTrimmed;
     await supabase.auth.updateUser(updatePayload);
 
-    // Actualizar tabla landlords
-    await supabase.from('landlords').upsert(
-      { email: userEmail, name: profileName.trim(), phone: profilePhone.trim() },
-      { onConflict: 'email' }
-    );
+    // Actualizar tabla según rol
+    if (role === 'gestor') {
+      await supabase.from('gestores').upsert(
+        { email: userEmail, name: profileName.trim() },
+        { onConflict: 'email' }
+      );
+    } else {
+      await supabase.from('landlords').upsert(
+        { email: userEmail, name: profileName.trim(), phone: profilePhone.trim() },
+        { onConflict: 'email' }
+      );
+    }
 
     setProfileSaving(false);
     if (emailChanged) {
@@ -421,9 +438,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
         />
 
         {/* ════════════════════════════════════════
-            SECCIÓN 2 — Cambiar rol
+            SECCIÓN 2 — Cambiar rol (solo propietario)
         ════════════════════════════════════════ */}
-        <div>
+        {role !== 'gestor' && <div>
           <p className="settings-section-label">Rol</p>
           <div className="settings-card">
             {/* Propietario — activo */}
@@ -479,12 +496,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
               <span className="settings-row-badge">Próximamente</span>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* ════════════════════════════════════════
-            SECCIÓN 2b — Gestores
+            SECCIÓN 2b — Gestores (solo propietario)
         ════════════════════════════════════════ */}
-        <div>
+        {role !== 'gestor' && <div>
           <p className="settings-section-label">Gestores</p>
           <div className="settings-card">
 
@@ -563,12 +580,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
               </svg>
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* ════════════════════════════════════════
-            SECCIÓN 3 — Plan
+            SECCIÓN 3 — Plan (solo propietario)
         ════════════════════════════════════════ */}
-        <div>
+        {role !== 'gestor' && <div>
           <p className="settings-section-label">Plan</p>
           <div className="settings-card">
             <div className="settings-card-row" style={{ alignItems: 'flex-start', paddingBottom: plan === 'pro' ? 14 : 10 }}>
@@ -619,7 +636,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack }) 
               </>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* ════════════════════════════════════════
             SECCIÓN 4 — Seguridad

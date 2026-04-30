@@ -5,6 +5,8 @@ import PropertyDetail from './PropertyDetail';
 import VacationalDetail from './VacationalDetail';
 import GeneralPanel from './GeneralPanel';
 import ChatConversation from './ChatConversation';
+import Settings from './Settings';
+import { getFile } from '../utils/fileStorage';
 
 // ── Iconos de estado ───────────────────────────────────────────────────────
 function getPropertyIcon(status, size = 48) {
@@ -187,6 +189,10 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   const [tenantMeta, setTenantMeta] = useState({});
   const [metaTick, setMetaTick] = useState(0);
 
+  const [gestorAvatarUrl, setGestorAvatarUrl] = useState(null);
+  const [gestorAvatarValid, setGestorAvatarValid] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
   const [showPropertySearch, setShowPropertySearch] = useState(false);
   const [propertySearch, setPropertySearch] = useState('');
   const [showChatSearch, setShowChatSearch] = useState(false);
@@ -224,6 +230,15 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         .eq('email', userEmail)
         .single();
       setGestorName(gestorRow?.name || userEmail);
+
+      const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
+      if (localAvatar) {
+        setGestorAvatarUrl(localAvatar);
+        setGestorAvatarValid(true);
+      } else {
+        const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(`${userEmail}/avatar`);
+        if (urlData?.publicUrl) setGestorAvatarUrl(urlData.publicUrl + '?t=1');
+      }
 
       const { data: accessRows, error } = await supabase
         .from('property_access')
@@ -328,6 +343,18 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setViewingEntry(prev => prev ? { ...prev, property: updatedProperty } : null);
   };
 
+  // ── Ajustes del gestor ───────────────────────────────────────────────────
+  if (showSettings) {
+    return (
+      <Settings
+        userEmail={userEmail}
+        onBack={() => setShowSettings(false)}
+        onLogout={onLogout}
+        role="gestor"
+      />
+    );
+  }
+
   // ── Vista de detalle de propiedad ────────────────────────────────────────
   if (viewingEntry) {
     const { property, permisos, landlordEmail } = viewingEntry;
@@ -377,31 +404,27 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         {/* Header */}
         <div style={{
           background: 'white', padding: '16px 20px',
-          display: 'flex', alignItems: 'center', gap: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           borderBottom: '1px solid #f0f0f0',
           position: 'sticky', top: 0, zIndex: 100,
         }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%', background: '#111',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
-          }}>
-            {(gestorName || userEmail || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-          </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111', lineHeight: 1.2 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>
               {gestorName || userEmail}
             </p>
-            <p style={{ margin: 0, fontSize: 11, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
+            <p style={{ margin: 0, fontSize: 12, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
           </div>
           <button
-            onClick={onLogout}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: '#aaa' }}
+            onClick={() => setShowSettings(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+            aria-label="Ajustes"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8"/>
-              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-            </svg>
+            <LandlordAvatar
+              email={userEmail}
+              name={gestorName}
+              avatarUrl={gestorAvatarUrl}
+              size={38}
+            />
           </button>
         </div>
 
