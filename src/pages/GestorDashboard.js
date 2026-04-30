@@ -54,6 +54,34 @@ function getPropertyIcon(status, size = 48) {
   );
 }
 
+// ── Avatar de propietario con fallback a iniciales ─────────────────────────
+function LandlordAvatar({ email, name, avatarUrl, size = 56 }) {
+  const [failed, setFailed] = useState(false);
+  const label = name && name !== email ? name : email;
+  const initials = label.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
+
+  if (avatarUrl && !failed) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={label}
+        onError={() => setFailed(true)}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: '#EBEBEB', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', fontSize: Math.round(size * 0.33),
+      fontWeight: 700, color: '#555', letterSpacing: '-0.5px',
+    }}>
+      {initials}
+    </div>
+  );
+}
+
 const CATEGORIES = [
   {
     key: 'en_alquiler',
@@ -148,6 +176,10 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ── Selección de propietario ─────────────────────────────────────────────
+  const [landlordsList, setLandlordsList] = useState([]); // [{ email, name, avatarUrl, propertyCount }]
+  const [selectedLandlord, setSelectedLandlord] = useState(null);
+
   const [activeTab, setActiveTab] = useState('general');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [viewingEntry, setViewingEntry] = useState(null); // { property, permisos, landlordEmail }
@@ -167,6 +199,18 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setPropertySearch('');
     setShowChatSearch(false);
     setChatSearch('');
+  };
+
+  const handleBackToLandlords = () => {
+    setSelectedLandlord(null);
+    setSelectedCategory(null);
+    setViewingEntry(null);
+    setChatWith(null);
+    setShowPropertySearch(false);
+    setPropertySearch('');
+    setShowChatSearch(false);
+    setChatSearch('');
+    setActiveTab('general');
   };
 
   // ── Carga inicial ────────────────────────────────────────────────────────
@@ -189,6 +233,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
       if (error || !accessRows || accessRows.length === 0) {
         setAccessMap({});
         setProperties([]);
+        setLandlordsList([]);
         setLoading(false);
         return;
       }
@@ -198,6 +243,33 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         map[r.property_id] = { permisos: r.permisos, landlordEmail: r.landlord_email };
       });
       setAccessMap(map);
+
+      // ── Construir lista de propietarios únicos ───────────────────────────
+      const uniqueEmails = [...new Set(accessRows.map(r => r.landlord_email))];
+
+      const { data: landlordRows } = await supabase
+        .from('landlords')
+        .select('email, name')
+        .in('email', uniqueEmails);
+
+      const landlordNameMap = {};
+      (landlordRows || []).forEach(l => {
+        landlordNameMap[l.email] = l.name;
+      });
+
+      const list = uniqueEmails.map(email => {
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(`${email}/avatar`);
+        return {
+          email,
+          name: landlordNameMap[email] || email,
+          avatarUrl: urlData?.publicUrl || null,
+          propertyCount: accessRows.filter(r => r.landlord_email === email).length,
+        };
+      });
+      setLandlordsList(list);
+      // ─────────────────────────────────────────────────────────────────────
 
       const ids = accessRows.map(r => r.property_id);
       const { data: propRows } = await supabase
@@ -243,7 +315,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
   // ── Actualizar propiedad (solo con permisos = 'gestion') ─────────────────
   const handleUpdateProperty = async (updatedProperty) => {
-    if (updatedProperty.deleted) return; // gestores no pueden eliminar propiedades
+    if (updatedProperty.deleted) return;
     const landlordEmail = accessMap[updatedProperty.id]?.landlordEmail;
     const { error } = await supabase.from('properties').upsert({
       id: updatedProperty.id,
@@ -282,9 +354,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     );
   }
 
-  const tenants = getGestorTenants(properties, accessMap);
-  const totalUnread = Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
-
   // ── Pantalla de carga ────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -301,21 +370,170 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     );
   }
 
+  // ── Pantalla de selección de propietario ─────────────────────────────────
+  if (!selectedLandlord) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f7f8fa' }}>
+        {/* Header */}
+        <div style={{
+          background: 'white', padding: '16px 20px',
+          display: 'flex', alignItems: 'center', gap: 12,
+          borderBottom: '1px solid #f0f0f0',
+          position: 'sticky', top: 0, zIndex: 100,
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%', background: '#111',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
+          }}>
+            {(gestorName || userEmail || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111', lineHeight: 1.2 }}>
+              {gestorName || userEmail}
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
+          </div>
+          <button
+            onClick={onLogout}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: '#aaa' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8"/>
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Título */}
+        <div style={{ padding: '28px 20px 8px' }}>
+          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '-0.4px' }}>
+            Propietarios
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#aaa' }}>
+            Selecciona el propietario que quieres gestionar
+          </p>
+        </div>
+
+        {/* Lista de propietarios */}
+        {landlordsList.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '80px 30px' }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%', background: '#f0f0f0',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="9" cy="7" r="4" stroke="#bbb" strokeWidth="2"/>
+              </svg>
+            </div>
+            <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#333' }}>Sin propietarios asignados</p>
+            <p style={{ margin: '8px 0 0', fontSize: 14, color: '#aaa', lineHeight: 1.5 }}>
+              Aún no tienes acceso a propiedades de ningún propietario.
+            </p>
+          </div>
+        ) : (
+          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {landlordsList.map(landlord => (
+              <button
+                key={landlord.email}
+                onClick={() => setSelectedLandlord(landlord)}
+                style={{
+                  width: '100%', background: 'white', border: 'none', borderRadius: 16,
+                  padding: '16px', display: 'flex', alignItems: 'center', gap: 14,
+                  cursor: 'pointer', textAlign: 'left',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                }}
+              >
+                <LandlordAvatar
+                  email={landlord.email}
+                  name={landlord.name}
+                  avatarUrl={landlord.avatarUrl}
+                  size={52}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {landlord.name !== landlord.email ? landlord.name : landlord.email}
+                  </p>
+                  {landlord.name !== landlord.email && (
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#aaa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {landlord.email}
+                    </p>
+                  )}
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: '#888' }}>
+                    {landlord.propertyCount} {landlord.propertyCount === 1 ? 'propiedad' : 'propiedades'}
+                  </p>
+                </div>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: '#ccc' }}>
+                  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ── Dashboard filtrado por propietario seleccionado ──────────────────────
+  const filteredProperties = properties.filter(p => p.landlord_email === selectedLandlord.email);
+  const tenants = getGestorTenants(filteredProperties, accessMap);
+  const totalUnread = Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
+
+  // Botón Volver reutilizable
+  const BackButton = () => (
+    <button
+      onClick={handleBackToLandlords}
+      style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '4px 0', color: '#111', fontSize: 14, fontWeight: 500,
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      Volver
+    </button>
+  );
+
   return (
     <div style={{ position: 'relative', minHeight: '100vh' }}>
 
       {/* ── Tab: Resumen ── */}
       {activeTab === 'general' && (
-        <GeneralPanel
-          properties={properties}
-          userEmail={userEmail}
-          onNavigateToProperties={() => switchTab('properties')}
-          onOpenSettings={onLogout}
-          avatarUrl={null}
-          avatarValid={false}
-          onAvatarLoad={() => {}}
-          onAvatarError={() => {}}
-        />
+        <>
+          {/* Barra "Volver" encima de GeneralPanel */}
+          <div style={{
+            background: 'white', borderBottom: '1px solid #f0f0f0',
+            padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10,
+            position: 'sticky', top: 0, zIndex: 200,
+          }}>
+            <BackButton />
+            <div style={{ flex: 1 }} />
+            <LandlordAvatar
+              email={selectedLandlord.email}
+              name={selectedLandlord.name}
+              avatarUrl={selectedLandlord.avatarUrl}
+              size={28}
+            />
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {selectedLandlord.name !== selectedLandlord.email ? selectedLandlord.name : selectedLandlord.email}
+            </p>
+          </div>
+          <GeneralPanel
+            properties={filteredProperties}
+            userEmail={userEmail}
+            onNavigateToProperties={() => switchTab('properties')}
+            onOpenSettings={onLogout}
+            avatarUrl={null}
+            avatarValid={false}
+            onAvatarLoad={() => {}}
+            onAvatarError={() => {}}
+          />
+        </>
       )}
 
       {/* ── Tab: Propiedades ── */}
@@ -326,22 +544,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
             <>
               {/* Header nivel 1 */}
               <div className="dashboard-header">
-                {/* Avatar/perfil del gestor */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: '50%', background: '#111',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
-                  }}>
-                    {(gestorName || userEmail || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111', lineHeight: 1.2 }}>
-                      {gestorName || userEmail}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 11, color: '#aaa', lineHeight: 1.2 }}>Gestor</p>
-                  </div>
-                </div>
+                <BackButton />
 
                 <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Propiedades</span>
 
@@ -354,6 +557,19 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                     <path d="M20 20l-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                 </button>
+              </div>
+
+              {/* Etiqueta propietario seleccionado */}
+              <div style={{ padding: '0 20px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <LandlordAvatar
+                  email={selectedLandlord.email}
+                  name={selectedLandlord.name}
+                  avatarUrl={selectedLandlord.avatarUrl}
+                  size={22}
+                />
+                <p style={{ margin: 0, fontSize: 12, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedLandlord.name !== selectedLandlord.email ? selectedLandlord.name : selectedLandlord.email}
+                </p>
               </div>
 
               {/* Barra de búsqueda */}
@@ -390,7 +606,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                 /* Resultados de búsqueda */
                 <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {(() => {
-                    const results = properties.filter(p =>
+                    const results = filteredProperties.filter(p =>
                       p.name.toLowerCase().includes(propertySearch.toLowerCase())
                     );
                     if (results.length === 0) {
@@ -453,7 +669,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               ) : (
                 /* Cuadrícula 2x2 de categorías */
                 <div className="category-grid-wrapper">
-                  {properties.length === 0 ? (
+                  {filteredProperties.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '80px 30px' }}>
                       <div style={{
                         width: 72, height: 72, borderRadius: '50%', background: '#f0f0f0',
@@ -472,7 +688,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                   ) : (
                     <div className="category-grid">
                       {CATEGORIES.map(cat => {
-                        const count = properties.filter(p => cat.statuses.includes(p.status)).length;
+                        const count = filteredProperties.filter(p => cat.statuses.includes(p.status)).length;
                         return (
                           <button
                             key={cat.key}
@@ -512,7 +728,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               </div>
 
               {(() => {
-                const catProperties = properties.filter(p => selectedCategory.statuses.includes(p.status));
+                const catProperties = filteredProperties.filter(p => selectedCategory.statuses.includes(p.status));
                 if (catProperties.length === 0) {
                   return (
                     <div className="empty-state">
@@ -596,12 +812,13 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           <div style={{ minHeight: '100vh', background: '#f7f8fa', paddingBottom: '80px' }}>
             {/* Header */}
             <div style={{
-              background: 'white', padding: '16px 20px',
+              background: 'white', padding: '12px 20px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               position: 'sticky', top: 0, zIndex: 100,
               borderBottom: '1px solid #f0f0f0',
             }}>
-              <span style={{ fontWeight: 700, fontSize: '20px', color: '#111', letterSpacing: '-0.3px' }}>Mensajes</span>
+              <BackButton />
+              <span style={{ fontWeight: 700, fontSize: '17px', color: '#111', letterSpacing: '-0.3px' }}>Mensajes</span>
               <button
                 onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(''); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
