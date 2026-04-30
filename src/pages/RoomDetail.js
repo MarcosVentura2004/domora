@@ -508,7 +508,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
           status: 'confirmed',
           confirmed_at: confirmedAt,
           marked_at: confirmedAt,
-          landlord_email: landlordEmail,
+          landlord_email: property.landlord_email || landlordEmail,
         })
         .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
       console.log('[RoomDetail handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });

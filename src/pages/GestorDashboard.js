@@ -202,10 +202,12 @@ export default function GestorDashboard({ userEmail, onLogout }) {
       const ids = accessRows.map(r => r.property_id);
       const { data: propRows } = await supabase
         .from('properties')
-        .select('id, data')
+        .select('id, landlord_email, data')
         .in('id', ids);
 
-      const props = (propRows || []).map(r => r.data).filter(Boolean);
+      const props = (propRows || [])
+        .map(r => r.data ? { ...r.data, landlord_email: r.landlord_email } : null)
+        .filter(Boolean);
       setProperties(props);
       setLoading(false);
     }

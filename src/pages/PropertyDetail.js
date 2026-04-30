@@ -481,7 +481,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           status: 'confirmed',
           confirmed_at: confirmedAt,
           marked_at: confirmedAt,
-          landlord_email: landlordEmail,
+          landlord_email: property.landlord_email || landlordEmail,
         })
         .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
       console.log('[handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });
