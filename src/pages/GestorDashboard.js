@@ -431,7 +431,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   }
 
   // ── Modo "Mis propiedades" — Dashboard completo del propietario ──────────
-  if (mainTab === 'mis_propiedades' && hasOwnProperties) {
+  if (mainTab === 'mis_propiedades') {
     return (
       <div>
         {/* Header fijo con pestañas */}
@@ -515,30 +515,28 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               <LandlordAvatar email={userEmail} name={gestorName} avatarUrl={gestorAvatarUrl} size={38} />
             </button>
           </div>
-          {hasOwnProperties && (
-            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
-              <button
-                onClick={() => switchMainTab('mis_propiedades')}
-                style={{
-                  flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 500, color: '#aaa',
-                  borderBottom: '2px solid transparent',
-                }}
-              >
-                Mis propiedades
-              </button>
-              <button
-                onClick={() => switchMainTab('gestion')}
-                style={{
-                  flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 700, color: '#111',
-                  borderBottom: '2px solid #111',
-                }}
-              >
-                Gestión
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
+            <button
+              onClick={() => switchMainTab('mis_propiedades')}
+              style={{
+                flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 500, color: '#aaa',
+                borderBottom: '2px solid transparent',
+              }}
+            >
+              Mis propiedades
+            </button>
+            <button
+              onClick={() => switchMainTab('gestion')}
+              style={{
+                flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, color: '#111',
+                borderBottom: '2px solid #111',
+              }}
+            >
+              Gestión
+            </button>
+          </div>
         </div>
 
         {/* Título */}
