@@ -482,9 +482,11 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         {/* Dashboard en contenedor desplazable que empieza bajo el header */}
         <div style={{
           position: 'fixed', top: tabHeaderHeight, left: 0, right: 0, bottom: 0,
-          overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+          overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
         }}>
-          <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} />
+          <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} hideHeader={true} />
+          </div>
         </div>
       </div>
     );
@@ -1099,6 +1101,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           currentRole="landlord"
           isGroup={chatWith.isGroup || false}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
+          currentUserEmail={userEmail}
         />
       )}
 

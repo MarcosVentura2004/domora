@@ -108,32 +108,35 @@ function AttachmentView({ msg, isMe }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack }) {
+export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack, currentUserEmail }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [landlordAvatarUrl, setLandlordAvatarUrl] = useState(null);
   const [landlordAvatarValid, setLandlordAvatarValid] = useState(false);
 
-  // Cargar avatar del propietario (IndexedDB primero, Supabase Storage como fallback)
+  // currentUserEmail es el usuario autenticado (gestor o propietario). Si no se pasa, se usa landlordEmail.
+  const avatarEmail = currentUserEmail || landlordEmail;
+
+  // Cargar avatar del usuario autenticado (IndexedDB primero, Supabase Storage como fallback)
   useEffect(() => {
-    if (!landlordEmail) return;
-    getFile(`avatar_${landlordEmail}`)
+    if (!avatarEmail) return;
+    getFile(`avatar_${avatarEmail}`)
       .then(local => {
         if (local) {
           setLandlordAvatarUrl(local);
           setLandlordAvatarValid(true);
         } else {
-          const { data } = supabase.storage.from('avatars').getPublicUrl(`${landlordEmail}/avatar`);
+          const { data } = supabase.storage.from('avatars').getPublicUrl(`${avatarEmail}/avatar`);
           if (data?.publicUrl) setLandlordAvatarUrl(data.publicUrl + '?t=1');
         }
       })
       .catch(() => {});
-  }, [landlordEmail]);
+  }, [avatarEmail]);
 
   const [text, setText] = useState('');
   const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
   const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
   // Load messages on mount
@@ -172,7 +175,10 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
 
   // Scroll to bottom on new message
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages]);
 
   async function loadMessages() {
@@ -328,7 +334,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div ref={messagesContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {loading && (
           <p style={{ textAlign: 'center', color: '#bbb', fontSize: '14px', marginTop: '60px' }}>Cargando...</p>
         )}
@@ -414,7 +420,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Pending file preview */}

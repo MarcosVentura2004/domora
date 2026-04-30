@@ -141,7 +141,7 @@ const CATEGORIES = [
   },
 ];
 
-function Dashboard({ userEmail, onLogout, onSwitchRole }) {
+function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader }) {
   const [properties, setProperties] = useState(() => {
     const saved = localStorage.getItem(`properties_${userEmail}`);
     return saved ? JSON.parse(saved) : [];
@@ -327,7 +327,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
   }
 
   return (
-    <div style={{ position: 'relative', minHeight: '100vh' }}>
+    <div style={{ position: 'relative', minHeight: hideHeader ? '100%' : '100vh' }}>
 
       {/* Panel General */}
       {activeTab === 'general' && (
@@ -340,6 +340,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
           avatarValid={avatarValid}
           onAvatarLoad={() => setAvatarValid(true)}
           onAvatarError={() => setAvatarValid(false)}
+          hideHeader={hideHeader}
         />
       )}
 
@@ -352,25 +353,29 @@ function Dashboard({ userEmail, onLogout, onSwitchRole }) {
             <>
               {/* Header nivel 1 */}
               <div className="dashboard-header">
-                <button className="profile-button" onClick={() => setShowSettings(true)}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {avatarUrl && (
-                      <img
-                        src={avatarUrl}
-                        alt=""
-                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: avatarValid ? 'block' : 'none' }}
-                        onLoad={() => setAvatarValid(true)}
-                        onError={() => setAvatarValid(false)}
-                      />
-                    )}
-                    {!avatarValid && (
-                      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                        <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
-                        <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
-                      </svg>
-                    )}
-                  </div>
-                </button>
+                {!hideHeader ? (
+                  <button className="profile-button" onClick={() => setShowSettings(true)}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {avatarUrl && (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: avatarValid ? 'block' : 'none' }}
+                          onLoad={() => setAvatarValid(true)}
+                          onError={() => setAvatarValid(false)}
+                        />
+                      )}
+                      {!avatarValid && (
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                          <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
+                          <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                ) : (
+                  <div style={{ width: 32 }} />
+                )}
                 <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Propiedades</span>
                 <button
                   onClick={() => { setShowPropertySearch(!showPropertySearch); setPropertySearch(''); }}
