@@ -108,7 +108,7 @@ function AttachmentView({ msg, isMe }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack, currentUserEmail }) {
+export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack, currentUserEmail, hideAvatar }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [landlordAvatarUrl, setLandlordAvatarUrl] = useState(null);
@@ -291,8 +291,8 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>←</button>
 
-        {/* Avatar en cabecera */}
-        {(() => {
+        {/* Avatar en cabecera — omitido cuando hideAvatar=true */}
+        {!hideAvatar && (() => {
           const showLandlordPhoto = !isGroup;
           const otherInitials = otherName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
           return (
@@ -313,14 +313,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 13, fontWeight: 700, color: isGroup ? 'white' : '#555',
                 }}>
-                  {isGroup ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2"/>
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  ) : otherInitials}
+                  {otherInitials}
                 </div>
               )}
             </div>

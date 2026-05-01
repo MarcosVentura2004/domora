@@ -69,7 +69,7 @@ function getMonthlyExpenses(property, supabaseExpenses) {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader }) {
+function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader, hideAvatar }) {
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showRentabilityModal, setShowRentabilityModal] = useState(false);
@@ -291,25 +291,29 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       {/* Header — oculto cuando está embebido dentro de otro componente con su propio header */}
       {!hideHeader && (
         <div className="dashboard-header">
-          <button className="profile-button" onClick={onOpenSettings}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {avatarUrl && (
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: avatarValid ? 'block' : 'none' }}
-                  onLoad={onAvatarLoad}
-                  onError={onAvatarError}
-                />
-              )}
-              {!avatarValid && (
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                  <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
-                  <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
-                </svg>
-              )}
-            </div>
-          </button>
+          {!hideAvatar ? (
+            <button className="profile-button" onClick={onOpenSettings}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {avatarUrl && (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: avatarValid ? 'block' : 'none' }}
+                    onLoad={onAvatarLoad}
+                    onError={onAvatarError}
+                  />
+                )}
+                {!avatarValid && (
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
+                    <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
+                  </svg>
+                )}
+              </div>
+            </button>
+          ) : (
+            <div style={{ width: 32 }} />
+          )}
           <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Resumen</span>
           <div style={{ position: 'relative' }}>
             <button className="options-button" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>

@@ -485,7 +485,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
         }}>
           <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} hideHeader={true} />
+            <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} hideHeader={true} chatHideAvatar={true} />
           </div>
         </div>
       </div>
@@ -668,6 +668,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
             avatarValid={false}
             onAvatarLoad={() => {}}
             onAvatarError={() => {}}
+            hideAvatar={true}
           />
         </>
       )}
@@ -1102,6 +1103,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           isGroup={chatWith.isGroup || false}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
           currentUserEmail={userEmail}
+          hideAvatar={true}
         />
       )}
 

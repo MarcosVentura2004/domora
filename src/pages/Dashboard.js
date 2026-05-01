@@ -141,7 +141,7 @@ const CATEGORIES = [
   },
 ];
 
-function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader }) {
+function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvatar }) {
   const [properties, setProperties] = useState(() => {
     const saved = localStorage.getItem(`properties_${userEmail}`);
     return saved ? JSON.parse(saved) : [];
@@ -1043,6 +1043,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader }) {
           currentRole="landlord"
           isGroup={chatWith.isGroup || false}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
+          hideAvatar={chatHideAvatar}
         />
       )}
 
