@@ -33,6 +33,16 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getInitials(nameOrEmail) {
+  if (!nameOrEmail) return '?';
+  return nameOrEmail
+    .split(' ')
+    .map(w => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
 
 // ─── Attachment renderer ──────────────────────────────────────────────────────
 function AttachmentView({ msg, isMe }) {
@@ -107,50 +117,148 @@ function AttachmentView({ msg, isMe }) {
   );
 }
 
+// ─── Mini-avatar para un mensaje entrante ────────────────────────────────────
+// cached: { url: string|null, name: string, loaded: boolean }
+// showLabel: mostrar nombre corto debajo del avatar
+function SenderAvatar({ cached, showLabel, onError }) {
+  const initials = getInitials(cached?.name);
+  const firstWord = (cached?.name || '').split(' ')[0];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0, width: 26 }}>
+      <div style={{ width: 26, height: 26, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+        {cached?.url ? (
+          <img
+            src={cached.url}
+            alt=""
+            onError={onError}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div style={{
+            width: '100%', height: '100%', background: '#e5e5e5',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 9, fontWeight: 700, color: '#666',
+          }}>
+            {initials}
+          </div>
+        )}
+      </div>
+      {showLabel && firstWord && (
+        <p style={{
+          margin: 0, fontSize: 9, color: '#bbb', fontWeight: 500,
+          maxWidth: 36, overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap', textAlign: 'center', lineHeight: 1.2,
+        }}>
+          {firstWord}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack, currentUserEmail }) {
+export default function ChatConversation({
+  landlordEmail,
+  propertyId,
+  roomId,
+  tenantId,
+  tenantName,
+  propertyName,
+  currentRole,
+  isGroup,
+  onBack,
+  currentUserEmail,
+}) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [landlordAvatarUrl, setLandlordAvatarUrl] = useState(null);
-  const [landlordAvatarValid, setLandlordAvatarValid] = useState(false);
 
-  // currentUserEmail es el usuario autenticado (gestor o propietario). Si no se pasa, se usa landlordEmail.
-  const avatarEmail = currentUserEmail || landlordEmail;
-
-  // Cargar avatar del usuario autenticado (IndexedDB primero, Supabase Storage como fallback)
-  // Se usa en los mini-avatares de mensajes entrantes, no en el header.
-  useEffect(() => {
-    if (!avatarEmail) return;
-    getFile(`avatar_${avatarEmail}`)
-      .then(local => {
-        if (local) {
-          setLandlordAvatarUrl(local);
-          setLandlordAvatarValid(true);
-        } else {
-          const { data } = supabase.storage.from('avatars').getPublicUrl(`${avatarEmail}/avatar`);
-          if (data?.publicUrl) setLandlordAvatarUrl(data.publicUrl + '?t=1');
-        }
-      })
-      .catch(() => {});
-  }, [avatarEmail]);
+  // avatarCache: { [email]: { url: string|null, name: string, loaded: boolean } }
+  const [avatarCache, setAvatarCache] = useState({});
+  const loadingEmails = useRef(new Set());
 
   const [text, setText] = useState('');
-  const [pendingFile, setPendingFile] = useState(null); // { file, preview, fileName, fileType, fileSize }
+  const [pendingFile, setPendingFile] = useState(null);
   const [sending, setSending] = useState(false);
   const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
-  // Load messages on mount
+  // ── Determina si un mensaje lo envió el usuario actual ──────────────────────
+  // Compara sender_id directamente para que gestor y propietario vean los
+  // mensajes del otro en el lado izquierdo con su avatar propio.
+  const myId = currentRole === 'landlord'
+    ? (currentUserEmail || landlordEmail)
+    : tenantId;
+
+  const isMe = (msg) => {
+    if (msg.sender !== currentRole) return false;
+    if (msg.sender_id != null) return String(msg.sender_id) === String(myId);
+    // Mensajes antiguos sin sender_id: asumir propios si el rol coincide
+    return true;
+  };
+
+  // ── Carga avatar para un email (landlord o gestor) ──────────────────────────
+  const ensureAvatarLoaded = async (email) => {
+    if (!email || avatarCache[email]?.loaded || loadingEmails.current.has(email)) return;
+    loadingEmails.current.add(email);
+
+    let url = null;
+    let name = email;
+
+    // 1. IndexedDB local
+    const local = await getFile(`avatar_${email}`).catch(() => null);
+    if (local) {
+      url = local;
+    } else {
+      // 2. Supabase Storage public URL
+      const { data: storageData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(`${email}/avatar`);
+      if (storageData?.publicUrl) url = storageData.publicUrl + '?t=1';
+    }
+
+    // 3. Nombre: primero en landlords, luego en gestores
+    const { data: landlordRow } = await supabase
+      .from('landlords')
+      .select('name')
+      .eq('email', email)
+      .maybeSingle();
+    if (landlordRow?.name) {
+      name = landlordRow.name;
+    } else {
+      const { data: gestorRow } = await supabase
+        .from('gestores')
+        .select('name')
+        .eq('email', email)
+        .maybeSingle();
+      if (gestorRow?.name) name = gestorRow.name;
+    }
+
+    setAvatarCache(prev => ({ ...prev, [email]: { url, name, loaded: true } }));
+  };
+
+  // ── Disparar carga de avatares cuando cambian los mensajes ──────────────────
+  useEffect(() => {
+    const senderIds = [
+      ...new Set(
+        messages
+          .filter(m => m.sender === 'landlord' && m.sender_id)
+          .map(m => m.sender_id)
+      ),
+    ];
+    senderIds.forEach(ensureAvatarLoaded);
+  }, [messages]); // eslint-disable-line
+
+  // ── Carga mensajes ──────────────────────────────────────────────────────────
   useEffect(() => {
     loadMessages();
   }, [landlordEmail, propertyId, roomId, tenantId]); // eslint-disable-line
 
-  // Mark as read once messages are loaded
+  // ── Marcar como leídos al cargar ────────────────────────────────────────────
   useEffect(() => {
     if (!loading) markAsRead();
   }, [loading]); // eslint-disable-line
 
-  // Real-time subscription
+  // ── Suscripción en tiempo real ──────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
       .channel(`chat:${landlordEmail}:${propertyId}:${roomId || tenantId}:${isGroup ? 'group' : 'individual'}`)
@@ -174,12 +282,10 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     return () => { supabase.removeChannel(channel); };
   }, [landlordEmail, propertyId, roomId, tenantId, currentRole, isGroup]); // eslint-disable-line
 
-  // Scroll to bottom on new message
+  // ── Scroll al último mensaje ────────────────────────────────────────────────
   useEffect(() => {
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTop = container.scrollHeight;
-    }
+    if (container) container.scrollTop = container.scrollHeight;
   }, [messages]);
 
   async function loadMessages() {
@@ -276,7 +382,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
     }
   };
 
-  const isMe = (sender) => sender === currentRole;
   const otherName = isGroup
     ? (currentRole === 'tenant' ? 'Chat del bloque' : 'Todos los inquilinos')
     : (currentRole === 'tenant' ? 'Propietario' : tenantName);
@@ -291,7 +396,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         borderBottom: '1px solid #eee', position: 'sticky', top: 0, zIndex: 10,
       }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>←</button>
-
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontWeight: 600, fontSize: '15px', color: '#111' }}>{otherName}</p>
           <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{isGroup ? `${propertyName} · Grupo` : propertyName}</p>
@@ -309,6 +413,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
           </p>
         )}
         {messages.map((msg, i) => {
+          const mine = isMe(msg);
           const msgDate = new Date(msg.created_at);
           const prevDate = i > 0 ? new Date(messages[i - 1].created_at) : null;
           const isNewDay = !prevDate || msgDate.toDateString() !== prevDate.toDateString();
@@ -325,6 +430,14 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
 
           const isAudioMsg = msg.attachment_type?.startsWith('audio/');
 
+          // ── Avatar y label para mensajes entrantes (sender=landlord) ──────
+          // Se determina si el remitente es el propietario o un gestor
+          const isLandlordMsg = msg.sender === 'landlord';
+          const isGestor = isLandlordMsg && msg.sender_id && msg.sender_id !== landlordEmail;
+          const senderCached = isLandlordMsg
+            ? (avatarCache[msg.sender_id] || { url: null, name: msg.sender_id || '', loaded: false })
+            : null;
+
           return (
             <div key={msg.id}>
               {isNewDay && (
@@ -334,44 +447,55 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
                   <div style={{ flex: 1, height: '1px', background: '#e5e5e5' }} />
                 </div>
               )}
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flexDirection: isMe(msg.sender) ? 'row-reverse' : 'row', marginLeft: isMe(msg.sender) ? 'auto' : 0, maxWidth: '80%' }}>
-                {/* Mini avatar para mensajes entrantes */}
-                {!isMe(msg.sender) && (() => {
-                  const isLandlordMsg = msg.sender === 'landlord';
-                  const otherInitials = otherName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: 6,
+                flexDirection: mine ? 'row-reverse' : 'row',
+                marginLeft: mine ? 'auto' : 0,
+                maxWidth: '80%',
+              }}>
+                {/* Mini-avatar para mensajes entrantes */}
+                {!mine && (() => {
+                  if (isLandlordMsg) {
+                    return (
+                      <SenderAvatar
+                        cached={senderCached}
+                        showLabel={isGestor}
+                        onError={() => {
+                          setAvatarCache(prev => ({
+                            ...prev,
+                            [msg.sender_id]: { ...prev[msg.sender_id], url: null },
+                          }));
+                        }}
+                      />
+                    );
+                  }
+                  // Mensajes de inquilino vistos desde propietario/gestor
+                  const initials = getInitials(tenantName || otherName);
                   return (
-                    <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
-                      {isLandlordMsg && landlordAvatarUrl && (
-                        <img
-                          src={landlordAvatarUrl}
-                          alt=""
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: landlordAvatarValid ? 'block' : 'none', position: 'absolute', inset: 0 }}
-                        />
-                      )}
-                      {(!isLandlordMsg || !landlordAvatarValid) && (
-                        <div style={{
-                          width: '100%', height: '100%',
-                          background: '#e5e5e5',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 9, fontWeight: 700, color: '#666',
-                        }}>
-                          {otherInitials}
-                        </div>
-                      )}
+                    <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, overflow: 'hidden' }}>
+                      <div style={{
+                        width: '100%', height: '100%', background: '#e5e5e5',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, fontWeight: 700, color: '#666',
+                      }}>
+                        {initials}
+                      </div>
                     </div>
                   );
                 })()}
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe(msg.sender) ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
-                  {currentRole === 'tenant' && !isMe(msg.sender) && (
-                    <p style={{ margin: '0 0 3px 4px', fontSize: '11px', color: '#bbb', fontWeight: 500, lineHeight: 1 }}>
-                      {msg.sender_id === landlordEmail ? 'Propietario' : 'Gestor'}
-                    </p>
-                  )}
+                <div style={{
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: mine ? 'flex-end' : 'flex-start',
+                  maxWidth: '100%',
+                }}>
                   <div style={{
-                    background: isMe(msg.sender) ? '#111' : 'white',
-                    color: isMe(msg.sender) ? 'white' : '#111',
-                    borderRadius: isMe(msg.sender) ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                    background: mine ? '#111' : 'white',
+                    color: mine ? 'white' : '#111',
+                    borderRadius: mine ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                     padding: isAudioMsg ? '10px 12px' : (msg.attachment_url && !msg.content ? '8px' : '10px 14px'),
                     fontSize: '14px', lineHeight: '1.4',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
@@ -380,9 +504,9 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
                     minWidth: isAudioMsg ? '220px' : undefined,
                   }}>
                     {msg.content && !isAudioMsg && <span>{msg.content}</span>}
-                    {msg.attachment_url && <AttachmentView msg={msg} isMe={isMe(msg.sender)} />}
+                    {msg.attachment_url && <AttachmentView msg={msg} isMe={mine} />}
                   </div>
-                  <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: isMe(msg.sender) ? 'right' : 'left' }}>
+                  <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: mine ? 'right' : 'left' }}>
                     {msgDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
@@ -439,7 +563,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             maxHeight: '120px',
           }}
         />
-
         <button
           onClick={handleSend}
           disabled={!canSend}
