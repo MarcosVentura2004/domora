@@ -6,24 +6,24 @@ const now = new Date();
 const currentYear = now.getFullYear();
 const currentMonth = now.getMonth();
 
-function getMonthlyIncome(property) {
+function getMonthlyIncome(property, year, month) {
   const ownership = (property.ownershipPercentage || 100) / 100;
   if (property.status === 'vacacional') {
     return (property.bookings || [])
       .filter(b => {
         const s = new Date(b.startDate);
-        return b.status === 'confirmed' && s.getFullYear() === currentYear && s.getMonth() === currentMonth;
+        return b.status === 'confirmed' && s.getFullYear() === year && s.getMonth() === month;
       })
       .reduce((sum, b) => sum + (b.amount || 0), 0) * ownership;
   }
   if (property.status === 'por_habitaciones') {
     return (property.payments || [])
-      .filter(p => p.year === currentYear && p.month === currentMonth && p.status === 'confirmed' && p.roomId)
+      .filter(p => p.year === year && p.month === month && p.status === 'confirmed' && p.roomId)
       .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
   }
   if (property.status === 'alquilado' || property.status === 'otros') {
     return (property.payments || [])
-      .filter(p => p.year === currentYear && p.month === currentMonth && p.status === 'confirmed' && !p.roomId)
+      .filter(p => p.year === year && p.month === month && p.status === 'confirmed' && !p.roomId)
       .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
   }
   return 0;
@@ -55,10 +55,10 @@ function getMonthlyEquivalentGP(expense) {
   return amt;
 }
 
-function getMonthlyExpenses(property, supabaseExpenses) {
+function getMonthlyExpenses(property, supabaseExpenses, year, month) {
   if (property.status === 'uso_propio') return 0;
   const propertyExpenses = (supabaseExpenses || []).filter(e => String(e.property_id) === String(property.id));
-  const active = getExpensesForMonth(propertyExpenses, currentYear, currentMonth);
+  const active = getExpensesForMonth(propertyExpenses, year, month);
   const ownership = property.ownershipPercentage || 100;
   return active.reduce((sum, e) => {
     const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
@@ -70,6 +70,19 @@ function getMonthlyExpenses(property, supabaseExpenses) {
 // Componente principal
 // ─────────────────────────────────────────────
 function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader, hideAvatar }) {
+  const [viewMonth, setViewMonth] = useState(currentMonth);
+  const [viewYear, setViewYear] = useState(currentYear);
+
+  const goToPrevMonth = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else { setViewMonth(m => m - 1); }
+  };
+  const goToNextMonth = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else { setViewMonth(m => m + 1); }
+  };
+  const isCurrentMonth = viewYear === currentYear && viewMonth === currentMonth;
+
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showRentabilityModal, setShowRentabilityModal] = useState(false);
@@ -98,8 +111,8 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
         .from('payments')
         .select('property_id, tenant_id, room_id, status, amount, confirmed_at')
         .in('property_id', propertyIds)
-        .eq('year', currentYear)
-        .eq('month', currentMonth)
+        .eq('year', viewYear)
+        .eq('month', viewMonth)
         .then(({ data, error }) => {
           console.log('[GeneralPanel fetchPayments] Registros del mes recibidos de Supabase:', {
             year: currentYear, month: currentMonth,
@@ -136,7 +149,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [properties]);
+  }, [properties, viewYear, viewMonth]); // eslint-disable-line
 
   useEffect(() => {
     if (!userEmail) return;
@@ -149,8 +162,8 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       .then(({ data }) => { if (data) setSupabaseIncidents(data); });
   }, [userEmail]);
 
-  const totalIncome = properties.reduce((sum, p) => sum + getMonthlyIncome(p), 0);
-  const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p, supabaseExpenses), 0);
+  const totalIncome = properties.reduce((sum, p) => sum + getMonthlyIncome(p, viewYear, viewMonth), 0);
+  const totalExpenses = properties.reduce((sum, p) => sum + getMonthlyExpenses(p, supabaseExpenses, viewYear, viewMonth), 0);
   const totalNet = totalIncome - totalExpenses;
 
   const occupied = properties.filter(p =>
@@ -163,7 +176,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     }))
   ).length;
 
-  const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const monthName = new Date(viewYear, viewMonth, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
 
   const usoPropioProperties = properties.filter(p => p.status === 'uso_propio');
 
@@ -174,9 +187,9 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       name: p.name,
       id: p.id,
       status: p.status,
-      income: getMonthlyIncome(p),
-      expenses: getMonthlyExpenses(p, supabaseExpenses),
-      net: getMonthlyIncome(p) - getMonthlyExpenses(p, supabaseExpenses),
+      income: getMonthlyIncome(p, viewYear, viewMonth),
+      expenses: getMonthlyExpenses(p, supabaseExpenses, viewYear, viewMonth),
+      net: getMonthlyIncome(p, viewYear, viewMonth) - getMonthlyExpenses(p, supabaseExpenses, viewYear, viewMonth),
     })).sort((a, b) => b.net - a.net);
 
   // ── Alertas importantes ──
@@ -345,8 +358,27 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 
       <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-        {/* Mes */}
-        <p style={{ margin: 0, fontSize: '13px', color: '#aaa', textTransform: 'capitalize', textAlign: 'center' }}>{monthName}</p>
+        {/* Mes con navegación */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <button
+            onClick={goToPrevMonth}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: '#aaa' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <p style={{ margin: 0, fontSize: '13px', color: '#aaa', textTransform: 'capitalize', minWidth: '120px', textAlign: 'center' }}>{monthName}</p>
+          <button
+            onClick={goToNextMonth}
+            disabled={isCurrentMonth}
+            style={{ background: 'none', border: 'none', cursor: isCurrentMonth ? 'default' : 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: isCurrentMonth ? '#ddd' : '#aaa' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
 
         {/* Tarjeta principal neto */}
         <div style={{
