@@ -863,9 +863,9 @@ function ReportModal({ properties, onClose }) {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [ownerName, setOwnerName] = useState('');
   const [ownerNif, setOwnerNif] = useState('');
-  // tipo fiscal por propiedad: 'vivienda' | 'turistico'
+  // tipo fiscal por propiedad: 'residencial' | 'turistico' | 'comercial' | 'propio'
   const [fiscalTypes, setFiscalTypes] = useState(() =>
-    Object.fromEntries(reportableProperties.map(p => [p.id, p.status === 'vacacional' ? 'turistico' : 'vivienda']))
+    Object.fromEntries(reportableProperties.map(p => [p.id, p.status === 'vacacional' ? 'turistico' : 'residencial']))
   );
 
   const years = [];
@@ -1071,7 +1071,7 @@ function ReportModal({ properties, onClose }) {
         doc.rect(14, y, pageW - 28, 12, 'F');
         doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
         doc.text(property.name, 18, y + 8);
-        const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : 'Vivienda habitual';
+        const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : fiscalTypes[property.id] === 'comercial' ? 'Uso comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
         const typeLabel = property.status === 'alquilado' ? 'Alquilado' : property.status === 'por_habitaciones' ? 'Por habitaciones' : property.status === 'vacacional' ? 'Vacacional' : property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío';
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(80);
         doc.text(`${typeLabel} · ${property.ownershipPercentage || 100}% · ${fiscalType}`, pageW - 18, y + 8, { align: 'right' });
@@ -1149,8 +1149,8 @@ function ReportModal({ properties, onClose }) {
       y += 12;
 
       allData.forEach(({ p: property, d: data }) => {
-        const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : 'Vivienda habitual';
-        const reduction = fiscalTypes[property.id] === 'vivienda' ? 0.6 : 0;
+        const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : fiscalTypes[property.id] === 'comercial' ? 'Uso comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
+        const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
         const netPrevio = data.totalCobrado - data.totalExpenses;
 
         const rows2 = [
@@ -1278,12 +1278,12 @@ function ReportModal({ properties, onClose }) {
           {/* Tipo fiscal por propiedad */}
           {reportableProperties.length > 0 && (
             <div className="form-group">
-              <label>Tipo fiscal por inmueble</label>
+              <label>Uso fiscal del inmueble</label>
               {reportableProperties.map(p => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span style={{ fontSize: '13px', color: '#333', flex: 1 }}>{p.name}</span>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    {[['vivienda', 'Vivienda'], ['turistico', 'Turístico']].map(([key, label]) => (
+                    {[['residencial', 'Residencial'], ['turistico', 'Turístico'], ['comercial', 'Comercial'], ['propio', 'Propio']].map(([key, label]) => (
                       <button key={key} type="button"
                         onClick={() => setFiscalTypes(prev => ({ ...prev, [p.id]: key }))}
                         style={{
