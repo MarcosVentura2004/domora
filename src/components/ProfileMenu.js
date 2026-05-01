@@ -11,6 +11,8 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [showCreateLandlordModal, setShowCreateLandlordModal] = useState(false);
+  const [creatingLandlord, setCreatingLandlord] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -34,6 +36,31 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
       data: { name: name.trim(), phone: phone.trim() },
     });
     setEditing(false);
+  };
+
+  const handleSwitchToLandlord = async () => {
+    const { data } = await supabase
+      .from('landlords')
+      .select('email')
+      .eq('email', userEmail)
+      .single();
+    if (data) {
+      onSwitchRole('landlord');
+    } else {
+      setShowCreateLandlordModal(true);
+    }
+  };
+
+  const handleCreateLandlordAccount = async () => {
+    setCreatingLandlord(true);
+    await supabase.from('landlords').insert({
+      email: userEmail,
+      name: name || userEmail,
+      plan: 'free',
+    });
+    setCreatingLandlord(false);
+    setShowCreateLandlordModal(false);
+    onSwitchRole('landlord');
   };
 
   return (
@@ -106,7 +133,10 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
 
             <div className="profile-panel-divider" />
 
-            <button className="profile-panel-item" onClick={onSwitchRole}>
+            <button
+              className="profile-panel-item"
+              onClick={role === 'tenant' ? handleSwitchToLandlord : onSwitchRole}
+            >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <circle cx="9" cy="7" r="4" stroke="#444" strokeWidth="2"/>
@@ -129,6 +159,57 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
           </>
         )}
       </div>
+
+      {/* Modal — Crear cuenta de propietario */}
+      {showCreateLandlordModal && (
+        <div
+          className="profile-overlay"
+          style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}
+          onClick={() => !creatingLandlord && setShowCreateLandlordModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: '20px 20px 0 0',
+              padding: '28px 24px 36px',
+              width: '100%',
+              maxWidth: 480,
+            }}
+          >
+            <p style={{ margin: '0 0 10px', fontSize: '17px', fontWeight: 700, color: '#111' }}>
+              Crear cuenta de propietario
+            </p>
+            <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#555', lineHeight: 1.5 }}>
+              No tienes cuenta de propietario. ¿Quieres crear una ahora?
+            </p>
+            <button
+              onClick={handleCreateLandlordAccount}
+              disabled={creatingLandlord}
+              style={{
+                width: '100%', padding: '14px', borderRadius: '12px',
+                background: '#111', color: 'white', border: 'none',
+                fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                marginBottom: 10, opacity: creatingLandlord ? 0.6 : 1,
+              }}
+            >
+              {creatingLandlord ? 'Creando…' : 'Crear cuenta'}
+            </button>
+            {!creatingLandlord && (
+              <button
+                onClick={() => setShowCreateLandlordModal(false)}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: '12px',
+                  background: '#f5f5f5', color: '#111', border: 'none',
+                  fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
