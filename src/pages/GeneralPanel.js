@@ -109,7 +109,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
     const fetchPayments = () => {
       supabase
         .from('payments')
-        .select('property_id, tenant_id, room_id, status, amount, confirmed_at')
+        .select('property_id, tenant_id, room_id, status, amount, confirmed_at, marked_at')
         .in('property_id', propertyIds)
         .eq('year', viewYear)
         .eq('month', viewMonth)
@@ -124,6 +124,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
               room_id: p.room_id,
               status: p.status,
               confirmed_at: p.confirmed_at,
+              marked_at: p.marked_at,
             })),
           });
           if (data) setSupabasePayments(data);
@@ -212,9 +213,10 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       if (!hasConfirmed) {
         if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: false };
         pendingMap[prop.name].count++;
-        // Usar el importe del registro existente (si lo hay) aunque no esté confirmado
         const existingPayment = propPayments.find(p => !p.room_id);
         pendingMap[prop.name].total += existingPayment?.amount || 0;
+        // markedAt: el inquilino marcó el pago pero el propietario aún no lo ha confirmado
+        pendingMap[prop.name].markedAt = !!(existingPayment?.marked_at && !existingPayment?.confirmed_at);
       }
     } else if (prop.status === 'por_habitaciones') {
       (prop.rooms || []).filter(r => r.tenant).forEach(room => {
@@ -225,12 +227,12 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
           if (!pendingMap[prop.name]) pendingMap[prop.name] = { count: 0, total: 0, rooms: [], isPorHabitaciones: true };
           pendingMap[prop.name].isPorHabitaciones = true;
           pendingMap[prop.name].count++;
-          // Usar el importe del registro existente (si lo hay) aunque no esté confirmado
           const roomPayment = propPayments.find(p => String(p.room_id) === String(room.id));
           pendingMap[prop.name].total += roomPayment?.amount || 0;
           pendingMap[prop.name].rooms.push({
             roomName: room.name || 'Habitación',
             tenantName: (room.tenant && room.tenant.name) ? room.tenant.name : '',
+            markedAt: !!(roomPayment?.marked_at && !roomPayment?.confirmed_at),
           });
         }
       });
@@ -473,9 +475,15 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                                 <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888' }}>{item.count} pago{item.count !== 1 ? 's' : ''} sin confirmar</p>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#C62828' }}>
-                                  {item.total > 0 ? `${item.total.toFixed(0)} €` : '—'}
-                                </p>
+                                {!item.isPorHabitaciones && item.markedAt ? (
+                                  <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#F59E0B' }}>
+                                    Confirmado por inquilino
+                                  </p>
+                                ) : (
+                                  <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#C62828' }}>
+                                    {item.total > 0 ? `${item.total.toFixed(0)} €` : '—'}
+                                  </p>
+                                )}
                                 {item.isPorHabitaciones && (
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ transform: expandedProperty === item.name ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}>
                                     <path d="M6 9l6 6 6-6" stroke="#C62828" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -488,7 +496,11 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                                 {item.rooms.map((r, ri) => (
                                   <div key={ri} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', borderRadius: '8px', background: 'rgba(229,57,53,0.06)' }}>
                                     <p style={{ margin: 0, fontSize: '12px', color: '#555' }}>{r.roomName}{r.tenantName ? ` — ${r.tenantName}` : ''}</p>
-                                    <p style={{ margin: 0, fontSize: '11px', color: '#C62828', fontWeight: 600 }}>sin pago</p>
+                                    {r.markedAt ? (
+                                      <p style={{ margin: 0, fontSize: '11px', color: '#F59E0B', fontWeight: 600 }}>Confirmado por inquilino</p>
+                                    ) : (
+                                      <p style={{ margin: 0, fontSize: '11px', color: '#C62828', fontWeight: 600 }}>sin pago</p>
+                                    )}
                                   </div>
                                 ))}
                               </div>
