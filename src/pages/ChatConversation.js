@@ -108,7 +108,7 @@ function AttachmentView({ msg, isMe }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack, currentUserEmail, hideAvatar }) {
+export default function ChatConversation({ landlordEmail, propertyId, roomId, tenantId, tenantName, propertyName, currentRole, isGroup, onBack, currentUserEmail }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [landlordAvatarUrl, setLandlordAvatarUrl] = useState(null);
@@ -118,6 +118,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
   const avatarEmail = currentUserEmail || landlordEmail;
 
   // Cargar avatar del usuario autenticado (IndexedDB primero, Supabase Storage como fallback)
+  // Se usa en los mini-avatares de mensajes entrantes, no en el header.
   useEffect(() => {
     if (!avatarEmail) return;
     getFile(`avatar_${avatarEmail}`)
@@ -291,35 +292,6 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
       }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>←</button>
 
-        {/* Avatar en cabecera — omitido cuando hideAvatar=true */}
-        {!hideAvatar && (() => {
-          const showLandlordPhoto = !isGroup;
-          const otherInitials = otherName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-          return (
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              {showLandlordPhoto && landlordAvatarUrl && (
-                <img
-                  src={landlordAvatarUrl}
-                  alt=""
-                  style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', display: landlordAvatarValid ? 'block' : 'none' }}
-                  onLoad={() => setLandlordAvatarValid(true)}
-                  onError={() => setLandlordAvatarValid(false)}
-                />
-              )}
-              {(!showLandlordPhoto || !landlordAvatarValid) && (
-                <div style={{
-                  width: 38, height: 38, borderRadius: '50%',
-                  background: isGroup ? '#111' : '#e5e5e5',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 700, color: isGroup ? 'white' : '#555',
-                }}>
-                  {otherInitials}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontWeight: 600, fontSize: '15px', color: '#111' }}>{otherName}</p>
           <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{isGroup ? `${propertyName} · Grupo` : propertyName}</p>
@@ -333,7 +305,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         )}
         {!loading && messages.length === 0 && (
           <p style={{ textAlign: 'center', color: '#bbb', fontSize: '14px', marginTop: '60px' }}>
-            Sin mensajes todavía. ¡Inicia la conversación!
+            Sin mensajes todavía. Inicia la conversacion.
           </p>
         )}
         {messages.map((msg, i) => {
@@ -429,7 +401,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
             </div>
           )}
           <span style={{ flex: 1, fontSize: '13px', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingFile.fileName}</span>
-          <button onClick={() => setPendingFile(null)} style={{ background: 'none', border: 'none', fontSize: '18px', color: '#aaa', cursor: 'pointer', lineHeight: 1 }}>×</button>
+          <button onClick={() => setPendingFile(null)} style={{ background: 'none', border: 'none', fontSize: '18px', color: '#aaa', cursor: 'pointer', lineHeight: 1 }}>x</button>
         </div>
       )}
 
