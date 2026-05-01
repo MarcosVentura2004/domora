@@ -24,10 +24,11 @@ function formatMonthYear(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    const start = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
+    const dateStr = e.start_date ? (e.start_date + 'T12:00:00') : (e.created_at || e.date || '');
+    const start = new Date(dateStr);
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
-    if (e.type === 'puntual' || e.frequency === 'unico') return year === sy && month === sm;
+    if (e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico') return year === sy && month === sm;
     if (e.frequency === 'manual') return true; // siempre visible; propietario introduce importe cuando llega
     const monthsDiff = (year - sy) * 12 + (month - sm);
     const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : e.frequency === 'custom' ? (e.custom_frequency_months || 1) : 1;
