@@ -240,7 +240,10 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
   });
   const pendingByPropertyList = Object.entries(pendingMap).map(([name, d]) => ({ name, ...d }));
   const pendingCount = pendingByPropertyList.reduce((sum, item) => sum + item.count, 0);
-  const pendingTotal = pendingByPropertyList.reduce((sum, item) => sum + item.total, 0);
+  const markedCount = pendingByPropertyList.reduce((sum, item) => {
+    if (item.isPorHabitaciones) return sum + item.rooms.filter(r => r.markedAt).length;
+    return sum + (item.markedAt ? 1 : 0);
+  }, 0);
 
   // Atención financiera
   const computeMonthTotal = (year, month) =>
@@ -449,7 +452,9 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                           {pendingCount} pago{pendingCount !== 1 ? 's' : ''} pendiente{pendingCount !== 1 ? 's' : ''}
                         </p>
                         <p style={{ margin: 0, fontSize: '11px', color: '#999' }}>
-                          {hasAlert ? (pendingTotal > 0 ? `por valor de ${pendingTotal.toFixed(0)} €` : 'pendientes de confirmar') : 'sin impagos este mes'}
+                          {hasAlert
+                            ? (() => { const n = markedCount > 0 ? markedCount : pendingCount; return `${n} pago${n !== 1 ? 's' : ''} por confirmar`; })()
+                            : 'sin impagos este mes'}
                         </p>
                       </div>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>

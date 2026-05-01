@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import './ProfileMenu.css';
 
@@ -7,12 +7,28 @@ function formatPhone(raw) {
   return digits.match(/.{1,3}/g)?.join(' ') ?? '';
 }
 
-export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, onClose }) {
+export default function ProfileMenu({
+  userEmail,
+  role,
+  onSwitchRole,
+  onLogout,
+  onClose,
+  tenantCode,
+  currentAvatarUrl,
+  onAvatarUpdate,
+}) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState(currentAvatarUrl || null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [showCreateLandlordModal, setShowCreateLandlordModal] = useState(false);
   const [creatingLandlord, setCreatingLandlord] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setAvatarUrl(currentAvatarUrl || null);
+  }, [currentAvatarUrl]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -36,6 +52,29 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
       data: { name: name.trim(), phone: phone.trim() },
     });
     setEditing(false);
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !tenantCode) return;
+    setAvatarUploading(true);
+    const path = `inquilino-${tenantCode}.jpg`;
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (!error) {
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      const publicUrl = urlData?.publicUrl;
+      const displayUrl = publicUrl + '?t=' + Date.now();
+      setAvatarUrl(displayUrl);
+      if (onAvatarUpdate) onAvatarUpdate(displayUrl);
+      await supabase
+        .from('inquilinos')
+        .update({ avatar_url: publicUrl })
+        .eq('code', tenantCode);
+    }
+    setAvatarUploading(false);
+    e.target.value = '';
   };
 
   const handleSwitchToLandlord = async () => {
@@ -65,25 +104,68 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
 
   return (
     <>
-      {/* Overlay transparente para cerrar al tocar fuera */}
       <div className="profile-overlay" onClick={onClose} />
 
       <div className="profile-panel">
-        {/* Cabecera cuenta */}
+        {/* Cabecera */}
         <div className="profile-panel-header">
-          <div className="profile-avatar">{initials}</div>
+          <button
+            className="profile-avatar"
+            onClick={() => !avatarUploading && tenantCode && fileInputRef.current?.click()}
+            style={{
+              cursor: tenantCode ? 'pointer' : 'default',
+              padding: 0,
+              border: 'none',
+              background: avatarUrl ? 'none' : '#111',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+            aria-label="Cambiar foto de perfil"
+            disabled={!tenantCode || avatarUploading}
+          >
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block' }}
+              />
+            ) : (
+              <span>{initials}</span>
+            )}
+            {avatarUploading && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: 'rgba(255,255,255,0.7)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '50%',
+              }}>
+                <div style={{
+                  width: 14, height: 14, borderRadius: '50%',
+                  border: '2px solid rgba(0,0,0,0.15)',
+                  borderTopColor: '#333',
+                  animation: 'spin 0.7s linear infinite',
+                }} />
+              </div>
+            )}
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarChange}
+          />
+
           <div className="profile-panel-info">
             <span className="profile-panel-name">{name || 'Mi cuenta'}</span>
             <span className="profile-panel-email">{userEmail}</span>
-            {phone && (
-              <span className="profile-panel-phone">{phone}</span>
-            )}
+            {phone && <span className="profile-panel-phone">{phone}</span>}
           </div>
         </div>
 
         <div className="profile-panel-divider" />
 
-        {/* Editar cuenta */}
         {editing ? (
           <form onSubmit={handleSave} className="profile-edit-form">
             <label className="profile-edit-label">Nombre</label>
@@ -120,15 +202,6 @@ export default function ProfileMenu({ userEmail, role, onSwitchRole, onLogout, o
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               Editar cuenta
-            </button>
-
-            <button className="profile-panel-item profile-panel-item-disabled" onClick={() => {}}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="3" stroke="#aaa" strokeWidth="2"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="#aaa" strokeWidth="2"/>
-              </svg>
-              <span style={{ color: '#bbb' }}>Ajustes</span>
-              <span className="profile-panel-badge">Próximamente</span>
             </button>
 
             <div className="profile-panel-divider" />

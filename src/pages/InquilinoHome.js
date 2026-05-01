@@ -13,14 +13,32 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [viewingRental, setViewingRental] = useState(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [chatForRental, setChatForRental] = useState(null);
-  const [unreadCounts, setUnreadCounts] = useState({}); // { [code]: number }
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [avatarUrl, setAvatarUrl] = useState(null);
+
+  // Primer código activo, usado para la foto de perfil
+  const firstCode = tenantCodes[0] || null;
+
+  // Cargar avatar desde la tabla inquilinos
+  useEffect(() => {
+    if (!firstCode) return;
+    supabase
+      .from('inquilinos')
+      .select('avatar_url')
+      .eq('code', firstCode)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.avatar_url) {
+          setAvatarUrl(data.avatar_url + '?t=' + Date.now());
+        }
+      });
+  }, [firstCode]);
 
   useEffect(() => {
     const active = rentals.filter(r => !r.expired);
     if (!active.length) return;
 
     const queries = active.flatMap(r => {
-      // Query para mensajes privados no leídos
       let q = supabase
         .from('messages')
         .select('id', { count: 'exact', head: true })
@@ -36,7 +54,6 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       }
       const privateQ = q.then(({ count }) => [r.code, count || 0]);
 
-      // Query para mensajes de grupo no leídos (solo si aplica)
       const groupQ = r.hasGroupChat
         ? supabase
             .from('messages')
@@ -55,7 +72,6 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
     Promise.all(queries).then(results => setUnreadCounts(Object.fromEntries(results)));
   }, [rentals]); // eslint-disable-line
 
-  // Construye los alquileres desde localStorage y verifica en Supabase si siguen activos
   useEffect(() => {
     if (!tenantCodes.length) {
       setRentals([]);
@@ -72,7 +88,6 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       const props = JSON.parse(localStorage.getItem(`properties_${meta.landlordEmail}`) || '[]');
       const prop = props.find(p => String(p.id) === String(meta.propertyId));
 
-      // Si no hay datos en localStorage usamos placeholders para mostrar la tarjeta expirada
       const address = prop?.name || code;
       let tenantName = '';
       let rent = prop?.price || 0;
@@ -101,7 +116,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
         roomId: meta.roomId || null,
         tenantId: meta.tenantId,
         hasGroupChat: !!(prop?.isSharedProperty || prop?.status === 'por_habitaciones'),
-        expired: false, // se actualiza tras verificar en Supabase
+        expired: false,
       };
     }).filter(Boolean);
 
@@ -110,7 +125,6 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
 
     const now = new Date();
 
-    // Verificar en Supabase si cada código sigue activo y leer estado de pago
     built.forEach(async (rental) => {
       const { data } = await supabase.rpc('find_property_by_tenant_code', { p_code: rental.code });
       if (!data) {
@@ -119,7 +133,6 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
         );
         return;
       }
-      // Leer estado del pago del mes actual
       const col = rental.roomId ? 'room_id' : 'tenant_id';
       const val = rental.roomId || rental.tenantId;
       const { data: payment } = await supabase
@@ -174,17 +187,34 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   }
 
   const tenantName = rentals[0]?.tenantName || '';
+  const avatarInitial = (tenantName || userEmail || 'I').charAt(0).toUpperCase();
 
   return (
     <div className="inquilino-home">
       {/* Header */}
       <div className="inquilino-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
-          <button className="inquilino-profile-btn" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="16" fill="#E5E5E5"/>
-              <path d="M16 16c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#666"/>
-            </svg>
+          <button
+            className="inquilino-profile-btn"
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+          >
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+              />
+            ) : (
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: '#E5E5E5',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '14px', fontWeight: 700, color: '#666',
+              }}>
+                {avatarInitial}
+              </div>
+            )}
           </button>
           <div>
             <h1 className="inquilino-greeting">Hola, {tenantName.split(' ')[0] || 'inquilino'}</h1>
@@ -197,6 +227,9 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
               onSwitchRole={onSwitchRole}
               onLogout={onLogout}
               onClose={() => setShowProfileMenu(false)}
+              tenantCode={firstCode}
+              currentAvatarUrl={avatarUrl}
+              onAvatarUpdate={setAvatarUrl}
             />
           )}
         </div>
@@ -311,3 +344,9 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
     </div>
   );
 }
+
+/*
+  SQL para añadir el campo avatar_url a la tabla inquilinos (ejecutar manualmente en Supabase):
+
+  ALTER TABLE inquilinos ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+*/
