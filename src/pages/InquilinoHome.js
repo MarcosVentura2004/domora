@@ -6,7 +6,7 @@ import ChatConversation from './ChatConversation';
 import ProfileMenu from '../components/ProfileMenu';
 import { supabase } from '../supabaseClient';
 
-export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCodesUpdate, onSwitchRole }) {
+export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCodesUpdate, onSwitchRole, onGoToAuth }) {
   const [rentals, setRentals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddCode, setShowAddCode] = useState(false);
@@ -19,19 +19,18 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   // Primer código activo, usado para la foto de perfil
   const firstCode = tenantCodes[0] || null;
 
-  // Cargar avatar desde la tabla inquilinos
+  // Cargar avatar directamente desde Supabase Storage
   useEffect(() => {
     if (!firstCode) return;
-    supabase
-      .from('inquilinos')
-      .select('avatar_url')
-      .eq('code', firstCode)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data?.avatar_url) {
-          setAvatarUrl(data.avatar_url + '?t=' + Date.now());
-        }
-      });
+    const path = `inquilino-${firstCode}.jpg`;
+    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    if (urlData?.publicUrl) {
+      const url = urlData.publicUrl + '?t=' + Date.now();
+      const img = new window.Image();
+      img.onload = () => setAvatarUrl(url);
+      img.onerror = () => {};
+      img.src = url;
+    }
   }, [firstCode]);
 
   useEffect(() => {
@@ -230,6 +229,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
               tenantCode={firstCode}
               currentAvatarUrl={avatarUrl}
               onAvatarUpdate={setAvatarUrl}
+              onGoToAuth={onGoToAuth}
             />
           )}
         </div>

@@ -175,6 +175,7 @@ function App() {
           onLogout={handleLogout}
           onCodesUpdate={handleCodesUpdate}
           onSwitchRole={handleSwitchRole}
+          onGoToAuth={() => setPage('auth')}
         />
       )}
 

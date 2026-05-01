@@ -16,13 +16,14 @@ export default function ProfileMenu({
   tenantCode,
   currentAvatarUrl,
   onAvatarUpdate,
+  onGoToAuth,
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(currentAvatarUrl || null);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [showCreateLandlordModal, setShowCreateLandlordModal] = useState(false);
+  const [showLandlordModal, setShowLandlordModal] = useState(false);
   const [creatingLandlord, setCreatingLandlord] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -62,16 +63,24 @@ export default function ProfileMenu({
     const { error } = await supabase.storage
       .from('avatars')
       .upload(path, file, { upsert: true, contentType: file.type });
-    if (!error) {
+    if (error) {
+      console.error('[ProfileMenu] Avatar upload error:', error);
+    } else {
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
       const publicUrl = urlData?.publicUrl;
-      const displayUrl = publicUrl + '?t=' + Date.now();
-      setAvatarUrl(displayUrl);
-      if (onAvatarUpdate) onAvatarUpdate(displayUrl);
-      await supabase
-        .from('inquilinos')
-        .update({ avatar_url: publicUrl })
-        .eq('code', tenantCode);
+      if (publicUrl) {
+        const displayUrl = publicUrl + '?t=' + Date.now();
+        setAvatarUrl(displayUrl);
+        if (onAvatarUpdate) onAvatarUpdate(displayUrl);
+        // Actualizar tabla inquilinos (best-effort — falla silenciosamente si la columna no existe)
+        supabase
+          .from('inquilinos')
+          .update({ avatar_url: publicUrl })
+          .eq('code', tenantCode)
+          .then(({ error: dbErr }) => {
+            if (dbErr) console.warn('[ProfileMenu] avatar_url DB update failed:', dbErr.message);
+          });
+      }
     }
     setAvatarUploading(false);
     e.target.value = '';
@@ -86,7 +95,7 @@ export default function ProfileMenu({
     if (data) {
       onSwitchRole('landlord');
     } else {
-      setShowCreateLandlordModal(true);
+      setShowLandlordModal(true);
     }
   };
 
@@ -98,7 +107,7 @@ export default function ProfileMenu({
       plan: 'free',
     });
     setCreatingLandlord(false);
-    setShowCreateLandlordModal(false);
+    setShowLandlordModal(false);
     onSwitchRole('landlord');
   };
 
@@ -233,53 +242,77 @@ export default function ProfileMenu({
         )}
       </div>
 
-      {/* Modal — Crear cuenta de propietario */}
-      {showCreateLandlordModal && (
+      {/* Modal — Cuenta de propietario */}
+      {showLandlordModal && (
         <div
           className="profile-overlay"
-          style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}
-          onClick={() => !creatingLandlord && setShowCreateLandlordModal(false)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 200,
+          }}
+          onClick={() => !creatingLandlord && setShowLandlordModal(false)}
         >
           <div
             onClick={e => e.stopPropagation()}
             style={{
               background: 'white',
-              borderRadius: '20px 20px 0 0',
-              padding: '28px 24px 36px',
+              borderRadius: '20px',
+              padding: '28px 24px 24px',
               width: '100%',
-              maxWidth: 480,
+              maxWidth: 360,
+              boxShadow: '0 12px 48px rgba(0,0,0,0.18)',
             }}
           >
-            <p style={{ margin: '0 0 10px', fontSize: '17px', fontWeight: 700, color: '#111' }}>
-              Crear cuenta de propietario
+            <p style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 700, color: '#111' }}>
+              Cuenta de propietario
             </p>
-            <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#555', lineHeight: 1.5 }}>
-              No tienes cuenta de propietario. ¿Quieres crear una ahora?
+            <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#666', lineHeight: 1.5 }}>
+              No tienes cuenta de propietario asociada a este email. ¿Qué quieres hacer?
             </p>
-            <button
-              onClick={handleCreateLandlordAccount}
-              disabled={creatingLandlord}
-              style={{
-                width: '100%', padding: '14px', borderRadius: '12px',
-                background: '#111', color: 'white', border: 'none',
-                fontSize: '15px', fontWeight: 600, cursor: 'pointer',
-                marginBottom: 10, opacity: creatingLandlord ? 0.6 : 1,
-              }}
-            >
-              {creatingLandlord ? 'Creando…' : 'Crear cuenta'}
-            </button>
-            {!creatingLandlord && (
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
-                onClick={() => setShowCreateLandlordModal(false)}
+                onClick={handleCreateLandlordAccount}
+                disabled={creatingLandlord}
                 style={{
-                  width: '100%', padding: '14px', borderRadius: '12px',
-                  background: '#f5f5f5', color: '#111', border: 'none',
+                  width: '100%', padding: '13px', borderRadius: '12px',
+                  background: '#111', color: 'white', border: 'none',
                   fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                  opacity: creatingLandlord ? 0.6 : 1,
                 }}
               >
-                Cancelar
+                {creatingLandlord ? 'Creando…' : 'Crear cuenta nueva'}
               </button>
-            )}
+
+              {!creatingLandlord && onGoToAuth && (
+                <button
+                  onClick={() => { setShowLandlordModal(false); onGoToAuth(); }}
+                  style={{
+                    width: '100%', padding: '13px', borderRadius: '12px',
+                    background: '#F5F5F5', color: '#111', border: 'none',
+                    fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  Iniciar sesión
+                </button>
+              )}
+
+              {!creatingLandlord && (
+                <button
+                  onClick={() => setShowLandlordModal(false)}
+                  style={{
+                    width: '100%', padding: '13px', borderRadius: '12px',
+                    background: 'none', color: '#aaa', border: 'none',
+                    fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
