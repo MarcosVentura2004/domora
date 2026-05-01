@@ -255,7 +255,7 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
         tenant_id: isGroup ? null : (roomId ? null : tenantId),
         landlord_email: landlordEmail,
         sender: currentRole,
-        sender_id: currentRole === 'landlord' ? landlordEmail : tenantId,
+        sender_id: currentRole === 'landlord' ? (currentUserEmail || landlordEmail) : tenantId,
         content: text.trim() || null,
         attachment_url,
         attachment_name,
@@ -363,6 +363,11 @@ export default function ChatConversation({ landlordEmail, propertyId, roomId, te
                 })()}
 
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe(msg.sender) ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
+                  {currentRole === 'tenant' && !isMe(msg.sender) && (
+                    <p style={{ margin: '0 0 3px 4px', fontSize: '11px', color: '#bbb', fontWeight: 500, lineHeight: 1 }}>
+                      {msg.sender_id === landlordEmail ? 'Propietario' : 'Gestor'}
+                    </p>
+                  )}
                   <div style={{
                     background: isMe(msg.sender) ? '#111' : 'white',
                     color: isMe(msg.sender) ? 'white' : '#111',

@@ -124,7 +124,8 @@ const CATEGORIES = [
 function getGestorTenants(properties, accessMap) {
   const list = [];
   properties.forEach(prop => {
-    const landlordEmail = accessMap[prop.id]?.landlordEmail || '';
+    // prop.landlord_email is set directly from the DB column; fallback to accessMap for safety
+    const landlordEmail = prop.landlord_email || accessMap[prop.id]?.landlordEmail || '';
     const isGroupEligible = prop.status === 'por_habitaciones' || prop.isSharedProperty;
     if (isGroupEligible) {
       const names = prop.status === 'por_habitaciones'
@@ -1175,3 +1176,50 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     </div>
   );
 }
+
+/*
+  ── RLS para la tabla messages — ejecutar en Supabase SQL Editor ──────────────
+
+  Estas políticas permiten al gestor leer, insertar y actualizar mensajes
+  de las propiedades que tiene asignadas en property_access.
+
+  -- SELECT: el gestor puede leer mensajes de sus propiedades asignadas
+  CREATE POLICY "gestores_select_messages"
+  ON public.messages
+  FOR SELECT
+  USING (
+    property_id IN (
+      SELECT property_id FROM public.property_access
+      WHERE gestor_email = auth.email()
+    )
+  );
+
+  -- INSERT: el gestor puede enviar mensajes en sus propiedades asignadas
+  CREATE POLICY "gestores_insert_messages"
+  ON public.messages
+  FOR INSERT
+  WITH CHECK (
+    property_id IN (
+      SELECT property_id FROM public.property_access
+      WHERE gestor_email = auth.email()
+    )
+  );
+
+  -- UPDATE: el gestor puede marcar mensajes como leídos (read_by_landlord)
+  --         en sus propiedades asignadas
+  CREATE POLICY "gestores_update_messages"
+  ON public.messages
+  FOR UPDATE
+  USING (
+    property_id IN (
+      SELECT property_id FROM public.property_access
+      WHERE gestor_email = auth.email()
+    )
+  )
+  WITH CHECK (
+    property_id IN (
+      SELECT property_id FROM public.property_access
+      WHERE gestor_email = auth.email()
+    )
+  );
+*/
