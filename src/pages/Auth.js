@@ -25,8 +25,8 @@ const COUNTRY_CODES = [
 ];
 
 // steps: 'login' | 'register' | 'verify-email' | 'phone' | 'verify-phone'
-function Auth({ onLogin, onBack }) {
-  const [step, setStep] = useState('login');
+function Auth({ onLogin, onBack, initialStep }) {
+  const [step, setStep] = useState(initialStep || 'login');
   const [registerTab, setRegisterTab] = useState('email'); // 'email' | 'phone'
   const [phoneFrom, setPhoneFrom] = useState('phone');     // where to back from verify-phone
   const [email, setEmail] = useState('');

@@ -15,6 +15,7 @@ function App() {
   const [userType, setUserType] = useState(null); // 'propietario' o 'inquilino'
   const [userEmail, setUserEmail] = useState(null);
   const [tenantCodes, setTenantCodes] = useState([]);
+  const [authInitialStep, setAuthInitialStep] = useState('login');
 
   // Restore session on mount
   useEffect(() => {
@@ -143,6 +144,7 @@ function App() {
         <Auth
           onLogin={handleLogin}
           onBack={() => setPage('welcome')}
+          initialStep={authInitialStep}
         />
       )}
 
@@ -175,7 +177,7 @@ function App() {
           onLogout={handleLogout}
           onCodesUpdate={handleCodesUpdate}
           onSwitchRole={handleSwitchRole}
-          onGoToAuth={() => setPage('auth')}
+          onGoToAuth={(step) => { setAuthInitialStep(step || 'login'); setPage('auth'); }}
         />
       )}
 

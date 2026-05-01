@@ -24,7 +24,6 @@ export default function ProfileMenu({
   const [avatarUrl, setAvatarUrl] = useState(currentAvatarUrl || null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [showLandlordModal, setShowLandlordModal] = useState(false);
-  const [creatingLandlord, setCreatingLandlord] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -99,17 +98,6 @@ export default function ProfileMenu({
     }
   };
 
-  const handleCreateLandlordAccount = async () => {
-    setCreatingLandlord(true);
-    await supabase.from('landlords').insert({
-      email: userEmail,
-      name: name || userEmail,
-      plan: 'free',
-    });
-    setCreatingLandlord(false);
-    setShowLandlordModal(false);
-    onSwitchRole('landlord');
-  };
 
   return (
     <>
@@ -245,13 +233,15 @@ export default function ProfileMenu({
       {/* Modal — Cuenta de propietario */}
       {showLandlordModal && (
         <div
-          className="profile-overlay"
           style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1100,
+            background: 'rgba(0,0,0,0.35)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '24px',
-            zIndex: 200,
           }}
           onClick={() => !creatingLandlord && setShowLandlordModal(false)}
         >
@@ -263,7 +253,7 @@ export default function ProfileMenu({
               padding: '28px 24px 24px',
               width: '100%',
               maxWidth: 360,
-              boxShadow: '0 12px 48px rgba(0,0,0,0.18)',
+              boxShadow: '0 12px 48px rgba(0,0,0,0.22)',
             }}
           >
             <p style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 700, color: '#111' }}>
@@ -275,43 +265,37 @@ export default function ProfileMenu({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
-                onClick={handleCreateLandlordAccount}
-                disabled={creatingLandlord}
+                onClick={() => { setShowLandlordModal(false); onGoToAuth('register'); }}
                 style={{
                   width: '100%', padding: '13px', borderRadius: '12px',
                   background: '#111', color: 'white', border: 'none',
                   fontSize: '15px', fontWeight: 600, cursor: 'pointer',
-                  opacity: creatingLandlord ? 0.6 : 1,
                 }}
               >
-                {creatingLandlord ? 'Creando…' : 'Crear cuenta nueva'}
+                Crear cuenta nueva
               </button>
 
-              {!creatingLandlord && onGoToAuth && (
-                <button
-                  onClick={() => { setShowLandlordModal(false); onGoToAuth(); }}
-                  style={{
-                    width: '100%', padding: '13px', borderRadius: '12px',
-                    background: '#F5F5F5', color: '#111', border: 'none',
-                    fontSize: '15px', fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  Iniciar sesión
-                </button>
-              )}
+              <button
+                onClick={() => { setShowLandlordModal(false); onGoToAuth('login'); }}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: '12px',
+                  background: '#F5F5F5', color: '#111', border: 'none',
+                  fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Iniciar sesión
+              </button>
 
-              {!creatingLandlord && (
-                <button
-                  onClick={() => setShowLandlordModal(false)}
-                  style={{
-                    width: '100%', padding: '13px', borderRadius: '12px',
-                    background: 'none', color: '#aaa', border: 'none',
-                    fontSize: '14px', fontWeight: 500, cursor: 'pointer',
-                  }}
-                >
-                  Cancelar
-                </button>
-              )}
+              <button
+                onClick={() => setShowLandlordModal(false)}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: '12px',
+                  background: 'none', color: '#aaa', border: 'none',
+                  fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
