@@ -956,7 +956,9 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               borderBottom: '1px solid #f0f0f0',
             }}>
               <BackButton />
-              <span style={{ fontWeight: 700, fontSize: '17px', color: '#111', letterSpacing: '-0.3px' }}>Mensajes</span>
+              <span style={{ fontWeight: 700, fontSize: '15px', color: '#111', letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+                Mensajes de {selectedLandlord.email}
+              </span>
               <button
                 onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(''); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
