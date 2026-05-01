@@ -20,7 +20,6 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [profileName, setProfileName] = useState('');
   const [profilePhone, setProfilePhone] = useState('');
   const [profileEmail, setProfileEmail] = useState(userEmail || '');
-  // avatarSrc: puede ser un blob: local o una URL de Supabase
   const [avatarSrc, setAvatarSrc] = useState(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
@@ -34,6 +33,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   // ── Rol ─────────────────────────────────────────────────
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [showCreateLandlordModal, setShowCreateLandlordModal] = useState(false);
+  const [creatingLandlord, setCreatingLandlord] = useState(false);
 
   // ── Seguridad ────────────────────────────────────────────
   const [passwordSending, setPasswordSending] = useState(false);
@@ -45,7 +46,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [deleting, setDeleting] = useState(false);
 
   // ── Gestores ─────────────────────────────────────────────
-  const [gestores, setGestores] = useState([]);       // [{ email, name, permisos, properties: [id] }]
+  const [gestores, setGestores] = useState([]);
   const [ownerProperties, setOwnerProperties] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -59,21 +60,18 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   // ── Carga gestores ────────────────────────────────────────
   const loadGestores = async () => {
-    // Propiedades del propietario
     const { data: propsData } = await supabase
       .from('properties')
       .select('id, data')
       .eq('landlord_email', userEmail);
     setOwnerProperties((propsData || []).map(r => ({ id: r.id, name: r.data?.name || r.id })));
 
-    // Accesos concedidos
     const { data: accessRows } = await supabase
       .from('property_access')
       .select('gestor_email, property_id, permisos')
       .eq('landlord_email', userEmail);
     if (!accessRows || accessRows.length === 0) { setGestores([]); return; }
 
-    // Nombres de gestores
     const emails = [...new Set(accessRows.map(r => r.gestor_email))];
     const { data: gestorRows } = await supabase
       .from('gestores')
@@ -81,7 +79,6 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       .in('email', emails);
     const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.name]));
 
-    // Agrupar por gestor
     const grouped = emails.map(email => ({
       email,
       name: nameMap[email] || email,
@@ -100,13 +97,11 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     setInviteSending(true);
     setInviteError('');
     try {
-      // 1. Insertar / actualizar en tabla gestores
       await supabase.from('gestores').upsert(
         { email: inviteEmail.trim().toLowerCase(), name: inviteName.trim() },
         { onConflict: 'email' }
       );
 
-      // 2. Insertar registros en property_access (uno por propiedad)
       const rows = [...invitePropertyIds].map(pid => ({
         gestor_email: inviteEmail.trim().toLowerCase(),
         landlord_email: userEmail,
@@ -115,7 +110,6 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       }));
       await supabase.from('property_access').upsert(rows, { onConflict: 'gestor_email,property_id' });
 
-      // 3. Enviar email de invitación
       const landlordRow = await supabase.from('landlords').select('name').eq('email', userEmail).single();
       const landlordName = landlordRow?.data?.name || userEmail;
       await sendGestorInviteEmail({
@@ -153,11 +147,36 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     loadGestores();
   };
 
+  // ── Handler cambio a propietario ──────────────────────────
+  const handleSwitchToLandlord = async () => {
+    const { data } = await supabase
+      .from('landlords')
+      .select('email')
+      .eq('email', userEmail)
+      .single();
+    if (data) {
+      onSwitchRole('landlord');
+    } else {
+      setShowCreateLandlordModal(true);
+    }
+  };
+
+  const handleCreateLandlordAccount = async () => {
+    setCreatingLandlord(true);
+    await supabase.from('landlords').insert({
+      email: userEmail,
+      name: profileName || userEmail,
+      plan: 'free',
+    });
+    setCreatingLandlord(false);
+    setShowCreateLandlordModal(false);
+    onSwitchRole('landlord');
+  };
+
   // ── Carga inicial ─────────────────────────────────────────
   useEffect(() => {
-    if (role !== 'gestor') loadGestores();
+    if (role === 'landlord') loadGestores();
     async function load() {
-      // Datos del usuario autenticado
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.user_metadata) {
         setProfileName(user.user_metadata.name || '');
@@ -165,15 +184,13 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       }
 
       if (role === 'gestor') {
-        // Datos de la tabla gestores
         const { data: gestor } = await supabase
           .from('gestores')
           .select('name')
           .eq('email', userEmail)
           .single();
         if (gestor?.name) setProfileName(gestor.name);
-      } else {
-        // Datos de la tabla landlords (plan, nombre, teléfono)
+      } else if (role === 'landlord') {
         const { data: landlord } = await supabase
           .from('landlords')
           .select('name, phone, plan')
@@ -187,12 +204,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         }
       }
 
-      // Avatar: primero IndexedDB (local, siempre disponible)
       const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
       if (localAvatar) {
         setAvatarSrc(localAvatar);
       } else {
-        // Si no hay local, intentar desde Supabase Storage
         const { data: urlData } = supabase.storage
           .from('avatars')
           .getPublicUrl(`${userEmail}/avatar`);
@@ -214,7 +229,6 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     setUploadError(null);
     setPhotoUploading(true);
 
-    // 1. Convertir a dataURL y guardar en IndexedDB — funciona siempre, sin bucket
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = ev => resolve(ev.target.result);
@@ -222,21 +236,18 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       reader.readAsDataURL(file);
     });
     await saveFile(`avatar_${userEmail}`, dataUrl).catch(() => {});
-    setAvatarSrc(dataUrl); // se ve de inmediato
+    setAvatarSrc(dataUrl);
 
-    // 2. Intentar subir también a Supabase Storage (para verlo en otros dispositivos)
     const { error } = await supabase.storage
       .from('avatars')
       .upload(`${userEmail}/avatar`, file, { upsert: true, contentType: file.type });
 
     if (error) {
-      // Fallo silencioso — ya está guardado en local, el usuario ve la foto
       console.warn('Supabase Storage no disponible, avatar guardado solo en local:', error.message);
     } else {
       const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(`${userEmail}/avatar`);
-      // Actualizar IndexedDB con la URL remota para futuros dispositivos
       await saveFile(`avatar_${userEmail}`, urlData.publicUrl + '?t=' + Date.now()).catch(() => {});
       setAvatarSrc(urlData.publicUrl + '?t=' + Date.now());
     }
@@ -250,12 +261,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     const emailTrimmed = profileEmail.trim().toLowerCase();
     const emailChanged = emailTrimmed && emailTrimmed !== userEmail;
 
-    // Actualizar nombre, teléfono y (si cambia) email en Supabase Auth
     const updatePayload = { data: { name: profileName.trim(), phone: profilePhone.trim() } };
     if (emailChanged) updatePayload.email = emailTrimmed;
     await supabase.auth.updateUser(updatePayload);
 
-    // Actualizar tabla según rol
     if (role === 'gestor') {
       await supabase.from('gestores').upsert(
         { email: userEmail, name: profileName.trim() },
@@ -288,13 +297,11 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     if (deleteText !== 'ELIMINAR' || deleting) return;
     setDeleting(true);
     try {
-      // Eliminar datos del usuario
       await supabase.from('properties').delete().eq('landlord_email', userEmail);
       await supabase.from('messages').delete().eq('landlord_email', userEmail);
       await supabase.from('payments').delete().eq('landlord_email', userEmail);
       await supabase.from('incidents').delete().eq('landlord_email', userEmail);
       await supabase.from('landlords').delete().eq('email', userEmail);
-      // Intentar eliminar cuenta vía RPC (requiere función en Supabase)
       await supabase.rpc('delete_user_account').catch(() => null);
     } catch (err) {
       console.error('Error eliminando cuenta:', err);
@@ -438,74 +445,98 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         />
 
         {/* ════════════════════════════════════════
-            SECCIÓN 2 — Cambiar rol (solo propietario)
+            SECCIÓN 2 — Cambiar rol (todos los roles)
         ════════════════════════════════════════ */}
-        {role !== 'gestor' && <div>
+        <div>
           <p className="settings-section-label">Rol</p>
           <div className="settings-card">
-            {/* Propietario — activo */}
-            <div className="settings-card-row">
-              <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 21V12h6v9" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* Propietario */}
+            {role === 'landlord' ? (
+              <div className="settings-card-row">
+                <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9 21V12h6v9" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content">
+                  <p className="settings-row-title">Propietario</p>
+                  <p className="settings-row-subtitle">Rol actual</p>
+                </div>
+                <svg className="settings-row-check" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M20 6L9 17l-5-5" stroke="#34c759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <div className="settings-row-content">
-                <p className="settings-row-title">Propietario</p>
-                <p className="settings-row-subtitle">Rol actual</p>
-              </div>
-              <svg className="settings-row-check" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M20 6L9 17l-5-5" stroke="#34c759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
+            ) : (
+              <button
+                className="settings-card-row"
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                onClick={handleSwitchToLandlord}
+              >
+                <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M9 21V12h6v9" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content">
+                  <p className="settings-row-title">Propietario</p>
+                  <p className="settings-row-subtitle">Gestiona tus propiedades</p>
+                </div>
+                <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
 
             {/* Inquilino */}
-            <button
-              className="settings-card-row"
-              style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-              onClick={() => setShowRoleModal(true)}
-            >
-              <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="12" cy="7" r="4" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            {role === 'tenant' ? (
+              <div className="settings-card-row">
+                <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="7" r="4" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content">
+                  <p className="settings-row-title">Inquilino</p>
+                  <p className="settings-row-subtitle">Rol actual</p>
+                </div>
+                <svg className="settings-row-check" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M20 6L9 17l-5-5" stroke="#34c759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <div className="settings-row-content">
-                <p className="settings-row-title">Inquilino</p>
-                <p className="settings-row-subtitle">Introduce tu código de acceso</p>
-              </div>
-              <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-
-            {/* Gestor — deshabilitado */}
-            <div className="settings-card-row settings-role-disabled">
-              <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <rect x="2" y="7" width="20" height="14" rx="2" stroke="#aaa" strokeWidth="2"/>
-                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M12 12v4M10 14h4" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
+            ) : (
+              <button
+                className="settings-card-row"
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                onClick={() => setShowRoleModal(true)}
+              >
+                <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="7" r="4" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content">
+                  <p className="settings-row-title">Inquilino</p>
+                  <p className="settings-row-subtitle">Introduce tu código de acceso</p>
+                </div>
+                <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
                 </svg>
-              </div>
-              <div className="settings-row-content">
-                <p className="settings-row-title" style={{ color: '#aaa' }}>Gestor</p>
-              </div>
-              <span className="settings-row-badge">Próximamente</span>
-            </div>
+              </button>
+            )}
           </div>
-        </div>}
+        </div>
 
         {/* ════════════════════════════════════════
             SECCIÓN 2b — Gestores (solo propietario)
         ════════════════════════════════════════ */}
-        {role !== 'gestor' && <div>
+        {role === 'landlord' && <div>
           <p className="settings-section-label">Gestores</p>
           <div className="settings-card">
 
-            {/* Lista de gestores actuales */}
             {gestores.length === 0 ? (
               <div className="settings-card-row" style={{ opacity: 0.5, pointerEvents: 'none' }}>
                 <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
@@ -554,10 +585,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
               ))
             )}
 
-            {/* Separador */}
             {gestores.length > 0 && <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />}
 
-            {/* Botón invitar */}
             <button
               className="settings-card-row"
               style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
@@ -583,9 +612,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>}
 
         {/* ════════════════════════════════════════
-            SECCIÓN 3 — Plan (solo propietario)
+            SECCIÓN 3 — Plan (propietario y gestor)
         ════════════════════════════════════════ */}
-        {role !== 'gestor' && <div>
+        {role !== 'tenant' && <div>
           <p className="settings-section-label">Plan</p>
           <div className="settings-card">
             <div className="settings-card-row" style={{ alignItems: 'flex-start', paddingBottom: plan === 'pro' ? 14 : 10 }}>
@@ -939,6 +968,40 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
             >
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          MODAL — Crear cuenta de propietario
+      ════════════════════════════════════════ */}
+      {showCreateLandlordModal && (
+        <div className="settings-modal-overlay" onClick={() => !creatingLandlord && setShowCreateLandlordModal(false)}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()}>
+            <p className="settings-modal-title">Crear cuenta de propietario</p>
+            <p className="settings-modal-desc">
+              No tienes cuenta de propietario. ¿Quieres crear una ahora?
+            </p>
+            <button
+              className="settings-modal-btn-primary"
+              onClick={handleCreateLandlordAccount}
+              disabled={creatingLandlord}
+            >
+              {creatingLandlord ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <div className="settings-spinner" />
+                  Creando…
+                </span>
+              ) : 'Crear cuenta'}
+            </button>
+            {!creatingLandlord && (
+              <button
+                className="settings-modal-btn-cancel"
+                onClick={() => setShowCreateLandlordModal(false)}
+              >
+                Cancelar
+              </button>
+            )}
           </div>
         </div>
       )}
