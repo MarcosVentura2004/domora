@@ -438,6 +438,29 @@ export default function ChatConversation({
             ? (avatarCache[msg.sender_id] || { url: null, name: msg.sender_id || '', loaded: false })
             : null;
 
+          // ── Primera burbuja de un grupo consecutivo del mismo remitente ───
+          const prevMsg = i > 0 ? messages[i - 1] : null;
+          const isFirstInGroup = isNewDay || !prevMsg
+            || prevMsg.sender !== msg.sender
+            || String(prevMsg.sender_id ?? '') !== String(msg.sender_id ?? '');
+
+          // Etiqueta de rol: "Propietario", "Gestor" (o nombre), "Inquilino"
+          let senderLabel = '';
+          if (isFirstInGroup) {
+            if (msg.sender === 'landlord') {
+              if (!msg.sender_id || msg.sender_id === landlordEmail) {
+                senderLabel = 'Propietario';
+              } else {
+                const cached = avatarCache[msg.sender_id];
+                senderLabel = (cached?.name && cached.name !== msg.sender_id)
+                  ? cached.name.split(' ')[0]
+                  : 'Gestor';
+              }
+            } else if (msg.sender === 'tenant') {
+              senderLabel = 'Inquilino';
+            }
+          }
+
           return (
             <div key={msg.id}>
               {isNewDay && (
@@ -492,6 +515,17 @@ export default function ChatConversation({
                   alignItems: mine ? 'flex-end' : 'flex-start',
                   maxWidth: '100%',
                 }}>
+                  {senderLabel ? (
+                    <p style={{
+                      margin: '0 4px 3px',
+                      fontSize: '11px',
+                      color: '#bbb',
+                      fontWeight: 500,
+                      lineHeight: 1,
+                    }}>
+                      {senderLabel}
+                    </p>
+                  ) : null}
                   <div style={{
                     background: mine ? '#111' : 'white',
                     color: mine ? 'white' : '#111',
