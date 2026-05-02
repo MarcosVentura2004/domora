@@ -88,11 +88,13 @@ function getExpensesForMonth(expenses, year, month) {
     const isUnico = e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico';
     if (isUnico) {
       if (!e.start_date) return false;
-      const d = new Date(e.start_date + 'T12:00:00');
+      const d = new Date(e.start_date.substring(0, 10) + 'T12:00:00');
       return d.getFullYear() === year && d.getMonth() === month;
     }
     // Gastos recurrentes: start_date marca el inicio de la recurrencia
-    const dateStr = e.start_date ? (e.start_date + 'T12:00:00') : (e.created_at || '');
+    const dateStr = e.start_date
+      ? (e.start_date.substring(0, 10) + 'T12:00:00')
+      : (e.created_at ? (e.created_at.substring(0, 10) + 'T12:00:00') : '');
     const start = new Date(dateStr);
     if (isNaN(start.getTime())) return false;
     const sy = start.getFullYear(), sm = start.getMonth();
