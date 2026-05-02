@@ -24,12 +24,20 @@ function formatMonthYear(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    const dateStr = e.start_date ? (e.start_date + 'T12:00:00') : (e.created_at || e.date || '');
+    // Gastos únicos: usar exclusivamente start_date (fecha elegida por el usuario), nunca created_at
+    const isUnico = e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico';
+    if (isUnico) {
+      if (!e.start_date) return false;
+      const d = new Date(e.start_date + 'T12:00:00');
+      return d.getFullYear() === year && d.getMonth() === month;
+    }
+    // Gastos recurrentes: start_date marca el inicio de la recurrencia
+    const dateStr = e.start_date ? (e.start_date + 'T12:00:00') : (e.created_at || '');
     const start = new Date(dateStr);
+    if (isNaN(start.getTime())) return false;
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
-    if (e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico') return year === sy && month === sm;
-    if (e.frequency === 'manual') return true; // siempre visible; propietario introduce importe cuando llega
+    if (e.frequency === 'manual') return true;
     const monthsDiff = (year - sy) * 12 + (month - sm);
     const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : e.frequency === 'custom' ? (e.custom_frequency_months || 1) : 1;
     if (monthsDiff % step !== 0) return false;
@@ -1728,7 +1736,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
             {repeats && !hasAmount && <p style={{ fontSize: 12, color: '#888', marginTop: 6 }}>Introduces el importe cuando llega la factura.</p>}
           </div>
           <div className="form-group">
-            <label>Fecha de inicio</label>
+            <label>{!repeats ? 'Fecha del gasto' : 'Fecha de inicio'}</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
           </div>
           <div className="form-group">

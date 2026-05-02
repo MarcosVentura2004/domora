@@ -84,11 +84,19 @@ function formatMonthYear(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    const dateStr = e.start_date ? (e.start_date + 'T12:00:00') : (e.created_at || e.date || '');
+    // Gastos únicos: usar exclusivamente start_date (fecha elegida por el usuario), nunca created_at
+    const isUnico = e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico';
+    if (isUnico) {
+      if (!e.start_date) return false;
+      const d = new Date(e.start_date + 'T12:00:00');
+      return d.getFullYear() === year && d.getMonth() === month;
+    }
+    // Gastos recurrentes: start_date marca el inicio de la recurrencia
+    const dateStr = e.start_date ? (e.start_date + 'T12:00:00') : (e.created_at || '');
     const start = new Date(dateStr);
+    if (isNaN(start.getTime())) return false;
     const sy = start.getFullYear(), sm = start.getMonth();
     if (year < sy || (year === sy && month < sm)) return false;
-    if (e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico') return year === sy && month === sm;
     if (e.frequency === 'manual') return true;
     const monthsDiff = (year - sy) * 12 + (month - sm);
     const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : e.frequency === 'custom' ? (e.custom_frequency_months || 1) : 1;
@@ -247,7 +255,6 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
-  const [showExpenseHistory, setShowExpenseHistory] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -404,52 +411,11 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     }
   };
 
-  const getPaymentStatus = () => {
-    if (!room.tenant) return null;
-    const today = new Date();
-    const isCurrentMonthView = currentYear === today.getFullYear() && currentMonth === today.getMonth();
-    if (!isCurrentMonthView) {
-      if (currentPayment) {
-        return currentPayment.status === 'confirmed' ? 'paid' : 'pending_confirmation';
-      }
-      return 'overdue';
-    }
-    if (currentPayment) {
-      if (currentPayment.status === 'confirmed') return 'paid';
-      if (currentPayment.status === 'pending') return 'pending_confirmation';
-    }
-    return 'pending';
-  };
-
-  const paymentStatus = getPaymentStatus();
-
-  const handleConfirmPayment = (customAmount) => {
-    const amount = customAmount !== undefined ? customAmount : room.price;
-    const updatedPayments = payments.map(p =>
-      p.year === currentYear && p.month === currentMonth && p.roomId === room.id
-        ? { 
-            ...p, 
-            status: 'confirmed', 
-            confirmedAt: new Date().toISOString(),
-            amount,
-            tenantName: room.tenant?.name || p.tenantName
-          }
-        : p
-    );
-    onUpdate({ ...property, payments: updatedPayments });
-  };
-
   const handleRejectPayment = () => {
     const updatedPayments = payments.filter(p =>
       !(p.year === currentYear && p.month === currentMonth && p.roomId === room.id)
     );
     onUpdate({ ...property, payments: updatedPayments });
-  };
-
-  const handleCancelPayment = () => {
-    if (window.confirm('¿Estás seguro de que quieres cancelar este pago confirmado?')) {
-      handleRejectPayment();
-    }
   };
 
   // Abre el modal de confirmar pago con importe editable
