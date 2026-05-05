@@ -91,6 +91,18 @@
   object-fit: contain;
 }
 
+.welcome-card-icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1.5px solid #eee;
+  border-radius: 14px;
+}
+
 .welcome-card-label {
   font-size: 18px;
   font-weight: 600;
