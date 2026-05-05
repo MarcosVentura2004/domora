@@ -118,8 +118,6 @@ function AttachmentView({ msg, isMe }) {
 }
 
 // ─── Mini-avatar para un mensaje entrante ────────────────────────────────────
-// cached: { url: string|null, name: string, loaded: boolean }
-// showLabel: mostrar nombre corto debajo del avatar
 function SenderAvatar({ cached, showLabel, onError }) {
   const initials = getInitials(cached?.name);
   const firstWord = (cached?.name || '').split(' ')[0];
@@ -168,6 +166,10 @@ export default function ChatConversation({
   isGroup,
   onBack,
   currentUserEmail,
+  // Props para chat directo gestor-propietario
+  isDirectChat = false,
+  otherEmail = null,
+  otherName = null,
 }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -182,21 +184,19 @@ export default function ChatConversation({
   const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
-  // ── Determina si un mensaje lo envió el usuario actual ──────────────────────
-  // Compara sender_id directamente para que gestor y propietario vean los
-  // mensajes del otro en el lado izquierdo con su avatar propio.
+  // ── isMe: en modo directo usa sender_id, en modo normal usa sender + sender_id ──
   const myId = currentRole === 'landlord'
     ? (currentUserEmail || landlordEmail)
     : tenantId;
 
   const isMe = (msg) => {
+    if (isDirectChat) return msg.sender_id === currentUserEmail;
     if (msg.sender !== currentRole) return false;
     if (msg.sender_id != null) return String(msg.sender_id) === String(myId);
-    // Mensajes antiguos sin sender_id: asumir propios si el rol coincide
     return true;
   };
 
-  // ── Carga avatar para un email (landlord o gestor) ──────────────────────────
+  // ── Carga avatar para un email ──────────────────────────────────────────────
   const ensureAvatarLoaded = async (email) => {
     if (!email || avatarCache[email]?.loaded || loadingEmails.current.has(email)) return;
     loadingEmails.current.add(email);
@@ -204,19 +204,16 @@ export default function ChatConversation({
     let url = null;
     let name = email;
 
-    // 1. IndexedDB local
     const local = await getFile(`avatar_${email}`).catch(() => null);
     if (local) {
       url = local;
     } else {
-      // 2. Supabase Storage public URL
       const { data: storageData } = supabase.storage
         .from('avatars')
         .getPublicUrl(`${email}/avatar`);
       if (storageData?.publicUrl) url = storageData.publicUrl + '?t=1';
     }
 
-    // 3. Nombre: primero en landlords, luego en gestores
     const { data: landlordRow } = await supabase
       .from('landlords')
       .select('name')
@@ -238,6 +235,10 @@ export default function ChatConversation({
 
   // ── Disparar carga de avatares cuando cambian los mensajes ──────────────────
   useEffect(() => {
+    if (isDirectChat) {
+      if (otherEmail) ensureAvatarLoaded(otherEmail);
+      return;
+    }
     const senderIds = [
       ...new Set(
         messages
@@ -251,15 +252,37 @@ export default function ChatConversation({
   // ── Carga mensajes ──────────────────────────────────────────────────────────
   useEffect(() => {
     loadMessages();
-  }, [landlordEmail, propertyId, roomId, tenantId]); // eslint-disable-line
+  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail]); // eslint-disable-line
 
-  // ── Marcar como leídos al cargar ────────────────────────────────────────────
+  // ── Marcar como leidos al cargar ────────────────────────────────────────────
   useEffect(() => {
     if (!loading) markAsRead();
   }, [loading]); // eslint-disable-line
 
-  // ── Suscripción en tiempo real ──────────────────────────────────────────────
+  // ── Suscripcion en tiempo real ──────────────────────────────────────────────
   useEffect(() => {
+    if (isDirectChat) {
+      const channelKey = [currentUserEmail, otherEmail].sort().join(':');
+      const channel = supabase
+        .channel(`direct:${channelKey}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        }, (payload) => {
+          const m = payload.new;
+          if (!m.is_direct_message) return;
+          const isThisConv =
+            (m.sender_id === currentUserEmail && m.recipient_id === otherEmail) ||
+            (m.sender_id === otherEmail && m.recipient_id === currentUserEmail);
+          if (!isThisConv) return;
+          setMessages(prev => [...prev, m]);
+          markAsRead();
+        })
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
+
     const channel = supabase
       .channel(`chat:${landlordEmail}:${propertyId}:${roomId || tenantId}:${isGroup ? 'group' : 'individual'}`)
       .on('postgres_changes', {
@@ -280,9 +303,9 @@ export default function ChatConversation({
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [landlordEmail, propertyId, roomId, tenantId, currentRole, isGroup]); // eslint-disable-line
+  }, [isDirectChat, currentUserEmail, otherEmail, landlordEmail, propertyId, roomId, tenantId, currentRole, isGroup]); // eslint-disable-line
 
-  // ── Scroll al último mensaje ────────────────────────────────────────────────
+  // ── Scroll al ultimo mensaje ────────────────────────────────────────────────
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (container) container.scrollTop = container.scrollHeight;
@@ -290,6 +313,24 @@ export default function ChatConversation({
 
   async function loadMessages() {
     setLoading(true);
+
+    if (isDirectChat) {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('is_direct_message', true)
+        .or(`sender_id.eq.${currentUserEmail},recipient_id.eq.${currentUserEmail}`)
+        .order('created_at', { ascending: true });
+
+      const filtered = (data || []).filter(m =>
+        (m.sender_id === currentUserEmail && m.recipient_id === otherEmail) ||
+        (m.sender_id === otherEmail && m.recipient_id === currentUserEmail)
+      );
+      setMessages(filtered);
+      setLoading(false);
+      return;
+    }
+
     let q = supabase
       .from('messages')
       .select('*')
@@ -309,6 +350,19 @@ export default function ChatConversation({
   }
 
   async function markAsRead() {
+    if (isDirectChat) {
+      // En chat directo, el gestor usa read_by_tenant, el propietario read_by_landlord
+      const col = currentRole === 'gestor' ? 'read_by_tenant' : 'read_by_landlord';
+      await supabase
+        .from('messages')
+        .update({ [col]: true })
+        .eq('is_direct_message', true)
+        .eq('sender_id', otherEmail)
+        .eq('recipient_id', currentUserEmail)
+        .eq(col, false);
+      return;
+    }
+
     const col = currentRole === 'landlord' ? 'read_by_landlord' : 'read_by_tenant';
     let q = supabase
       .from('messages')
@@ -343,35 +397,60 @@ export default function ChatConversation({
 
       if (pendingFile) {
         const ext = pendingFile.fileName.split('.').pop();
-        const path = `${landlordEmail}/${propertyId}/${Date.now()}.${ext}`;
+        const basePath = isDirectChat
+          ? `direct/${landlordEmail}/${Date.now()}.${ext}`
+          : `${landlordEmail}/${propertyId}/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from('chat-attachments')
-          .upload(path, pendingFile.file, { contentType: pendingFile.fileType });
+          .upload(basePath, pendingFile.file, { contentType: pendingFile.fileType });
         if (uploadError) throw uploadError;
-        const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(path);
+        const { data: { publicUrl } } = supabase.storage.from('chat-attachments').getPublicUrl(basePath);
         attachment_url = publicUrl;
         attachment_name = pendingFile.fileName;
         attachment_type = pendingFile.fileType;
         attachment_size = pendingFile.fileSize;
       }
 
-      const { error } = await supabase.from('messages').insert({
-        property_id: propertyId,
-        room_id: isGroup ? null : (roomId || null),
-        tenant_id: isGroup ? null : (roomId ? null : tenantId),
-        landlord_email: landlordEmail,
-        sender: currentRole,
-        sender_id: currentRole === 'landlord' ? (currentUserEmail || landlordEmail) : tenantId,
-        content: text.trim() || null,
-        attachment_url,
-        attachment_name,
-        attachment_type,
-        attachment_size,
-        is_group_message: isGroup || false,
-        read_by_landlord: currentRole === 'landlord',
-        read_by_tenant: currentRole === 'tenant',
-      });
-      if (error) throw error;
+      if (isDirectChat) {
+        const { error } = await supabase.from('messages').insert({
+          property_id: null,
+          room_id: null,
+          tenant_id: null,
+          landlord_email: landlordEmail,
+          sender: currentRole === 'gestor' ? 'tenant' : 'landlord',
+          sender_id: currentUserEmail,
+          recipient_id: otherEmail,
+          content: text.trim() || null,
+          attachment_url,
+          attachment_name,
+          attachment_type,
+          attachment_size,
+          is_group_message: false,
+          is_direct_message: true,
+          read_by_landlord: currentRole === 'landlord',
+          read_by_tenant: currentRole === 'gestor',
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('messages').insert({
+          property_id: propertyId,
+          room_id: isGroup ? null : (roomId || null),
+          tenant_id: isGroup ? null : (roomId ? null : tenantId),
+          landlord_email: landlordEmail,
+          sender: currentRole,
+          sender_id: currentRole === 'landlord' ? (currentUserEmail || landlordEmail) : tenantId,
+          content: text.trim() || null,
+          attachment_url,
+          attachment_name,
+          attachment_type,
+          attachment_size,
+          is_group_message: isGroup || false,
+          is_direct_message: false,
+          read_by_landlord: currentRole === 'landlord',
+          read_by_tenant: currentRole === 'tenant',
+        });
+        if (error) throw error;
+      }
 
       setText('');
       setPendingFile(null);
@@ -382,9 +461,19 @@ export default function ChatConversation({
     }
   };
 
-  const otherName = isGroup
-    ? (currentRole === 'tenant' ? 'Chat del bloque' : 'Todos los inquilinos')
-    : (currentRole === 'tenant' ? 'Propietario' : tenantName);
+  // ── Nombre a mostrar en el header ───────────────────────────────────────────
+  const displayOtherName = isDirectChat
+    ? (otherName || otherEmail || '')
+    : isGroup
+      ? (currentRole === 'tenant' ? 'Chat del bloque' : 'Todos los inquilinos')
+      : (currentRole === 'tenant' ? 'Propietario' : tenantName);
+
+  const displaySubtitle = isDirectChat
+    ? 'Mensaje directo'
+    : isGroup
+      ? `${propertyName} · Grupo`
+      : propertyName;
+
   const canSend = (text.trim() || pendingFile) && !sending;
 
   return (
@@ -397,8 +486,8 @@ export default function ChatConversation({
       }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontWeight: 600, fontSize: '15px', color: '#111' }}>{otherName}</p>
-          <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{isGroup ? `${propertyName} · Grupo` : propertyName}</p>
+          <p style={{ margin: 0, fontWeight: 600, fontSize: '15px', color: '#111' }}>{displayOtherName}</p>
+          <p style={{ margin: 0, fontSize: '12px', color: '#999' }}>{displaySubtitle}</p>
         </div>
       </div>
 
@@ -409,7 +498,7 @@ export default function ChatConversation({
         )}
         {!loading && messages.length === 0 && (
           <p style={{ textAlign: 'center', color: '#bbb', fontSize: '14px', marginTop: '60px' }}>
-            Sin mensajes todavía. Inicia la conversacion.
+            Sin mensajes todavia. Inicia la conversacion.
           </p>
         )}
         {messages.map((msg, i) => {
@@ -430,24 +519,25 @@ export default function ChatConversation({
 
           const isAudioMsg = msg.attachment_type?.startsWith('audio/');
 
-          // ── Avatar y label para mensajes entrantes (sender=landlord) ──────
-          // Se determina si el remitente es el propietario o un gestor
+          // ── Datos del remitente para mensajes normales ────────────────────
           const isLandlordMsg = msg.sender === 'landlord';
-          const isGestor = isLandlordMsg && msg.sender_id && msg.sender_id !== landlordEmail;
-          const senderCached = isLandlordMsg
+          const isGestor = !isDirectChat && isLandlordMsg && msg.sender_id && msg.sender_id !== landlordEmail;
+          const senderCachedNormal = !isDirectChat && isLandlordMsg
             ? (avatarCache[msg.sender_id] || { url: null, name: msg.sender_id || '', loaded: false })
             : null;
 
-          // ── Primera burbuja de un grupo consecutivo del mismo remitente ───
+          // ── Primera burbuja del grupo consecutivo del mismo remitente ─────
           const prevMsg = i > 0 ? messages[i - 1] : null;
           const isFirstInGroup = isNewDay || !prevMsg
             || prevMsg.sender !== msg.sender
             || String(prevMsg.sender_id ?? '') !== String(msg.sender_id ?? '');
 
-          // Etiqueta de rol: "Propietario", "Gestor" (o nombre), "Inquilino"
+          // ── Etiqueta de rol ───────────────────────────────────────────────
           let senderLabel = '';
-          if (isFirstInGroup) {
-            if (msg.sender === 'landlord') {
+          if (isFirstInGroup && !mine) {
+            if (isDirectChat) {
+              senderLabel = otherName || otherEmail || '';
+            } else if (msg.sender === 'landlord') {
               if (!msg.sender_id || msg.sender_id === landlordEmail) {
                 senderLabel = 'Propietario';
               } else {
@@ -481,10 +571,20 @@ export default function ChatConversation({
               }}>
                 {/* Mini-avatar para mensajes entrantes */}
                 {!mine && (() => {
+                  if (isDirectChat) {
+                    const cached = avatarCache[otherEmail] || { url: null, name: otherName || otherEmail || '', loaded: false };
+                    return (
+                      <SenderAvatar
+                        cached={cached}
+                        showLabel={false}
+                        onError={() => setAvatarCache(prev => ({ ...prev, [otherEmail]: { ...prev[otherEmail], url: null } }))}
+                      />
+                    );
+                  }
                   if (isLandlordMsg) {
                     return (
                       <SenderAvatar
-                        cached={senderCached}
+                        cached={senderCachedNormal}
                         showLabel={isGestor}
                         onError={() => {
                           setAvatarCache(prev => ({
@@ -495,8 +595,7 @@ export default function ChatConversation({
                       />
                     );
                   }
-                  // Mensajes de inquilino vistos desde propietario/gestor
-                  const initials = getInitials(tenantName || otherName);
+                  const initials = getInitials(tenantName || displayOtherName);
                   return (
                     <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, overflow: 'hidden' }}>
                       <div style={{
@@ -617,3 +716,46 @@ export default function ChatConversation({
     </div>
   );
 }
+
+/*
+  ── SQL para ejecutar en Supabase SQL Editor ──────────────────────────────────
+
+  Campos necesarios en la tabla messages para chats directos gestor-propietario:
+
+  ALTER TABLE public.messages
+    ADD COLUMN IF NOT EXISTS recipient_id text,
+    ADD COLUMN IF NOT EXISTS is_direct_message boolean NOT NULL DEFAULT false;
+
+  CREATE INDEX IF NOT EXISTS messages_direct_idx
+    ON public.messages (sender_id, recipient_id)
+    WHERE is_direct_message = true;
+
+  -- RLS: el propietario puede leer sus mensajes directos
+  CREATE POLICY "direct_messages_landlord_select"
+  ON public.messages FOR SELECT
+  USING (
+    is_direct_message = true AND (
+      sender_id = auth.email() OR recipient_id = auth.email()
+    )
+  );
+
+  -- RLS: el gestor puede leer mensajes directos donde participa
+  -- (misma politica cubre ambos roles por email)
+
+  -- RLS: cualquier usuario autenticado puede insertar mensajes directos
+  --      donde es el remitente
+  CREATE POLICY "direct_messages_insert"
+  ON public.messages FOR INSERT
+  WITH CHECK (
+    is_direct_message = true AND sender_id = auth.email()
+  );
+
+  -- RLS: marcar como leido (UPDATE read_by_landlord / read_by_tenant)
+  CREATE POLICY "direct_messages_update"
+  ON public.messages FOR UPDATE
+  USING (
+    is_direct_message = true AND (
+      sender_id = auth.email() OR recipient_id = auth.email()
+    )
+  );
+*/

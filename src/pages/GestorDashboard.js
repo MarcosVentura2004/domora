@@ -96,7 +96,7 @@ const CATEGORIES = [
   },
   {
     key: 'vacias',
-    title: 'Vacías',
+    title: 'Vacias',
     statuses: ['vacio'],
     representativeStatus: 'vacio',
     color: '#DC2626',
@@ -124,7 +124,6 @@ const CATEGORIES = [
 function getGestorTenants(properties, accessMap) {
   const list = [];
   properties.forEach(prop => {
-    // prop.landlord_email is set directly from the DB column; fallback to accessMap for safety
     const landlordEmail = prop.landlord_email || accessMap[prop.id]?.landlordEmail || '';
     const isGroupEligible = prop.status === 'por_habitaciones' || prop.isSharedProperty;
     if (isGroupEligible) {
@@ -176,23 +175,24 @@ function getGestorTenants(properties, accessMap) {
 // ── Componente principal ───────────────────────────────────────────────────
 export default function GestorDashboard({ userEmail, onLogout }) {
   const [gestorName, setGestorName] = useState('');
-  const [accessMap, setAccessMap] = useState({}); // { [property_id]: { permisos, landlordEmail } }
+  const [accessMap, setAccessMap] = useState({}); // { [property_id]: { permisos, landlordEmail, canMessage } }
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ── Selección de propietario ─────────────────────────────────────────────
-  const [landlordsList, setLandlordsList] = useState([]); // [{ email, name, avatarUrl, propertyCount }]
+  // ── Seleccion de propietario ─────────────────────────────────────────────
+  const [landlordsList, setLandlordsList] = useState([]); // [{ email, name, avatarUrl, propertyCount, canMessage }]
   const [selectedLandlord, setSelectedLandlord] = useState(null);
 
   const [activeTab, setActiveTab] = useState('general');
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [viewingEntry, setViewingEntry] = useState(null); // { property, permisos, landlordEmail }
+  const [viewingEntry, setViewingEntry] = useState(null);
   const [chatWith, setChatWith] = useState(null);
   const [tenantMeta, setTenantMeta] = useState({});
+  const [landlordDirectMeta, setLandlordDirectMeta] = useState({}); // { [landlordEmail]: { unread, lastTs, lastContent } }
   const [metaTick, setMetaTick] = useState(0);
 
-  const [hasOwnProperties, setHasOwnProperties] = useState(null); // null = aún cargando
-  const [mainTab, setMainTab] = useState('gestion'); // 'gestion' | 'mis_propiedades'
+  const [hasOwnProperties, setHasOwnProperties] = useState(null);
+  const [mainTab, setMainTab] = useState('gestion');
 
   const [gestorAvatarUrl, setGestorAvatarUrl] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -235,7 +235,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setActiveTab('general');
   };
 
-  // Medir la altura real del header con pestañas para posicionar el contenedor de Dashboard
   useEffect(() => {
     if (!tabHeaderRef.current) return;
     const observer = new ResizeObserver(() => {
@@ -266,7 +265,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         if (urlData?.publicUrl) setGestorAvatarUrl(urlData.publicUrl + '?t=1');
       }
 
-      // Comprobar si el gestor también tiene propiedades propias como propietario
       const { data: ownPropsData } = await supabase
         .from('properties')
         .select('id')
@@ -276,7 +274,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
       const { data: accessRows, error } = await supabase
         .from('property_access')
-        .select('property_id, landlord_email, permisos')
+        .select('property_id, landlord_email, permisos, can_message')
         .eq('gestor_email', userEmail);
 
       if (error || !accessRows || accessRows.length === 0) {
@@ -289,11 +287,15 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
       const map = {};
       accessRows.forEach(r => {
-        map[r.property_id] = { permisos: r.permisos, landlordEmail: r.landlord_email };
+        map[r.property_id] = {
+          permisos: r.permisos,
+          landlordEmail: r.landlord_email,
+          canMessage: r.can_message !== false,
+        };
       });
       setAccessMap(map);
 
-      // ── Construir lista de propietarios únicos ───────────────────────────
+      // ── Construir lista de propietarios unicos con canMessage ───────────
       const uniqueEmails = [...new Set(accessRows.map(r => r.landlord_email))];
 
       const { data: landlordRows } = await supabase
@@ -302,23 +304,24 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         .in('email', uniqueEmails);
 
       const landlordNameMap = {};
-      (landlordRows || []).forEach(l => {
-        landlordNameMap[l.email] = l.name;
-      });
+      (landlordRows || []).forEach(l => { landlordNameMap[l.email] = l.name; });
 
       const list = uniqueEmails.map(email => {
         const { data: urlData } = supabase.storage
           .from('avatars')
           .getPublicUrl(`${email}/avatar`);
+        const canMessage = accessRows
+          .filter(r => r.landlord_email === email)
+          .some(r => r.can_message !== false);
         return {
           email,
           name: landlordNameMap[email] || email,
           avatarUrl: urlData?.publicUrl || null,
           propertyCount: accessRows.filter(r => r.landlord_email === email).length,
+          canMessage,
         };
       });
       setLandlordsList(list);
-      // ─────────────────────────────────────────────────────────────────────
 
       const ids = accessRows.map(r => r.property_id);
       const { data: propRows } = await supabase
@@ -335,7 +338,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     load();
   }, [userEmail]);
 
-  // ── Carga unread counts ──────────────────────────────────────────────────
+  // ── Carga unread counts de inquilinos ────────────────────────────────────
   useEffect(() => {
     const ids = Object.keys(accessMap);
     if (ids.length === 0) return;
@@ -362,7 +365,31 @@ export default function GestorDashboard({ userEmail, onLogout }) {
       });
   }, [properties, accessMap, metaTick]); // eslint-disable-line
 
-  // ── Actualizar propiedad (solo con permisos = 'gestion') ─────────────────
+  // ── Carga unread counts de mensajes directos con propietarios ────────────
+  useEffect(() => {
+    if (!userEmail || landlordsList.length === 0) return;
+    supabase
+      .from('messages')
+      .select('sender_id, recipient_id, content, created_at, read_by_tenant, is_direct_message')
+      .eq('is_direct_message', true)
+      .or(`sender_id.eq.${userEmail},recipient_id.eq.${userEmail}`)
+      .then(({ data }) => {
+        if (!data) return;
+        const meta = {};
+        landlordsList.forEach(l => {
+          const convMsgs = data.filter(m =>
+            (m.sender_id === userEmail && m.recipient_id === l.email) ||
+            (m.sender_id === l.email && m.recipient_id === userEmail)
+          );
+          const unread = convMsgs.filter(m => m.sender_id === l.email && !m.read_by_tenant).length;
+          const last = convMsgs[convMsgs.length - 1];
+          meta[l.email] = { unread, lastTs: last?.created_at || '', lastContent: last?.content || '' };
+        });
+        setLandlordDirectMeta(meta);
+      });
+  }, [landlordsList, userEmail, metaTick]); // eslint-disable-line
+
+  // ── Actualizar propiedad ─────────────────────────────────────────────────
   const handleUpdateProperty = async (updatedProperty) => {
     if (updatedProperty.deleted) return;
     const landlordEmail = accessMap[updatedProperty.id]?.landlordEmail;
@@ -431,11 +458,10 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     );
   }
 
-  // ── Modo "Mis propiedades" — Dashboard completo del propietario ──────────
+  // ── Modo "Mis propiedades" ────────────────────────────────────────────────
   if (mainTab === 'mis_propiedades') {
     return (
       <div>
-        {/* Header fijo con pestañas */}
         <div
           ref={tabHeaderRef}
           style={{
@@ -475,12 +501,10 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                 borderBottom: '2px solid transparent',
               }}
             >
-              Gestión
+              Gestion
             </button>
           </div>
         </div>
-
-        {/* Dashboard en contenedor desplazable que empieza bajo el header */}
         <div style={{
           position: 'fixed', top: tabHeaderHeight, left: 0, right: 0, bottom: 0,
           overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
@@ -493,11 +517,10 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     );
   }
 
-  // ── Pantalla de selección de propietario ─────────────────────────────────
+  // ── Pantalla de seleccion de propietario ─────────────────────────────────
   if (!selectedLandlord) {
     return (
       <div style={{ minHeight: '100vh', background: '#f7f8fa' }}>
-        {/* Header */}
         <div style={{
           background: 'white',
           borderBottom: '1px solid #f0f0f0',
@@ -537,12 +560,11 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                 borderBottom: '2px solid #111',
               }}
             >
-              Gestión
+              Gestion
             </button>
           </div>
         </div>
 
-        {/* Título */}
         <div style={{ padding: '28px 20px 8px' }}>
           <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '-0.4px' }}>
             Propietarios
@@ -552,7 +574,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           </p>
         </div>
 
-        {/* Lista de propietarios */}
         {landlordsList.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 30px' }}>
             <div style={{
@@ -566,7 +587,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
             </div>
             <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#333' }}>Sin propietarios asignados</p>
             <p style={{ margin: '8px 0 0', fontSize: 14, color: '#aaa', lineHeight: 1.5 }}>
-              Aún no tienes acceso a propiedades de ningún propietario.
+              Aun no tienes acceso a propiedades de ningun propietario.
             </p>
           </div>
         ) : (
@@ -617,9 +638,17 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   // ── Dashboard filtrado por propietario seleccionado ──────────────────────
   const filteredProperties = properties.filter(p => p.landlord_email === selectedLandlord.email);
   const tenants = getGestorTenants(filteredProperties, accessMap);
-  const totalUnread = Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
 
-  // Botón Volver reutilizable
+  // Determinar si el gestor puede ver mensajes del propietario seleccionado
+  const canMessageSelectedLandlord = selectedLandlord.canMessage === true;
+
+  // Unread total: inquilinos + mensaje directo con el propietario
+  const tenantUnread = Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
+  const landlordDirectUnread = canMessageSelectedLandlord
+    ? (landlordDirectMeta[selectedLandlord.email]?.unread || 0)
+    : 0;
+  const totalUnread = tenantUnread + landlordDirectUnread;
+
   const BackButton = () => (
     <button
       onClick={handleBackToLandlords}
@@ -642,7 +671,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
       {/* ── Tab: Resumen ── */}
       {activeTab === 'general' && (
         <>
-          {/* Barra "Volver" encima de GeneralPanel */}
           <div style={{
             background: 'white', borderBottom: '1px solid #f0f0f0',
             padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10,
@@ -680,12 +708,9 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
           {selectedCategory === null ? (
             <>
-              {/* Header nivel 1 */}
               <div className="dashboard-header">
                 <BackButton />
-
                 <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Propiedades</span>
-
                 <button
                   onClick={() => { setShowPropertySearch(!showPropertySearch); setPropertySearch(''); }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
@@ -697,7 +722,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                 </button>
               </div>
 
-              {/* Etiqueta propietario seleccionado */}
               <div style={{ padding: '0 20px 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <LandlordAvatar
                   email={selectedLandlord.email}
@@ -710,7 +734,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                 </p>
               </div>
 
-              {/* Barra de búsqueda */}
               {showPropertySearch && (
                 <>
                   <div
@@ -741,7 +764,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               )}
 
               {propertySearch.trim() ? (
-                /* Resultados de búsqueda */
                 <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {(() => {
                     const results = filteredProperties.filter(p =>
@@ -753,11 +775,11 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                     return results.map(property => {
                       const cat = CATEGORIES.find(c => c.statuses.includes(property.status));
                       const statusLabel =
-                        property.status === 'alquilado'        ? 'Alquilado' :
-                        property.status === 'por_habitaciones'  ? 'Por habitaciones' :
-                        property.status === 'vacacional'        ? 'Vacacional' :
-                        property.status === 'otros'             ? (property.customType || 'Otros') :
-                        property.status === 'uso_propio'        ? 'Uso propio' : 'Vacío';
+                        property.status === 'alquilado'       ? 'Alquilado' :
+                        property.status === 'por_habitaciones' ? 'Por habitaciones' :
+                        property.status === 'vacacional'       ? 'Vacacional' :
+                        property.status === 'otros'            ? (property.customType || 'Otros') :
+                        property.status === 'uso_propio'       ? 'Uso propio' : 'Vacio';
                       const priceLabel =
                         property.status === 'vacacional'
                           ? `${(property.bookings || []).filter(b => {
@@ -767,7 +789,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                                 new Date(b.startDate).getFullYear() === now.getFullYear();
                             }).length} reservas este mes`
                           : property.status === 'uso_propio' ? 'Uso propio'
-                          : `${property.price} €/mes`;
+                          : `${property.price} euros/mes`;
                       const { permisos, landlordEmail } = accessMap[property.id] || {};
                       return (
                         <div
@@ -805,7 +827,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                   })()}
                 </div>
               ) : (
-                /* Cuadrícula 2x2 de categorías */
                 <div className="category-grid-wrapper">
                   {filteredProperties.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '80px 30px' }}>
@@ -820,7 +841,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                       </div>
                       <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#333' }}>Sin propiedades asignadas</p>
                       <p style={{ margin: '8px 0 0', fontSize: 14, color: '#aaa', lineHeight: 1.5 }}>
-                        El propietario aún no te ha dado acceso a ninguna propiedad.
+                        El propietario aun no te ha dado acceso a ninguna propiedad.
                       </p>
                     </div>
                   ) : (
@@ -850,7 +871,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               )}
             </>
           ) : (
-            /* ── Nivel 2: lista de propiedades de la categoría ── */
             <>
               <div className="dashboard-header">
                 <button
@@ -870,7 +890,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                 if (catProperties.length === 0) {
                   return (
                     <div className="empty-state">
-                      <p>No hay propiedades asignadas en esta categoría</p>
+                      <p>No hay propiedades asignadas en esta categoria</p>
                     </div>
                   );
                 }
@@ -878,11 +898,11 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                   <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {catProperties.map(property => {
                       const statusLabel =
-                        property.status === 'alquilado'        ? 'Alquilado' :
-                        property.status === 'por_habitaciones'  ? 'Por habitaciones' :
-                        property.status === 'vacacional'        ? 'Vacacional' :
-                        property.status === 'otros'             ? (property.customType || 'Otros') :
-                        property.status === 'uso_propio'        ? 'Uso propio' : 'Vacío';
+                        property.status === 'alquilado'       ? 'Alquilado' :
+                        property.status === 'por_habitaciones' ? 'Por habitaciones' :
+                        property.status === 'vacacional'       ? 'Vacacional' :
+                        property.status === 'otros'            ? (property.customType || 'Otros') :
+                        property.status === 'uso_propio'       ? 'Uso propio' : 'Vacio';
                       const priceLabel =
                         property.status === 'vacacional'
                           ? `${(property.bookings || []).filter(b => {
@@ -892,7 +912,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                                 new Date(b.startDate).getFullYear() === now.getFullYear();
                             }).length} reservas este mes`
                           : property.status === 'uso_propio' ? 'Uso propio'
-                          : `${property.price} €/mes`;
+                          : `${property.price} euros/mes`;
                       const { permisos, landlordEmail } = accessMap[property.id] || {};
                       return (
                         <div
@@ -939,13 +959,16 @@ export default function GestorDashboard({ userEmail, onLogout }) {
       )}
 
       {/* ── Tab: Mensajes — lista ── */}
-      {activeTab === 'chat' && !chatWith && (() => {
+      {activeTab === 'chat' && !chatWith && canMessageSelectedLandlord && (() => {
         const filteredTenants = chatSearch
           ? tenants.filter(t =>
               t.tenantName.toLowerCase().includes(chatSearch.toLowerCase()) ||
               t.propertyName.toLowerCase().includes(chatSearch.toLowerCase())
             )
           : tenants;
+
+        const directMeta = landlordDirectMeta[selectedLandlord.email] || { unread: 0, lastTs: '', lastContent: '' };
+
         return (
           <div style={{ minHeight: '100vh', background: '#f7f8fa', paddingBottom: '80px' }}>
             {/* Header */}
@@ -957,7 +980,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
             }}>
               <BackButton />
               <span style={{ fontWeight: 700, fontSize: '15px', color: '#111', letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
-                Mensajes de {selectedLandlord.email}
+                Mensajes
               </span>
               <button
                 onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(''); }}
@@ -970,7 +993,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               </button>
             </div>
 
-            {/* Barra búsqueda */}
+            {/* Barra busqueda */}
             {showChatSearch && (
               <>
                 <div
@@ -986,7 +1009,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                     <input
                       autoFocus
                       type="text"
-                      placeholder="Buscar conversación..."
+                      placeholder="Buscar conversacion..."
                       value={chatSearch}
                       onChange={e => setChatSearch(e.target.value)}
                       style={{
@@ -1000,109 +1023,172 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               </>
             )}
 
-            {tenants.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px 30px', gap: '16px', textAlign: 'center' }}>
-                <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#F0F1F3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <p style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#333' }}>Sin conversaciones</p>
-                <p style={{ margin: 0, fontSize: '14px', color: '#aaa', lineHeight: '1.6' }}>
-                  Las propiedades asignadas no tienen inquilinos activos.
-                </p>
-              </div>
-            ) : (
-              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[...filteredTenants]
-                  .map(t => ({ ...t, ...(tenantMeta[t.key] || { unread: 0, lastTs: '', lastContent: '' }) }))
-                  .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
-                  .map(t => {
-                    const initials = t.tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-                    const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
-                    const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
-                    const colorIdx = t.tenantName.charCodeAt(0) % avatarColors.length;
-                    return (
-                      <button
-                        key={t.key}
-                        onClick={() => setChatWith(t)}
-                        style={{
-                          width: '100%', background: t.isGroup ? '#f9f9f9' : 'white',
-                          border: t.isGroup ? '1px solid #e5e5e5' : 'none', borderRadius: '16px',
-                          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
-                          cursor: 'pointer', textAlign: 'left',
-                          boxShadow: t.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
-                        }}
-                      >
-                        <div style={{ position: 'relative', flexShrink: 0 }}>
-                          {t.isGroup ? (
-                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </div>
-                          ) : (
-                            <div style={{
-                              width: '48px', height: '48px', borderRadius: '50%',
-                              background: avatarColors[colorIdx],
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '16px', fontWeight: 700, color: avatarTextColors[colorIdx],
-                            }}>
-                              {initials}
-                            </div>
-                          )}
-                          {t.unread > 0 && (
-                            <span style={{
-                              position: 'absolute', top: 0, right: 0,
-                              background: '#e74c3c', color: 'white',
-                              borderRadius: '50%', width: 18, height: 18,
-                              fontSize: 11, fontWeight: 700,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              {t.unread}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                            <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>{t.tenantName}</p>
-                            {t.lastTs && (
-                              <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
-                                {new Date(t.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+              {/* Seccion: Propietario (chat directo) */}
+              <p style={{ margin: '4px 0 6px', fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                Propietario
+              </p>
+              {(() => {
+                const landlord = selectedLandlord;
+                const initials = landlord.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                return (
+                  <button
+                    onClick={() => setChatWith({
+                      isDirectChat: true,
+                      landlordEmail: landlord.email,
+                      otherEmail: landlord.email,
+                      otherName: landlord.name !== landlord.email ? landlord.name : landlord.email,
+                      key: `direct_${landlord.email}`,
+                    })}
+                    style={{
+                      width: '100%', background: 'white', border: 'none', borderRadius: '16px',
+                      padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                      cursor: 'pointer', textAlign: 'left',
+                      boxShadow: directMeta.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
+                    }}
+                  >
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <LandlordAvatar email={landlord.email} name={landlord.name} avatarUrl={landlord.avatarUrl} size={48} />
+                      {directMeta.unread > 0 && (
+                        <span style={{
+                          position: 'absolute', top: 0, right: 0,
+                          background: '#e74c3c', color: 'white',
+                          borderRadius: '50%', width: 18, height: 18,
+                          fontSize: 11, fontWeight: 700,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {directMeta.unread}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>
+                          {landlord.name !== landlord.email ? landlord.name : landlord.email}
+                        </p>
+                        {directMeta.lastTs && (
+                          <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
+                            {new Date(directMeta.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>Propietario</p>
+                      {directMeta.lastContent && (
+                        <p style={{ margin: '2px 0 0', fontSize: '13px', color: directMeta.unread > 0 ? '#333' : '#aaa', fontWeight: directMeta.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {directMeta.lastContent}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })()}
+
+              {/* Seccion: Inquilinos */}
+              {filteredTenants.length > 0 && (
+                <>
+                  <p style={{ margin: '8px 0 6px', fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                    Inquilinos
+                  </p>
+                  {[...filteredTenants]
+                    .map(t => ({ ...t, ...(tenantMeta[t.key] || { unread: 0, lastTs: '', lastContent: '' }) }))
+                    .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
+                    .map(t => {
+                      const initials = t.tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                      const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
+                      const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
+                      const colorIdx = t.tenantName.charCodeAt(0) % avatarColors.length;
+                      return (
+                        <button
+                          key={t.key}
+                          onClick={() => setChatWith(t)}
+                          style={{
+                            width: '100%', background: t.isGroup ? '#f9f9f9' : 'white',
+                            border: t.isGroup ? '1px solid #e5e5e5' : 'none', borderRadius: '16px',
+                            padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                            cursor: 'pointer', textAlign: 'left',
+                            boxShadow: t.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
+                          }}
+                        >
+                          <div style={{ position: 'relative', flexShrink: 0 }}>
+                            {t.isGroup ? (
+                              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </div>
+                            ) : (
+                              <div style={{
+                                width: '48px', height: '48px', borderRadius: '50%',
+                                background: avatarColors[colorIdx],
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '16px', fontWeight: 700, color: avatarTextColors[colorIdx],
+                              }}>
+                                {initials}
+                              </div>
+                            )}
+                            {t.unread > 0 && (
+                              <span style={{
+                                position: 'absolute', top: 0, right: 0,
+                                background: '#e74c3c', color: 'white',
+                                borderRadius: '50%', width: 18, height: 18,
+                                fontSize: 11, fontWeight: 700,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                {t.unread}
                               </span>
                             )}
                           </div>
-                          <p style={{ margin: 0, fontSize: '12px', color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {t.isGroup ? t.tenantSubtitle : t.propertyName}
-                          </p>
-                          {t.lastContent && (
-                            <p style={{ margin: '2px 0 0', fontSize: '13px', color: t.unread > 0 ? '#333' : '#aaa', fontWeight: t.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {t.lastContent}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                              <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>{t.tenantName}</p>
+                              {t.lastTs && (
+                                <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
+                                  {new Date(t.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                </span>
+                              )}
+                            </div>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {t.isGroup ? t.tenantSubtitle : t.propertyName}
                             </p>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-              </div>
-            )}
+                            {t.lastContent && (
+                              <p style={{ margin: '2px 0 0', fontSize: '13px', color: t.unread > 0 ? '#333' : '#aaa', fontWeight: t.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {t.lastContent}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                </>
+              )}
+
+              {filteredTenants.length === 0 && (
+                <p style={{ textAlign: 'center', color: '#bbb', fontSize: 13, margin: '24px 0' }}>
+                  No hay inquilinos activos en las propiedades asignadas.
+                </p>
+              )}
+            </div>
           </div>
         );
       })()}
 
-      {/* ── Tab: Mensajes — conversación ── */}
+      {/* ── Tab: Mensajes — conversacion ── */}
       {activeTab === 'chat' && chatWith && (
         <ChatConversation
-          landlordEmail={chatWith.landlordEmail}
+          isDirectChat={chatWith.isDirectChat || false}
+          landlordEmail={chatWith.isDirectChat ? chatWith.landlordEmail : chatWith.landlordEmail}
           propertyId={chatWith.propertyId}
           roomId={chatWith.roomId}
           tenantId={chatWith.tenantId}
           tenantName={chatWith.tenantName}
           propertyName={chatWith.propertyName}
-          currentRole="landlord"
+          otherEmail={chatWith.otherEmail}
+          otherName={chatWith.otherName}
+          currentRole={chatWith.isDirectChat ? 'gestor' : 'landlord'}
           isGroup={chatWith.isGroup || false}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
           currentUserEmail={userEmail}
@@ -1146,31 +1232,33 @@ export default function GestorDashboard({ userEmail, onLogout }) {
             <span style={{ fontSize: '10px', fontWeight: activeTab === 'properties' ? 600 : 400 }}>Propiedades</span>
           </button>
 
-          {/* Mensajes */}
-          <button onClick={() => switchTab('chat')} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-            background: 'none', border: 'none', cursor: 'pointer', padding: '8px 20px',
-            color: activeTab === 'chat' ? '#111' : '#aaa', position: 'relative',
-          }}>
-            <div style={{ position: 'relative' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {totalUnread > 0 && (
-                <span style={{
-                  position: 'absolute', top: -4, right: -6,
-                  background: '#e74c3c', color: 'white',
-                  borderRadius: '50%', minWidth: 16, height: 16,
-                  fontSize: 10, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: '0 3px',
-                }}>
-                  {totalUnread > 99 ? '99+' : totalUnread}
-                </span>
-              )}
-            </div>
-            <span style={{ fontSize: '10px', fontWeight: activeTab === 'chat' ? 600 : 400 }}>Mensajes</span>
-          </button>
+          {/* Mensajes — solo visible si can_message = true */}
+          {canMessageSelectedLandlord && (
+            <button onClick={() => switchTab('chat')} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+              background: 'none', border: 'none', cursor: 'pointer', padding: '8px 20px',
+              color: activeTab === 'chat' ? '#111' : '#aaa', position: 'relative',
+            }}>
+              <div style={{ position: 'relative' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {totalUnread > 0 && (
+                  <span style={{
+                    position: 'absolute', top: -4, right: -6,
+                    background: '#e74c3c', color: 'white',
+                    borderRadius: '50%', minWidth: 16, height: 16,
+                    fontSize: 10, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 3px',
+                  }}>
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: '10px', fontWeight: activeTab === 'chat' ? 600 : 400 }}>Mensajes</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -1178,50 +1266,3 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     </div>
   );
 }
-
-/*
-  ── RLS para la tabla messages — ejecutar en Supabase SQL Editor ──────────────
-
-  Estas políticas permiten al gestor leer, insertar y actualizar mensajes
-  de las propiedades que tiene asignadas en property_access.
-
-  -- SELECT: el gestor puede leer mensajes de sus propiedades asignadas
-  CREATE POLICY "gestores_select_messages"
-  ON public.messages
-  FOR SELECT
-  USING (
-    property_id IN (
-      SELECT property_id FROM public.property_access
-      WHERE gestor_email = auth.email()
-    )
-  );
-
-  -- INSERT: el gestor puede enviar mensajes en sus propiedades asignadas
-  CREATE POLICY "gestores_insert_messages"
-  ON public.messages
-  FOR INSERT
-  WITH CHECK (
-    property_id IN (
-      SELECT property_id FROM public.property_access
-      WHERE gestor_email = auth.email()
-    )
-  );
-
-  -- UPDATE: el gestor puede marcar mensajes como leídos (read_by_landlord)
-  --         en sus propiedades asignadas
-  CREATE POLICY "gestores_update_messages"
-  ON public.messages
-  FOR UPDATE
-  USING (
-    property_id IN (
-      SELECT property_id FROM public.property_access
-      WHERE gestor_email = auth.email()
-    )
-  )
-  WITH CHECK (
-    property_id IN (
-      SELECT property_id FROM public.property_access
-      WHERE gestor_email = auth.email()
-    )
-  );
-*/

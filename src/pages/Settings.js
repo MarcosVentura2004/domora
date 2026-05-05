@@ -53,6 +53,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [inviteName, setInviteName] = useState('');
   const [invitePropertyIds, setInvitePropertyIds] = useState(new Set());
   const [invitePermission, setInvitePermission] = useState('lectura');
+  const [inviteCanMessage, setInviteCanMessage] = useState(true);
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteSent, setInviteSent] = useState(false);
@@ -68,7 +69,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
     const { data: accessRows } = await supabase
       .from('property_access')
-      .select('gestor_email, property_id, permisos')
+      .select('gestor_email, property_id, permisos, can_message')
       .eq('landlord_email', userEmail);
     if (!accessRows || accessRows.length === 0) { setGestores([]); return; }
 
@@ -79,12 +80,16 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       .in('email', emails);
     const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.name]));
 
-    const grouped = emails.map(email => ({
-      email,
-      name: nameMap[email] || email,
-      permisos: accessRows.find(r => r.gestor_email === email)?.permisos || 'lectura',
-      propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
-    }));
+    const grouped = emails.map(email => {
+      const firstRow = accessRows.find(r => r.gestor_email === email);
+      return {
+        email,
+        name: nameMap[email] || email,
+        permisos: firstRow?.permisos || 'lectura',
+        canMessage: firstRow?.can_message !== false,
+        propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
+      };
+    });
     setGestores(grouped);
   };
 
@@ -107,6 +112,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         landlord_email: userEmail,
         property_id: pid,
         permisos: invitePermission,
+        can_message: inviteCanMessage,
       }));
       await supabase.from('property_access').upsert(rows, { onConflict: 'gestor_email,property_id' });
 
@@ -126,11 +132,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         setInviteName('');
         setInvitePropertyIds(new Set());
         setInvitePermission('lectura');
+        setInviteCanMessage(true);
         setInviteSent(false);
         loadGestores();
       }, 1800);
     } catch (err) {
-      setInviteError('Error al enviar la invitación. Inténtalo de nuevo.');
+      setInviteError('Error al enviar la invitacion. Intentalo de nuevo.');
     } finally {
       setInviteSending(false);
     }
@@ -220,7 +227,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       }
     }
     load();
-  }, [userEmail]);
+  }, [userEmail]); // eslint-disable-line
 
   // ── Handlers ──────────────────────────────────────────────
   const handlePhotoChange = async (e) => {
@@ -310,7 +317,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     onLogout();
   };
 
-  // ── Cálculo de iniciales para avatar ─────────────────────
+  // ── Calculo de iniciales para avatar ─────────────────────
   const initials = (profileName || userEmail || '?')
     .split(' ')
     .map(w => w[0])
@@ -333,7 +340,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       <div className="settings-body">
 
         {/* ════════════════════════════════════════
-            SECCIÓN 1 — Perfil
+            SECCION 1 — Perfil
         ════════════════════════════════════════ */}
         <div>
           <p className="settings-section-label">Perfil</p>
@@ -378,7 +385,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 />
               </div>
               <div>
-                <label className="settings-input-label">Correo electrónico</label>
+                <label className="settings-input-label">Correo electronico</label>
                 <input
                   className="settings-input"
                   type="email"
@@ -388,12 +395,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 />
                 {profileEmail.trim().toLowerCase() !== userEmail && profileEmail.trim() && (
                   <p style={{ margin: '5px 0 0', fontSize: '12px', color: '#8e8e93', lineHeight: 1.4 }}>
-                    Se enviará un enlace de verificación al nuevo correo para confirmar el cambio.
+                    Se enviara un enlace de verificacion al nuevo correo para confirmar el cambio.
                   </p>
                 )}
               </div>
               <div>
-                <label className="settings-input-label">Teléfono</label>
+                <label className="settings-input-label">Telefono</label>
                 <input
                   className="settings-input"
                   type="tel"
@@ -409,7 +416,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                   <path d="M20 6L9 17l-5-5" stroke="#27ae60" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                Enlace de verificación enviado a {profileEmail.trim()}. Confirma el cambio desde tu nuevo correo.
+                Enlace de verificacion enviado a {profileEmail.trim()}. Confirma el cambio desde tu nuevo correo.
               </div>
             )}
 
@@ -445,7 +452,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         />
 
         {/* ════════════════════════════════════════
-            SECCIÓN 2 — Cambiar rol (todos los roles)
+            SECCION 2 — Cambiar rol (todos los roles)
         ════════════════════════════════════════ */}
         <div>
           <p className="settings-section-label">Rol</p>
@@ -520,7 +527,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </div>
                 <div className="settings-row-content">
                   <p className="settings-row-title">Inquilino</p>
-                  <p className="settings-row-subtitle">Introduce tu código de acceso</p>
+                  <p className="settings-row-subtitle">Introduce tu codigo de acceso</p>
                 </div>
                 <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -531,7 +538,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>
 
         {/* ════════════════════════════════════════
-            SECCIÓN 2b — Gestores (solo propietario)
+            SECCION 2b — Gestores (solo propietario)
         ════════════════════════════════════════ */}
         {role === 'landlord' && <div>
           <p className="settings-section-label">Gestores</p>
@@ -565,7 +572,11 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                     <p className="settings-row-subtitle" style={{ marginTop: 2 }}>
                       {g.propertyIds.length} {g.propertyIds.length === 1 ? 'propiedad' : 'propiedades'} ·{' '}
                       <span style={{ color: g.permisos === 'gestion' ? '#16a34a' : '#555' }}>
-                        {g.permisos === 'gestion' ? 'Gestión completa' : 'Solo lectura'}
+                        {g.permisos === 'gestion' ? 'Gestion completa' : 'Solo lectura'}
+                      </span>
+                      {' · '}
+                      <span style={{ color: g.canMessage ? '#16a34a' : '#e74c3c' }}>
+                        Mensajes: {g.canMessage ? 'Si' : 'No'}
                       </span>
                     </p>
                   </div>
@@ -612,7 +623,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>}
 
         {/* ════════════════════════════════════════
-            SECCIÓN 3 — Plan (propietario y gestor)
+            SECCION 3 — Plan (propietario y gestor)
         ════════════════════════════════════════ */}
         {role !== 'tenant' && <div>
           <p className="settings-section-label">Plan</p>
@@ -631,7 +642,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                   </span>
                 </div>
                 {plan === 'pro' && (
-                  <p className="settings-row-subtitle">Plan Pro activo · Sin límites</p>
+                  <p className="settings-row-subtitle">Plan Pro activo · Sin limites</p>
                 )}
               </div>
             </div>
@@ -644,7 +655,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                       <circle cx="12" cy="12" r="10" stroke="#aaa" strokeWidth="2"/>
                       <path d="M12 8v4M12 16h.01" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
-                    Máximo 1 propiedad
+                    Maximo 1 propiedad
                   </div>
                   <div className="settings-plan-limit-row">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -668,7 +679,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>}
 
         {/* ════════════════════════════════════════
-            SECCIÓN 4 — Seguridad
+            SECCION 4 — Seguridad
         ════════════════════════════════════════ */}
         <div>
           <p className="settings-section-label">Seguridad</p>
@@ -686,8 +697,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </svg>
               </div>
               <div className="settings-row-content">
-                <p className="settings-row-title">Cambiar contraseña</p>
-                <p className="settings-row-subtitle">Recibirás un enlace en tu email</p>
+                <p className="settings-row-title">Cambiar contrasena</p>
+                <p className="settings-row-subtitle">Recibiras un enlace en tu email</p>
               </div>
               {passwordSending ? (
                 <div className="settings-spinner" style={{ borderColor: 'rgba(0,0,0,0.15)', borderTopColor: '#333' }} />
@@ -709,7 +720,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>
 
         {/* ════════════════════════════════════════
-            SECCIÓN 5 — Tutoriales
+            SECCION 5 — Tutoriales
         ════════════════════════════════════════ */}
         <div>
           <p className="settings-section-label">Tutoriales</p>
@@ -722,16 +733,16 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </svg>
               </div>
               <div className="settings-row-content">
-                <p className="settings-row-title" style={{ color: '#aaa' }}>Vídeos de ayuda</p>
-                <p className="settings-row-subtitle">Guías paso a paso para empezar</p>
+                <p className="settings-row-title" style={{ color: '#aaa' }}>Videos de ayuda</p>
+                <p className="settings-row-subtitle">Guias paso a paso para empezar</p>
               </div>
-              <span className="settings-row-badge">Próximamente</span>
+              <span className="settings-row-badge">Proximamente</span>
             </div>
           </div>
         </div>
 
         {/* ════════════════════════════════════════
-            SECCIÓN 6 — Contacto
+            SECCION 6 — Contacto
         ════════════════════════════════════════ */}
         <div>
           <p className="settings-section-label">Contacto y soporte</p>
@@ -748,10 +759,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 <p className="settings-row-subtitle">soporte@trydomio.com</p>
               </div>
             </div>
-            <a
-              href="mailto:soporte@trydomio.com"
-              style={{ textDecoration: 'none' }}
-            >
+            <a href="mailto:soporte@trydomio.com" style={{ textDecoration: 'none' }}>
               <div className="settings-card-row" style={{ cursor: 'pointer' }}>
                 <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -775,8 +783,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         <div style={{ height: 1, background: '#e5e5e5', margin: '0 4px' }} />
 
         {/* ════════════════════════════════════════
-            SECCIÓN 7 — Cerrar sesión
-            SECCIÓN 8 — Eliminar cuenta
+            SECCION 7 — Cerrar sesion
+            SECCION 8 — Eliminar cuenta
         ════════════════════════════════════════ */}
         <div className="settings-danger-section">
           <button className="settings-logout-btn" onClick={onLogout}>
@@ -785,7 +793,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
               <polyline points="16 17 21 12 16 7" stroke="#ff3b30" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               <line x1="21" y1="12" x2="9" y2="12" stroke="#ff3b30" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Cerrar sesión
+            Cerrar sesion
           </button>
 
           <button className="settings-delete-btn" onClick={() => setShowDeleteModal(true)}>
@@ -815,7 +823,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                     <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
-                <p style={{ margin: 0, fontWeight: 700, color: '#111' }}>Invitación enviada</p>
+                <p style={{ margin: 0, fontWeight: 700, color: '#111' }}>Invitacion enviada</p>
                 <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#888' }}>Se ha notificado a {inviteEmail}</p>
               </div>
             ) : (
@@ -850,7 +858,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Propiedades con acceso</label>
                   {ownerProperties.length === 0 ? (
-                    <p style={{ fontSize: '13px', color: '#aaa', margin: 0 }}>No tienes propiedades aún.</p>
+                    <p style={{ fontSize: '13px', color: '#aaa', margin: 0 }}>No tienes propiedades aun.</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {ownerProperties.map(prop => {
@@ -893,12 +901,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </div>
 
                 {/* Permisos */}
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 12 }}>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Permisos</label>
                   <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e5e5' }}>
                     {[
                       { value: 'lectura', label: 'Solo lectura' },
-                      { value: 'gestion', label: 'Gestión completa' },
+                      { value: 'gestion', label: 'Gestion completa' },
                     ].map(opt => (
                       <button
                         key={opt.value}
@@ -910,6 +918,32 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                           fontSize: '12px', fontWeight: 600,
                           background: invitePermission === opt.value ? '#111' : 'white',
                           color: invitePermission === opt.value ? 'white' : '#555',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Puede ver mensajes */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Puede ver mensajes</label>
+                  <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e5e5' }}>
+                    {[
+                      { value: true, label: 'Si' },
+                      { value: false, label: 'No' },
+                    ].map(opt => (
+                      <button
+                        key={String(opt.value)}
+                        type="button"
+                        onClick={() => setInviteCanMessage(opt.value)}
+                        disabled={inviteSending}
+                        style={{
+                          flex: 1, padding: '10px 4px', border: 'none', cursor: 'pointer',
+                          fontSize: '12px', fontWeight: 600,
+                          background: inviteCanMessage === opt.value ? '#111' : 'white',
+                          color: inviteCanMessage === opt.value ? 'white' : '#555',
                         }}
                       >
                         {opt.label}
@@ -932,7 +966,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                       <div className="settings-spinner" />
                       Enviando…
                     </span>
-                  ) : 'Enviar invitación'}
+                  ) : 'Enviar invitacion'}
                 </button>
                 {!inviteSending && (
                   <button className="settings-modal-btn-cancel" onClick={() => setShowInviteModal(false)}>
@@ -953,8 +987,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
           <div className="settings-modal" onClick={e => e.stopPropagation()}>
             <p className="settings-modal-title">Cambiar a inquilino</p>
             <p className="settings-modal-desc">
-              Serás redirigido a la pantalla de entrada de código.
-              Introduce el código de 6 caracteres que te ha proporcionado tu propietario.
+              Seras redirigido a la pantalla de entrada de codigo.
+              Introduce el codigo de 6 caracteres que te ha proporcionado tu propietario.
             </p>
             <button
               className="settings-modal-btn-primary"
@@ -980,7 +1014,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
           <div className="settings-modal" onClick={e => e.stopPropagation()}>
             <p className="settings-modal-title">Crear cuenta de propietario</p>
             <p className="settings-modal-desc">
-              No tienes cuenta de propietario. ¿Quieres crear una ahora?
+              No tienes cuenta de propietario. Quieres crear una ahora?
             </p>
             <button
               className="settings-modal-btn-primary"
@@ -1014,8 +1048,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
           <div className="settings-modal" onClick={e => e.stopPropagation()}>
             <p className="settings-modal-title">Eliminar cuenta</p>
             <p className="settings-modal-desc">
-              Esta acción es <strong>irreversible</strong>. Se eliminarán todas tus propiedades,
-              inquilinos, pagos e incidencias. Para confirmar, escribe <strong>ELIMINAR</strong> a continuación.
+              Esta accion es <strong>irreversible</strong>. Se eliminaran todas tus propiedades,
+              inquilinos, pagos e incidencias. Para confirmar, escribe <strong>ELIMINAR</strong> a continuacion.
             </p>
             <input
               className="settings-modal-input delete-input"
@@ -1051,3 +1085,15 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     </div>
   );
 }
+
+/*
+  ── SQL para ejecutar en Supabase SQL Editor ──────────────────────────────────
+
+  Anadir el campo can_message a la tabla property_access:
+
+  ALTER TABLE public.property_access
+    ADD COLUMN IF NOT EXISTS can_message boolean NOT NULL DEFAULT true;
+
+  Este campo controla si el gestor puede ver y usar la seccion de Mensajes.
+  El valor por defecto es true para mantener compatibilidad con registros existentes.
+*/

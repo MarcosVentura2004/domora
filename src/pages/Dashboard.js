@@ -172,6 +172,10 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
   // tenantMeta: { [key]: { unread: number, lastTs: string, lastContent: string } }
   const [tenantMeta, setTenantMeta] = useState({});
   const [metaTick, setMetaTick] = useState(0);
+  // gestores: list of { email, name, canMessage }
+  const [gestores, setGestores] = useState([]);
+  // gestorMeta: { [email]: { unread: number, lastTs: string, lastContent: string } }
+  const [gestorMeta, setGestorMeta] = useState({});
 
   // Broadcast state
   const [showBroadcast, setShowBroadcast] = useState(false);
@@ -204,6 +208,63 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
         setTenantMeta(meta);
       });
   }, [properties, userEmail, metaTick]); // eslint-disable-line
+
+  // Carga gestores asignados al propietario con can_message = true
+  useEffect(() => {
+    if (!userEmail) return;
+    supabase
+      .from('property_access')
+      .select('gestor_email, can_message')
+      .eq('landlord_email', userEmail)
+      .then(({ data }) => {
+        if (!data) return;
+        // Agrupar por gestor_email, can_message = true si al menos una fila lo tiene
+        const gestorMap = {};
+        data.forEach(row => {
+          if (!gestorMap[row.gestor_email]) {
+            gestorMap[row.gestor_email] = { email: row.gestor_email, canMessage: row.can_message !== false };
+          } else if (row.can_message !== false) {
+            gestorMap[row.gestor_email].canMessage = true;
+          }
+        });
+        const list = Object.values(gestorMap).filter(g => g.canMessage);
+        // Cargar nombres desde tabla gestores
+        if (list.length === 0) { setGestores([]); return; }
+        supabase
+          .from('gestores')
+          .select('email, name')
+          .in('email', list.map(g => g.email))
+          .then(({ data: gestorData }) => {
+            const nameMap = {};
+            (gestorData || []).forEach(g => { nameMap[g.email] = g.name; });
+            setGestores(list.map(g => ({ ...g, name: nameMap[g.email] || g.email })));
+          });
+      });
+  }, [userEmail]); // eslint-disable-line
+
+  // Carga unread counts de mensajes directos con gestores
+  useEffect(() => {
+    if (!userEmail || gestores.length === 0) return;
+    supabase
+      .from('messages')
+      .select('sender_id, recipient_id, content, created_at, read_by_landlord, is_direct_message')
+      .eq('landlord_email', userEmail)
+      .eq('is_direct_message', true)
+      .then(({ data }) => {
+        if (!data) return;
+        const meta = {};
+        gestores.forEach(g => {
+          const convMsgs = data.filter(m =>
+            (m.sender_id === userEmail && m.recipient_id === g.email) ||
+            (m.sender_id === g.email && m.recipient_id === userEmail)
+          );
+          const unread = convMsgs.filter(m => m.sender_id === g.email && !m.read_by_landlord).length;
+          const last = convMsgs[convMsgs.length - 1];
+          meta[g.email] = { unread, lastTs: last?.created_at || '', lastContent: last?.content || '' };
+        });
+        setGestorMeta(meta);
+      });
+  }, [gestores, userEmail, metaTick]); // eslint-disable-line
 
   // Carga avatar del propietario (IndexedDB primero, Supabase Storage como fallback)
   useEffect(() => {
@@ -947,7 +1008,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
               </>
             )}
 
-            {tenants.length === 0 ? (
+            {tenants.length === 0 && gestores.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px 30px', gap: '16px', textAlign: 'center' }}>
                 <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#F0F1F3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
@@ -961,82 +1022,160 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
               </div>
             ) : (
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[...filteredTenants]
-                  .map(t => ({ ...t, ...(tenantMeta[t.key] || { unread: 0, lastTs: '', lastContent: '' }) }))
-                  .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
-                  .map(t => {
-                    const initials = t.tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-                    const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
-                    const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
-                    const colorIdx = t.tenantName.charCodeAt(0) % avatarColors.length;
-                    return (
-                      <button
-                        key={t.key}
-                        onClick={() => setChatWith(t)}
-                        style={{
-                          width: '100%', background: t.isGroup ? '#f9f9f9' : 'white',
-                          border: t.isGroup ? '1px solid #e5e5e5' : 'none', borderRadius: '16px',
-                          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
-                          cursor: 'pointer', textAlign: 'left',
-                          boxShadow: t.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
-                        }}
-                      >
-                        <div style={{ position: 'relative', flexShrink: 0 }}>
-                          {t.isGroup ? (
-                            <div style={{
-                              width: '48px', height: '48px', borderRadius: '50%',
-                              background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
+                {filteredTenants.length > 0 && (
+                  <>
+                    {gestores.length > 0 && (
+                      <p style={{ margin: '4px 0 2px', fontSize: '12px', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inquilinos</p>
+                    )}
+                    {[...filteredTenants]
+                      .map(t => ({ ...t, ...(tenantMeta[t.key] || { unread: 0, lastTs: '', lastContent: '' }) }))
+                      .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
+                      .map(t => {
+                        const initials = t.tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                        const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
+                        const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
+                        const colorIdx = t.tenantName.charCodeAt(0) % avatarColors.length;
+                        return (
+                          <button
+                            key={t.key}
+                            onClick={() => setChatWith(t)}
+                            style={{
+                              width: '100%', background: t.isGroup ? '#f9f9f9' : 'white',
+                              border: t.isGroup ? '1px solid #e5e5e5' : 'none', borderRadius: '16px',
+                              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                              cursor: 'pointer', textAlign: 'left',
+                              boxShadow: t.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
+                            }}
+                          >
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              {t.isGroup ? (
+                                <div style={{
+                                  width: '48px', height: '48px', borderRadius: '50%',
+                                  background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </div>
+                              ) : (
+                                <div style={{
+                                  width: '48px', height: '48px', borderRadius: '50%',
+                                  background: avatarColors[colorIdx],
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '16px', fontWeight: 700, color: avatarTextColors[colorIdx],
+                                }}>
+                                  {initials}
+                                </div>
+                              )}
+                              {t.unread > 0 && (
+                                <span style={{
+                                  position: 'absolute', top: 0, right: 0,
+                                  background: '#e74c3c', color: 'white',
+                                  borderRadius: '50%', width: 18, height: 18,
+                                  fontSize: 11, fontWeight: 700,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {t.unread}
+                                </span>
+                              )}
                             </div>
-                          ) : (
-                          <div style={{
-                            width: '48px', height: '48px', borderRadius: '50%',
-                            background: avatarColors[colorIdx],
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '16px', fontWeight: 700, color: avatarTextColors[colorIdx],
-                          }}>
-                            {initials}
-                          </div>
-                          )}
-                          {t.unread > 0 && (
-                            <span style={{
-                              position: 'absolute', top: 0, right: 0,
-                              background: '#e74c3c', color: 'white',
-                              borderRadius: '50%', width: 18, height: 18,
-                              fontSize: 11, fontWeight: 700,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              {t.unread}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                            <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>{t.tenantName}</p>
-                            {t.lastTs && (
-                              <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
-                                {new Date(t.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
-                              </span>
-                            )}
-                          </div>
-                          <p style={{ margin: 0, fontSize: '12px', color: '#888', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {t.isGroup ? t.tenantSubtitle : t.propertyName}
-                          </p>
-                          {t.lastContent && (
-                            <p style={{ margin: '2px 0 0', fontSize: '13px', color: t.unread > 0 ? '#333' : '#aaa', fontWeight: t.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {t.lastContent}
-                            </p>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                                <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>{t.tenantName}</p>
+                                {t.lastTs && (
+                                  <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
+                                    {new Date(t.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ margin: 0, fontSize: '12px', color: '#888', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {t.isGroup ? t.tenantSubtitle : t.propertyName}
+                              </p>
+                              {t.lastContent && (
+                                <p style={{ margin: '2px 0 0', fontSize: '13px', color: t.unread > 0 ? '#333' : '#aaa', fontWeight: t.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {t.lastContent}
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </>
+                )}
+
+                {gestores.length > 0 && (
+                  <>
+                    <p style={{ margin: filteredTenants.length > 0 ? '12px 0 2px' : '4px 0 2px', fontSize: '12px', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestores</p>
+                    {gestores
+                      .map(g => ({ ...g, ...(gestorMeta[g.email] || { unread: 0, lastTs: '', lastContent: '' }) }))
+                      .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
+                      .map(g => {
+                        const initials = g.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                        const avatarColors = ['#E8F0FE', '#FCE8D5', '#E6F4EA', '#FDE8E8', '#EDE7F6'];
+                        const avatarTextColors = ['#3B6FE0', '#D2691E', '#2E7D32', '#C62828', '#6B3FA0'];
+                        const colorIdx = g.name.charCodeAt(0) % avatarColors.length;
+                        return (
+                          <button
+                            key={g.email}
+                            onClick={() => setChatWith({
+                              isDirectChat: true,
+                              landlordEmail: userEmail,
+                              otherEmail: g.email,
+                              otherName: g.name,
+                              key: `direct_${g.email}`,
+                            })}
+                            style={{
+                              width: '100%', background: 'white', border: 'none', borderRadius: '16px',
+                              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                              cursor: 'pointer', textAlign: 'left',
+                              boxShadow: g.unread > 0 ? '0 2px 12px rgba(0,0,0,0.08)' : '0 1px 4px rgba(0,0,0,0.05)',
+                            }}
+                          >
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              <div style={{
+                                width: '48px', height: '48px', borderRadius: '50%',
+                                background: avatarColors[colorIdx],
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '16px', fontWeight: 700, color: avatarTextColors[colorIdx],
+                              }}>
+                                {initials}
+                              </div>
+                              {g.unread > 0 && (
+                                <span style={{
+                                  position: 'absolute', top: 0, right: 0,
+                                  background: '#e74c3c', color: 'white',
+                                  borderRadius: '50%', width: 18, height: 18,
+                                  fontSize: 11, fontWeight: 700,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {g.unread}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                                <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#111' }}>{g.name}</p>
+                                {g.lastTs && (
+                                  <span style={{ fontSize: '11px', color: '#bbb', flexShrink: 0, fontWeight: 500 }}>
+                                    {new Date(g.lastTs).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ margin: 0, fontSize: '12px', color: '#888', fontWeight: 400 }}>Gestor</p>
+                              {g.lastContent && (
+                                <p style={{ margin: '2px 0 0', fontSize: '13px', color: g.unread > 0 ? '#333' : '#aaa', fontWeight: g.unread > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {g.lastContent}
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1046,13 +1185,16 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
       {activeTab === 'chat' && chatWith && (
         <ChatConversation
           landlordEmail={chatWith.landlordEmail}
-          propertyId={chatWith.propertyId}
-          roomId={chatWith.roomId}
-          tenantId={chatWith.tenantId}
-          tenantName={chatWith.tenantName}
-          propertyName={chatWith.propertyName}
+          propertyId={chatWith.isDirectChat ? null : chatWith.propertyId}
+          roomId={chatWith.isDirectChat ? null : chatWith.roomId}
+          tenantId={chatWith.isDirectChat ? null : chatWith.tenantId}
+          tenantName={chatWith.isDirectChat ? chatWith.otherName : chatWith.tenantName}
+          propertyName={chatWith.isDirectChat ? null : chatWith.propertyName}
           currentRole="landlord"
           isGroup={chatWith.isGroup || false}
+          isDirectChat={chatWith.isDirectChat || false}
+          otherEmail={chatWith.isDirectChat ? chatWith.otherEmail : null}
+          otherName={chatWith.isDirectChat ? chatWith.otherName : null}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
           hideAvatar={chatHideAvatar}
         />
@@ -1095,7 +1237,9 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
 
         {/* Chat */}
         {(() => {
-          const totalUnread = Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
+          const totalUnread =
+            Object.values(tenantMeta).reduce((sum, m) => sum + (m.unread || 0), 0) +
+            Object.values(gestorMeta).reduce((sum, m) => sum + (m.unread || 0), 0);
           return (
             <button onClick={() => switchTab('chat')} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
