@@ -111,6 +111,9 @@
   height: 40px;
   border-radius: 10px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-icon svg {
