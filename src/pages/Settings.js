@@ -636,10 +636,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
               </div>
               <div className="settings-row-content">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <p className="settings-row-title">{plan === 'pro' ? 'Plan Pro' : 'Plan Gratuito'}</p>
-                  <span className={`settings-plan-badge ${plan}`}>
-                    {plan === 'pro' ? 'PRO' : 'FREE'}
-                  </span>
+                  <p className="settings-row-title">{plan === 'pro' ? 'Plan Pro' : 'Plan Standard'}</p>
+                  {plan === 'pro' && (
+                    <span className="settings-plan-badge pro">PRO</span>
+                  )}
                 </div>
                 {plan === 'pro' && (
                   <p className="settings-row-subtitle">Plan Pro activo · Sin limites</p>
@@ -648,30 +648,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
             </div>
 
             {plan === 'free' && (
-              <>
-                <div className="settings-plan-limits">
-                  <div className="settings-plan-limit-row">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="#aaa" strokeWidth="2"/>
-                      <path d="M12 8v4M12 16h.01" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                    Maximo 1 propiedad
-                  </div>
-                  <div className="settings-plan-limit-row">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="#aaa" strokeWidth="2"/>
-                      <path d="M12 8v4M12 16h.01" stroke="#aaa" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                    Funciones avanzadas no disponibles
-                  </div>
-                </div>
-                <button
-                  className="settings-save-btn"
-                  onClick={() => window.open('https://trydomio.com/planes', '_blank')}
-                >
-                  Ver planes
-                </button>
-              </>
+              <button
+                className="settings-save-btn"
+                onClick={() => window.open('https://trydomio.com/planes', '_blank')}
+              >
+                Ver planes
+              </button>
             )}
           </div>
         </div>}
