@@ -29,31 +29,15 @@ function Welcome({ onSelectUserType }) {
         <div className="welcome-cards">
 
           <button className="welcome-card" onClick={() => onSelectUserType('propietario')}>
-            <div style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="19" cy="14" r="7" stroke="#111" strokeWidth="2.2"/>
-                <path d="M12 21C8 26 7 31 7 38" stroke="#111" strokeWidth="2.2" strokeLinecap="round"/>
-                <path d="M26 21C30 25 32 28 32 32" stroke="#111" strokeWidth="2.2" strokeLinecap="round"/>
-                <path d="M27 34L35 26L43 34" stroke="#3B6CF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <rect x="27" y="34" width="16" height="10" stroke="#3B6CF8" strokeWidth="1.9"/>
-                <path d="M32 44L32 39.5Q35 36.5 38 39.5L38 44" stroke="#3B6CF8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+            <div className="welcome-card-image">
+              <img src="/images/propietario-icon.png" alt="Propietario" />
             </div>
             <span className="welcome-card-label">Propietario / Gestor</span>
           </button>
 
           <button className="welcome-card" onClick={() => onSelectUserType('inquilino')}>
-            <div style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="19" cy="14" r="7" stroke="#111" strokeWidth="2.2"/>
-                <path d="M12 21C8 26 7 31 7 38" stroke="#111" strokeWidth="2.2" strokeLinecap="round"/>
-                <path d="M26 21C30 25 32 28 32 32" stroke="#111" strokeWidth="2.2" strokeLinecap="round"/>
-                <circle cx="37" cy="33" r="5.5" stroke="#3B6CF8" strokeWidth="2"/>
-                <circle cx="37" cy="33" r="1.5" fill="#3B6CF8"/>
-                <path d="M37 38.5L37 46" stroke="#3B6CF8" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M37 41.5L41 41.5" stroke="#3B6CF8" strokeWidth="2" strokeLinecap="round"/>
-                <path d="M37 44.5L40 44.5" stroke="#3B6CF8" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
+            <div className="welcome-card-image">
+              <img src="/images/inquilino-icon.png" alt="Inquilino" />
             </div>
             <span className="welcome-card-label">Inquilino</span>
           </button>
