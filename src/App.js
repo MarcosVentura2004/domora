@@ -10,10 +10,9 @@ import Planes from './pages/Planes';
 import './App.css';
 
 function App() {
-  const [currentPage, rawSetPage] = useState(
-    window.location.pathname === '/planes' ? 'planes' : 'welcome'
-  );
-  const currentPageRef = useRef('welcome');
+  const initialPage = window.location.pathname === '/planes' ? 'planes' : 'welcome';
+  const [currentPage, rawSetPage] = useState(initialPage);
+  const currentPageRef = useRef(initialPage);
   const setPage = (page) => { currentPageRef.current = page; rawSetPage(page); };
   const [userType, setUserType] = useState(null); // 'propietario' o 'inquilino'
   const [userEmail, setUserEmail] = useState(null);
@@ -22,6 +21,9 @@ function App() {
 
   // Restore session on mount
   useEffect(() => {
+    // Paginas publicas que nunca deben ser redirigidas por logica de sesion
+    if (currentPageRef.current === 'planes') return;
+
     // Inquilinos no tienen cuenta Supabase — restaurar desde localStorage
     if (localStorage.getItem('userType') === 'inquilino') {
       setUserType('inquilino');
