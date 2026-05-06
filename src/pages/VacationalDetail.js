@@ -106,6 +106,17 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [expenses, setExpenses] = useState([]);
   const [bookings, setBookings] = useState(property.bookings || []);
+  const [investmentData, setInvestmentData] = useState({
+    purchasePrice: '',
+    acquisitionCosts: '',
+    ownershipPercentage: '',
+    monthlyMortgage: '',
+    monthlyAmortization: '',
+  });
+  const [showInvestmentSection, setShowInvestmentSection] = useState(false);
+  const [investmentEditing, setInvestmentEditing] = useState(false);
+  const [investmentSaving, setInvestmentSaving] = useState(false);
+  const [roiPayments, setRoiPayments] = useState([]);
 
   React.useEffect(() => { setBookings(property.bookings || []); }, [property.bookings]);
 
@@ -116,6 +127,27 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
       .eq('property_id', String(property.id))
       .order('created_at', { ascending: false })
       .then(({ data }) => { if (data) setExpenses(data); });
+  }, [property.id]);
+
+  useEffect(() => {
+    if (property.investmentData) {
+      setInvestmentData({
+        purchasePrice: property.investmentData.purchasePrice ?? '',
+        acquisitionCosts: property.investmentData.acquisitionCosts ?? '',
+        ownershipPercentage: property.investmentData.ownershipPercentage ?? '',
+        monthlyMortgage: property.investmentData.monthlyMortgage ?? '',
+        monthlyAmortization: property.investmentData.monthlyAmortization ?? '',
+      });
+    }
+  }, [property.id]); // eslint-disable-line
+
+  useEffect(() => {
+    supabase
+      .from('payments')
+      .select('year, month, amount, status')
+      .eq('property_id', String(property.id))
+      .eq('status', 'confirmed')
+      .then(({ data }) => { if (data) setRoiPayments(data); });
   }, [property.id]);
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
@@ -213,6 +245,26 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, amount: parseFloat(newAmount) } : e));
   };
 
+  const handleSaveInvestmentData = async () => {
+    setInvestmentSaving(true);
+    const updatedProperty = { ...property, investmentData };
+    await supabase
+      .from('properties')
+      .update({
+        data: updatedProperty,
+        updated_at: new Date().toISOString(),
+        purchase_price: parseFloat(investmentData.purchasePrice) || null,
+        acquisition_costs: parseFloat(investmentData.acquisitionCosts) || null,
+        ownership_percentage: parseFloat(investmentData.ownershipPercentage) || null,
+        monthly_mortgage: parseFloat(investmentData.monthlyMortgage) || null,
+        monthly_amortization: parseFloat(investmentData.monthlyAmortization) || null,
+      })
+      .eq('id', property.id);
+    onUpdate(updatedProperty);
+    setInvestmentSaving(false);
+    setInvestmentEditing(false);
+  };
+
   const getHistoryMonths = () => {
     const months = [];
     let y = minYear, m = minMonth;
@@ -252,6 +304,87 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
     const map = { airbnb: '#FF5A5F', booking: '#003580', directo: '#4CAF50', otro: '#9C27B0' };
     return map[platform] || '#666';
   };
+
+  // ─── Datos de inversión — cálculo ROI ───
+  const invOwnershipPct = parseFloat(investmentData.ownershipPercentage) || property.ownershipPercentage || 100;
+  const invOwnership = invOwnershipPct / 100;
+  const totalInvestment = (parseFloat(investmentData.purchasePrice) || 0) + (parseFloat(investmentData.acquisitionCosts) || 0);
+  const hasInvestmentData = totalInvestment > 0;
+  const invMortgage = parseFloat(investmentData.monthlyMortgage) || 0;
+  const invAmortization = parseFloat(investmentData.monthlyAmortization) || 0;
+
+  const invMonthlyExpenses = expenses
+    .filter(e => e.active !== false)
+    .reduce((sum, e) => {
+      const pct = e.expense_percentage != null ? e.expense_percentage : invOwnershipPct;
+      return sum + getMonthlyEquivalent(e) * pct / 100;
+    }, 0);
+
+  const mortgageInExpenses = expenses.some(e => e.active !== false && e.category === 'hipoteca');
+
+  // Ingresos configurados para vacacional: precio mensual de referencia o promedio histórico
+  const invConfiguredIncome = (property.price || 0) * invOwnership;
+  const invCashflowBruto = invConfiguredIncome - invMortgage;
+
+  const invNow = new Date();
+  const invNowYear = invNow.getFullYear();
+  const invNowMonth = invNow.getMonth();
+  const invLast6 = [];
+  let invFy = invNowYear, invFm = invNowMonth;
+  for (let i = 0; i < 6; i++) {
+    invLast6.push({ year: invFy, month: invFm });
+    if (invFm === 0) { invFm = 11; invFy--; } else { invFm--; }
+  }
+  const invMonthsWithData = invLast6.filter(({ year, month }) =>
+    roiPayments.some(p => p.year === year && p.month === month)
+  );
+  const invAvgConfirmedIncome = invMonthsWithData.length > 0
+    ? invMonthsWithData.reduce((total, { year, month }) => {
+        return total + roiPayments
+          .filter(p => p.year === year && p.month === month)
+          .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      }, 0) / invMonthsWithData.length * invOwnership
+    : null;
+
+  // Si no hay pagos confirmados, usar ingresos de reservas de los últimos 6 meses
+  const invAvgBookingIncome = (() => {
+    const monthsWithBookings = invLast6.filter(({ year, month }) =>
+      bookings.some(b => {
+        const s = new Date(b.startDate);
+        return b.status === 'confirmed' && s.getFullYear() === year && s.getMonth() === month;
+      })
+    );
+    if (monthsWithBookings.length === 0) return null;
+    return monthsWithBookings.reduce((total, { year, month }) => {
+      return total + bookings
+        .filter(b => {
+          const s = new Date(b.startDate);
+          return b.status === 'confirmed' && s.getFullYear() === year && s.getMonth() === month;
+        })
+        .reduce((s, b) => s + (b.amount || 0), 0);
+    }, 0) / monthsWithBookings.length * invOwnership;
+  })();
+
+  const invEffectiveHistoricalIncome = invAvgConfirmedIncome ?? invAvgBookingIncome;
+  const invCashflowNeto = invEffectiveHistoricalIncome !== null
+    ? invEffectiveHistoricalIncome - invMonthlyExpenses - (mortgageInExpenses ? 0 : invMortgage)
+    : null;
+  const invHasHistorical = invCashflowNeto !== null;
+  const invEffectiveCashflow = invHasHistorical ? invCashflowNeto : invCashflowBruto;
+  const invBeneficioAnual = invEffectiveCashflow * 12;
+  const invRoiAnual = totalInvestment > 0 ? (invBeneficioAnual / totalInvestment) * 100 : null;
+  const invPayback = totalInvestment > 0 && invBeneficioAnual > 0 ? totalInvestment / invBeneficioAnual : null;
+  const invStartDateRef = property.createdAt ? new Date(property.createdAt) : new Date();
+  const invMonthsElapsed = Math.max(0,
+    (invNowYear - invStartDateRef.getFullYear()) * 12 + (invNowMonth - invStartDateRef.getMonth())
+  );
+  const invEquityAcumulado = invEffectiveCashflow * invMonthsElapsed + invAmortization * invMonthsElapsed;
+  const invRoiColor = invRoiAnual === null ? '#999'
+    : invRoiAnual < 3 ? '#C62828' : invRoiAnual < 6 ? '#F57F17' : '#2E7D32';
+  const invRoiBg = invRoiAnual === null ? '#F5F5F5'
+    : invRoiAnual < 3 ? '#FBE9E7' : invRoiAnual < 6 ? '#FFF8E1' : '#F1F8E9';
+  const invRoiLabel = invRoiAnual === null ? null
+    : invRoiAnual < 3 ? 'Bajo' : invRoiAnual < 6 ? 'Moderado' : 'Bueno';
 
   if (showExpenseSummary) {
     const getMonthlyIncome = (yr, mo) =>
@@ -552,6 +685,132 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
             </div>
           );
         })()}
+      </div>
+
+      {/* Datos de inversión */}
+      <div className="info-card">
+        <div className="card-header clickable" onClick={() => setShowInvestmentSection(!showInvestmentSection)}>
+          <h3>Datos de inversión</h3>
+          <span className="arrow">{showInvestmentSection ? '▼' : '›'}</span>
+        </div>
+
+        {showInvestmentSection && (
+          <div style={{ padding: '0 4px 4px' }}>
+            {!hasInvestmentData && !investmentEditing ? (
+              <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                <p style={{ color: '#aaa', fontSize: '14px', margin: '0 0 16px' }}>
+                  Añade los datos de inversión para calcular ROI y payback
+                </p>
+                <button
+                  onClick={() => setInvestmentEditing(true)}
+                  style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '14px', cursor: 'pointer', color: '#333' }}
+                >
+                  Añadir
+                </button>
+              </div>
+            ) : investmentEditing ? (
+              <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                  {[
+                    { label: 'Precio de compra (€)', key: 'purchasePrice', placeholder: '0' },
+                    { label: 'Gastos de adquisición (€)', key: 'acquisitionCosts', placeholder: '0' },
+                    { label: 'Porcentaje de propiedad (%)', key: 'ownershipPercentage', placeholder: '100' },
+                    { label: 'Cuota hipoteca mensual (€)', key: 'monthlyMortgage', placeholder: 'Opcional' },
+                    { label: 'Amortización mensual (€)', key: 'monthlyAmortization', placeholder: 'Opcional' },
+                  ].map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#555', marginBottom: '6px' }}>{label}</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder={placeholder}
+                        value={investmentData[key]}
+                        onChange={e => setInvestmentData(prev => ({ ...prev, [key]: e.target.value }))}
+                        style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', background: 'white', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={handleSaveInvestmentData}
+                    disabled={investmentSaving}
+                    style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#111', color: 'white', fontSize: '15px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    {investmentSaving ? 'Guardando...' : 'Guardar'}
+                  </button>
+                  <button
+                    onClick={() => setInvestmentEditing(false)}
+                    style={{ padding: '12px 16px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#666' }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: invCashflowNeto !== null ? '1fr 1fr' : '1fr', gap: '10px', marginBottom: '16px' }}>
+                  <div style={{ background: invCashflowBruto >= 0 ? '#F1F8E9' : '#FBE9E7', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#888', fontWeight: 500 }}>Cashflow bruto/mes</p>
+                    <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: invCashflowBruto >= 0 ? '#2E7D32' : '#C62828' }}>
+                      {invCashflowBruto >= 0 ? '+' : ''}{invCashflowBruto.toFixed(0)} €
+                    </p>
+                  </div>
+                  {invCashflowNeto !== null && (
+                    <div style={{ background: invCashflowNeto >= 0 ? '#F1F8E9' : '#FBE9E7', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#888', fontWeight: 500 }}>Cashflow neto/mes</p>
+                      <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: invCashflowNeto >= 0 ? '#2E7D32' : '#C62828' }}>
+                        {invCashflowNeto >= 0 ? '+' : ''}{invCashflowNeto.toFixed(0)} €
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#aaa' }}>
+                        Promedio {invMonthsWithData.length || invLast6.filter(({ year, month }) => bookings.some(b => { const s = new Date(b.startDate); return b.status === 'confirmed' && s.getFullYear() === year && s.getMonth() === month; })).length} meses reales
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <span style={{ fontSize: '13px', color: '#666' }}>Inversión total</span>
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: '#111' }}>{totalInvestment.toFixed(0)} €</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <span style={{ fontSize: '13px', color: '#666' }}>
+                      ROI anual {invHasHistorical ? '(neto)' : '(bruto)'}
+                    </span>
+                    <span style={{ background: invRoiBg, color: invRoiColor, padding: '4px 10px', borderRadius: '8px', fontSize: '13px', fontWeight: 700 }}>
+                      {invRoiAnual !== null ? `${invRoiAnual.toFixed(2)}%` : '—'}
+                      {invRoiLabel && <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 500 }}>{invRoiLabel}</span>}
+                    </span>
+                  </div>
+                  {invPayback !== null && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <span style={{ fontSize: '13px', color: '#666' }}>
+                        Payback {invHasHistorical ? '(neto)' : '(bruto)'}
+                      </span>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: '#111' }}>{invPayback.toFixed(1)} años</span>
+                    </div>
+                  )}
+                  {invMonthsElapsed > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <span style={{ fontSize: '13px', color: '#666' }}>Equity acumulado ({invMonthsElapsed} meses)</span>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: invEquityAcumulado >= 0 ? '#2E7D32' : '#C62828' }}>
+                        {invEquityAcumulado >= 0 ? '+' : ''}{invEquityAcumulado.toFixed(0)} €
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setInvestmentEditing(true)}
+                  style={{ fontSize: '13px', color: '#666', background: 'none', border: '1px solid #ddd', borderRadius: '8px', padding: '8px 14px', cursor: 'pointer' }}
+                >
+                  Editar datos
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Modals */}

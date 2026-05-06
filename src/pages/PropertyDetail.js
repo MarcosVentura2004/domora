@@ -273,6 +273,9 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [investmentEditing, setInvestmentEditing] = useState(false);
   const [investmentSaving, setInvestmentSaving] = useState(false);
   const [roiPayments, setRoiPayments] = useState([]);
+  const [showMortgageExpensePrompt, setShowMortgageExpensePrompt] = useState(false);
+  const [pendingMortgageAmount, setPendingMortgageAmount] = useState(null);
+  const [mortgagePrefillValues, setMortgagePrefillValues] = useState(null);
 
   useEffect(() => {
     if (!tenants.length || (property.status !== 'alquilado' && property.status !== 'otros')) return;
@@ -720,11 +723,26 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     const updatedProperty = { ...property, investmentData };
     await supabase
       .from('properties')
-      .update({ data: updatedProperty, updated_at: new Date().toISOString() })
+      .update({
+        data: updatedProperty,
+        updated_at: new Date().toISOString(),
+        purchase_price: parseFloat(investmentData.purchasePrice) || null,
+        acquisition_costs: parseFloat(investmentData.acquisitionCosts) || null,
+        ownership_percentage: parseFloat(investmentData.ownershipPercentage) || null,
+        monthly_mortgage: parseFloat(investmentData.monthlyMortgage) || null,
+        monthly_amortization: parseFloat(investmentData.monthlyAmortization) || null,
+      })
       .eq('id', property.id);
     onUpdate(updatedProperty);
     setInvestmentSaving(false);
     setInvestmentEditing(false);
+
+    const newMortgage = parseFloat(investmentData.monthlyMortgage);
+    const hasHipotecaExpense = expenses.some(e => e.active !== false && e.category === 'hipoteca');
+    if (newMortgage > 0 && !hasHipotecaExpense) {
+      setPendingMortgageAmount(newMortgage);
+      setShowMortgageExpensePrompt(true);
+    }
   };
 
   const handleAddTenant = async (tenantData) => {
@@ -1648,11 +1666,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
       {/* Modals */}
       {(showAddExpense || editingExpense) && (
         <AddExpenseModal
-          onClose={() => { setShowAddExpense(false); setEditingExpense(null); }}
-          onAdd={handleAddExpense}
+          onClose={() => { setShowAddExpense(false); setEditingExpense(null); setMortgagePrefillValues(null); }}
+          onAdd={(data) => { handleAddExpense(data); setMortgagePrefillValues(null); }}
           onUpdate={handleUpdateExpense}
           defaultExpensePct={property.ownershipPercentage || 100}
           initialExpense={editingExpense}
+          defaultValues={!editingExpense ? mortgagePrefillValues : null}
           landlordEmail={landlordEmail}
           propertyId={property.id}
         />
@@ -1682,11 +1701,11 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           onSave={(updatedData) => { onUpdate({ ...property, ...updatedData }); setShowEditModal(false); }}/>
       )}
       {editingTenant && (
-        <EditTenantModal 
-          tenant={editingTenant} 
+        <EditTenantModal
+          tenant={editingTenant}
           paymentConfig={paymentConfig}
           onClose={() => setEditingTenant(null)}
-          onSave={(updatedTenant, updatedConfig) => { 
+          onSave={(updatedTenant, updatedConfig) => {
             handleEditTenant(updatedTenant);
             if (updatedConfig) {
               setPaymentConfig(updatedConfig);
@@ -1695,6 +1714,37 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           }}
           onDelete={handleDeleteTenant}
         />
+      )}
+      {showMortgageExpensePrompt && (
+        <div className="modal-overlay" onClick={() => setShowMortgageExpensePrompt(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Hipoteca como gasto</h2>
+              <button className="modal-close" onClick={() => setShowMortgageExpensePrompt(false)}>×</button>
+            </div>
+            <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
+              ¿Quieres añadir la hipoteca ({pendingMortgageAmount} €/mes) también como gasto recurrente?
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  setShowMortgageExpensePrompt(false);
+                  setMortgagePrefillValues({ category: 'hipoteca', amount: pendingMortgageAmount, repeats: true, frequency: 'mensual' });
+                  setShowAddExpense(true);
+                }}
+                style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#111', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Sí, añadir
+              </button>
+              <button
+                onClick={() => setShowMortgageExpensePrompt(false)}
+                style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', color: '#666', cursor: 'pointer' }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1797,15 +1847,15 @@ const EXPENSE_CATEGORIES = [
 ];
 
 
-function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, landlordEmail, propertyId }) {
+function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, defaultValues, landlordEmail, propertyId }) {
   const today = new Date().toISOString().split('T')[0];
   const isEditing = !!initialExpense;
-  const [category, setCategory] = useState(isEditing ? (initialExpense.category || '') : '');
+  const [category, setCategory] = useState(isEditing ? (initialExpense.category || '') : (defaultValues?.category || ''));
   const [subcategory, setSubcategory] = useState(isEditing ? (initialExpense.subcategory || '') : '');
   const [description, setDescription] = useState(isEditing ? (initialExpense.description || '') : '');
-  const [amount, setAmount] = useState(isEditing ? (initialExpense.amount != null ? String(initialExpense.amount) : '') : '');
-  const [repeats, setRepeats] = useState(isEditing ? initialExpense.frequency !== 'unico' : false);
-  const [frequency, setFrequency] = useState(isEditing ? (initialExpense.frequency === 'unico' ? 'mensual' : initialExpense.frequency) : 'mensual');
+  const [amount, setAmount] = useState(isEditing ? (initialExpense.amount != null ? String(initialExpense.amount) : '') : (defaultValues?.amount != null ? String(defaultValues.amount) : ''));
+  const [repeats, setRepeats] = useState(isEditing ? initialExpense.frequency !== 'unico' : (defaultValues?.repeats ?? false));
+  const [frequency, setFrequency] = useState(isEditing ? (initialExpense.frequency === 'unico' ? 'mensual' : initialExpense.frequency) : (defaultValues?.frequency || 'mensual'));
   const [customFreqMonths, setCustomFreqMonths] = useState(isEditing ? (initialExpense.custom_frequency_months ? String(initialExpense.custom_frequency_months) : '') : '');
   const [durationType, setDurationType] = useState(isEditing ? (initialExpense.duration_payments ? 'pagos' : 'indefinido') : 'indefinido');
   const [durationPayments, setDurationPayments] = useState(isEditing ? (initialExpense.duration_payments ? String(initialExpense.duration_payments) : '') : '');

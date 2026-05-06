@@ -69,7 +69,7 @@ function getMonthlyExpenses(property, supabaseExpenses, year, month) {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, onOpenComparador, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader, hideAvatar }) {
+function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, onOpenComparador, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader, hideAvatar, onUpdateProperty }) {
   const [viewMonth, setViewMonth] = useState(currentMonth);
   const [viewYear, setViewYear] = useState(currentYear);
 
@@ -360,6 +360,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
           properties={properties}
           supabaseExpenses={supabaseExpenses}
           initialPropertyId={rentabilityInitialPropertyId}
+          onUpdateProperty={onUpdateProperty}
           onClose={() => { setShowRentabilityModal(false); setRentabilityInitialPropertyId(null); }}
         />
       )}
@@ -1322,7 +1323,7 @@ function ReportModal({ properties, onClose }) {
 // ─────────────────────────────────────────────
 // Modal calculadora de rentabilidad
 // ─────────────────────────────────────────────
-function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onClose }) {
+function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onUpdateProperty, onClose }) {
   const [selectedPropertyId, setSelectedPropertyId] = useState(
     initialPropertyId ?? (properties.length > 0 ? String(properties[0].id) : '')
   );
@@ -1340,6 +1341,9 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onC
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [historyPayments, setHistoryPayments] = useState([]);
+  const [showMortgageExpensePrompt, setShowMortgageExpensePrompt] = useState(false);
+  const [pendingMortgageAmount, setPendingMortgageAmount] = useState(null);
+  const [showAddMortgageExpense, setShowAddMortgageExpense] = useState(false);
 
   const property = properties.find(p => String(p.id) === String(selectedPropertyId));
 
@@ -1376,10 +1380,26 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onC
     const updatedProperty = { ...property, investmentData };
     await supabase
       .from('properties')
-      .update({ data: updatedProperty, updated_at: new Date().toISOString() })
+      .update({
+        data: updatedProperty,
+        updated_at: new Date().toISOString(),
+        purchase_price: parseFloat(investmentData.purchasePrice) || null,
+        monthly_mortgage: parseFloat(investmentData.monthlyMortgage) || null,
+        monthly_amortization: parseFloat(investmentData.monthlyAmortization) || null,
+      })
       .eq('id', property.id);
     setSaving(false);
     setSaved(true);
+    if (onUpdateProperty) onUpdateProperty(updatedProperty);
+
+    const newMortgage = parseFloat(investmentData.monthlyMortgage);
+    const hasHipotecaExpense = (supabaseExpenses || []).some(
+      e => String(e.property_id) === String(property.id) && e.active !== false && e.category === 'hipoteca'
+    );
+    if (newMortgage > 0 && !hasHipotecaExpense && !mortgageIsAutoDetected) {
+      setPendingMortgageAmount(newMortgage);
+      setShowMortgageExpensePrompt(true);
+    }
   };
 
   const handleExportPDF = () => {
@@ -1884,6 +1904,117 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onC
             </p>
           )}
         </div>
+      </div>
+
+      {showMortgageExpensePrompt && (
+        <div className="modal-overlay" onClick={() => setShowMortgageExpensePrompt(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Hipoteca como gasto</h2>
+              <button className="modal-close" onClick={() => setShowMortgageExpensePrompt(false)}>×</button>
+            </div>
+            <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
+              ¿Quieres añadir la hipoteca ({pendingMortgageAmount} €/mes) también como gasto recurrente?
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { setShowMortgageExpensePrompt(false); setShowAddMortgageExpense(true); }}
+                style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#111', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Sí, añadir
+              </button>
+              <button
+                onClick={() => setShowMortgageExpensePrompt(false)}
+                style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', color: '#666', cursor: 'pointer' }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddMortgageExpense && property && (
+        <AddMortgageExpenseModal
+          amount={pendingMortgageAmount}
+          propertyId={property.id}
+          landlordEmail={property.landlord_email}
+          defaultExpensePct={property.ownershipPercentage || 100}
+          onClose={() => setShowAddMortgageExpense(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddMortgageExpenseModal({ amount, propertyId, landlordEmail, defaultExpensePct, onClose }) {
+  const today = new Date().toISOString().split('T')[0];
+  const [durationType, setDurationType] = useState('indefinido');
+  const [durationPayments, setDurationPayments] = useState('');
+  const [startDate, setStartDate] = useState(today);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const expenseData = {
+      property_id: String(propertyId),
+      landlord_email: landlordEmail,
+      name: 'Hipoteca/Préstamo',
+      category: 'hipoteca',
+      subcategory: null,
+      description: '',
+      type: durationType === 'pagos' ? 'recurrente_temporal' : 'recurrente_fijo',
+      frequency: 'mensual',
+      custom_frequency_months: null,
+      amount: parseFloat(amount),
+      duration_payments: durationType === 'pagos' && durationPayments ? parseInt(durationPayments) : null,
+      start_date: startDate,
+      active: true,
+      expense_percentage: defaultExpensePct != null ? parseFloat(defaultExpensePct) : null,
+    };
+    await supabase.from('expenses').insert(expenseData);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Añadir hipoteca como gasto</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div style={{ background: '#F5F5F5', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#555' }}>Categoría: <strong>Hipoteca/Préstamo</strong></p>
+            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#555' }}>Importe: <strong>{amount} €/mes</strong></p>
+          </div>
+          <div className="form-group">
+            <label>Duración</label>
+            <div className="frequency-options">
+              <button type="button" className={`frequency-option ${durationType === 'indefinido' ? 'selected' : ''}`} onClick={() => setDurationType('indefinido')}>Indefinido</button>
+              <button type="button" className={`frequency-option ${durationType === 'pagos' ? 'selected' : ''}`} onClick={() => setDurationType('pagos')}>N.º de pagos</button>
+            </div>
+            {durationType === 'pagos' && (
+              <div style={{ marginTop: 10 }}>
+                <input
+                  type="number" min="1" placeholder="Ej: 360 (30 años)" value={durationPayments}
+                  onChange={e => setDurationPayments(e.target.value)} required
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
+          </div>
+          <div className="form-group">
+            <label>Fecha de inicio</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <button type="submit" className="submit-button" disabled={saving}>
+            {saving ? 'Guardando...' : 'Añadir gasto'}
+          </button>
+        </form>
       </div>
     </div>
   );
