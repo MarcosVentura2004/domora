@@ -6,10 +6,13 @@ import Dashboard from './pages/Dashboard';
 import GestorDashboard from './pages/GestorDashboard';
 import CodeEntry from './pages/CodeEntry';
 import InquilinoHome from './pages/InquilinoHome';
+import Planes from './pages/Planes';
 import './App.css';
 
 function App() {
-  const [currentPage, rawSetPage] = useState('welcome');
+  const [currentPage, rawSetPage] = useState(
+    window.location.pathname === '/planes' ? 'planes' : 'welcome'
+  );
   const currentPageRef = useRef('welcome');
   const setPage = (page) => { currentPageRef.current = page; rawSetPage(page); };
   const [userType, setUserType] = useState(null); // 'propietario' o 'inquilino'
@@ -181,6 +184,9 @@ function App() {
         />
       )}
 
+      {currentPage === 'planes' && (
+        <Planes />
+      )}
 
     </div>
   );
