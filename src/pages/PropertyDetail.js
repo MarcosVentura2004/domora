@@ -733,10 +733,19 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   };
 
   const handleSkipExpenseMonth = async (expenseId) => {
-    const monthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
     const expense = expenses.find(e => e.id === expenseId);
+    const step = expense?.frequency === 'trimestral' ? 3
+      : expense?.frequency === 'anual' ? 12
+      : expense?.frequency === 'custom' ? (expense?.custom_frequency_months || 1)
+      : 1;
+    const monthsToSkip = [];
+    let y = currentYear, m = currentMonth;
+    for (let i = 0; i < step; i++) {
+      monthsToSkip.push(`${y}-${String(m + 1).padStart(2, '0')}`);
+      if (m === 11) { m = 0; y++; } else { m++; }
+    }
     const currentSkipped = expense?.skipped_months || [];
-    const updatedSkipped = [...currentSkipped, monthStr];
+    const updatedSkipped = [...new Set([...currentSkipped, ...monthsToSkip])];
     await supabase.from('expenses').update({ skipped_months: updatedSkipped }).eq('id', expenseId);
     setExpenses(prev => prev.map(e => e.id === expenseId ? { ...e, skipped_months: updatedSkipped } : e));
     setDeleteExpenseModal(null);
@@ -1762,39 +1771,55 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           onDelete={handleDeleteTenant}
         />
       )}
-      {deleteExpenseModal && (
-        <div className="modal-overlay" onClick={() => setDeleteExpenseModal(null)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Eliminar gasto</h2>
-              <button className="modal-close" onClick={() => setDeleteExpenseModal(null)}>×</button>
-            </div>
-            <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
-              ¿Cómo quieres eliminar <strong>{deleteExpenseModal.expense.name}</strong>?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button
-                onClick={() => handleSkipExpenseMonth(deleteExpenseModal.expense.id)}
-                style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#333', textAlign: 'left' }}
-              >
-                <span style={{ display: 'block', fontWeight: 600 }}>Solo este mes</span>
-                <span style={{ display: 'block', fontSize: '12px', color: '#888', marginTop: 2 }}>
-                  El gasto se omite en {new Date(currentYear, currentMonth, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })} pero sigue activo los demás meses
-                </span>
-              </button>
-              <button
-                onClick={() => handleDeleteExpensePermanently(deleteExpenseModal.expense.id)}
-                style={{ padding: '12px', borderRadius: '10px', border: 'none', background: '#F44336', fontSize: '15px', cursor: 'pointer', color: 'white', textAlign: 'left' }}
-              >
-                <span style={{ display: 'block', fontWeight: 600 }}>Definitivamente</span>
-                <span style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
-                  Elimina el gasto de forma permanente
-                </span>
-              </button>
+      {deleteExpenseModal && (() => {
+        const freq = deleteExpenseModal.expense.frequency;
+        const customMonths = deleteExpenseModal.expense.custom_frequency_months || 1;
+        const periodLabel = freq === 'anual' ? 'este año'
+          : freq === 'trimestral' ? 'este trimestre'
+          : freq === 'custom' && customMonths === 6 ? 'este semestre'
+          : freq === 'custom' && customMonths === 2 ? 'este bimestre'
+          : freq === 'custom' ? `estos ${customMonths} meses`
+          : 'este mes';
+        const buttonLabel = freq === 'anual' ? 'Solo este año'
+          : freq === 'trimestral' ? 'Solo este trimestre'
+          : freq === 'custom' && customMonths === 6 ? 'Solo este semestre'
+          : freq === 'custom' && customMonths === 2 ? 'Solo este bimestre'
+          : freq === 'custom' ? `Solo estos ${customMonths} meses`
+          : 'Solo este mes';
+        return (
+          <div className="modal-overlay" onClick={() => setDeleteExpenseModal(null)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Eliminar gasto</h2>
+                <button className="modal-close" onClick={() => setDeleteExpenseModal(null)}>×</button>
+              </div>
+              <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
+                ¿Cómo quieres eliminar <strong>{deleteExpenseModal.expense.name}</strong>?
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  onClick={() => handleSkipExpenseMonth(deleteExpenseModal.expense.id)}
+                  style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#333', textAlign: 'left' }}
+                >
+                  <span style={{ display: 'block', fontWeight: 600 }}>{buttonLabel}</span>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#888', marginTop: 2 }}>
+                    El gasto se omite {periodLabel} pero sigue activo los demás períodos
+                  </span>
+                </button>
+                <button
+                  onClick={() => handleDeleteExpensePermanently(deleteExpenseModal.expense.id)}
+                  style={{ padding: '12px', borderRadius: '10px', border: 'none', background: '#F44336', fontSize: '15px', cursor: 'pointer', color: 'white', textAlign: 'left' }}
+                >
+                  <span style={{ display: 'block', fontWeight: 600 }}>Definitivamente</span>
+                  <span style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
+                    Elimina el gasto de forma permanente
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {showMortgageExpensePrompt && (
         <div className="modal-overlay" onClick={() => setShowMortgageExpensePrompt(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
