@@ -1,0 +1,244 @@
+/* ─── Comparador de inmuebles ─── */
+
+.comparador-page {
+  min-height: 100vh;
+  background: #f2f2f7;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+}
+
+/* ── Header ── */
+.comparador-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(242, 242, 247, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.comparador-back-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 15px;
+  font-weight: 400;
+  color: #007aff;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comparador-back-btn:active {
+  opacity: 0.6;
+}
+
+.comparador-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #111;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* ── Columns container ── */
+.comparador-columns-wrapper {
+  flex: 1;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+}
+
+.comparador-columns {
+  display: flex;
+  gap: 12px;
+  min-width: 600px;
+}
+
+/* ── Single column ── */
+.comparador-column {
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Selector card (immueble + month) ── */
+.comparador-selector-card {
+  background: white;
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.comparador-selector-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+}
+
+.comparador-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e5ea;
+  background: #f9f9fb;
+  font-size: 14px;
+  color: #111;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.comparador-select:focus {
+  outline: none;
+  border-color: #007aff;
+}
+
+/* ── Section card ── */
+.comparador-section-card {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.comparador-section-header {
+  padding: 12px 16px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Row ── */
+.comparador-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-top: 1px solid #f2f2f7;
+}
+
+.comparador-row:first-of-type {
+  border-top: none;
+}
+
+.comparador-row-label {
+  font-size: 14px;
+  color: #3c3c43;
+  flex: 1;
+}
+
+.comparador-row-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111;
+  text-align: right;
+}
+
+.comparador-row-value.positive {
+  color: #34c759;
+}
+
+.comparador-row-value.negative {
+  color: #ff3b30;
+}
+
+.comparador-row-value.neutral {
+  color: #8e8e93;
+}
+
+/* ── ROI semáforo badge ── */
+.comparador-roi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 6px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.comparador-roi-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.comparador-roi-badge.green {
+  background: #f0faf3;
+  color: #1c7d3c;
+}
+.comparador-roi-badge.green .comparador-roi-dot { background: #34c759; }
+
+.comparador-roi-badge.yellow {
+  background: #fffbf0;
+  color: #9a6700;
+}
+.comparador-roi-badge.yellow .comparador-roi-dot { background: #ff9f0a; }
+
+.comparador-roi-badge.red {
+  background: #fff2f1;
+  color: #c0392b;
+}
+.comparador-roi-badge.red .comparador-roi-dot { background: #ff3b30; }
+
+/* ── Loading / empty state ── */
+.comparador-loading {
+  padding: 20px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #8e8e93;
+}
+
+.comparador-empty {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #8e8e93;
+  text-align: center;
+}
+
+/* ── No property selected ── */
+.comparador-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  font-size: 14px;
+  color: #c7c7cc;
+  text-align: center;
+}
+
+/* ── Desktop: full width ── */
+@media (min-width: 680px) {
+  .comparador-columns-wrapper {
+    padding: 20px;
+  }
+  .comparador-columns {
+    min-width: unset;
+    gap: 16px;
+  }
+}

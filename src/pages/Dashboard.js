@@ -3,6 +3,7 @@ import './Dashboard.css';
 import PropertyDetail from './PropertyDetail';
 import VacationalDetail from './VacationalDetail';
 import GeneralPanel from './GeneralPanel';
+import Comparador from './Comparador';
 import ChatConversation from './ChatConversation';
 import Settings from './Settings';
 import { supabase } from '../supabaseClient';
@@ -397,11 +398,21 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
           userEmail={userEmail}
           onNavigateToProperties={() => switchTab('properties')}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenComparador={() => setActiveTab('comparador')}
           avatarUrl={avatarUrl}
           avatarValid={avatarValid}
           onAvatarLoad={() => setAvatarValid(true)}
           onAvatarError={() => setAvatarValid(false)}
           hideHeader={hideHeader}
+        />
+      )}
+
+      {/* Comparador de inmuebles */}
+      {activeTab === 'comparador' && (
+        <Comparador
+          properties={properties}
+          userEmail={userEmail}
+          onBack={() => setActiveTab('general')}
         />
       )}
 

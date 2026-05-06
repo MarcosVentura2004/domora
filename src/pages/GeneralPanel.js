@@ -69,7 +69,7 @@ function getMonthlyExpenses(property, supabaseExpenses, year, month) {
 // ─────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────
-function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader, hideAvatar }) {
+function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSettings, onOpenComparador, avatarUrl, avatarValid, onAvatarLoad, onAvatarError, hideHeader, hideAvatar }) {
   const [viewMonth, setViewMonth] = useState(currentMonth);
   const [viewYear, setViewYear] = useState(currentYear);
 
@@ -342,6 +342,9 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
                 </button>
                 <button className="option-item" onClick={() => { setShowRentabilityModal(true); setShowOptionsMenu(false); }}>
                   Calcular rentabilidad
+                </button>
+                <button className="option-item" onClick={() => { if (onOpenComparador) onOpenComparador(); setShowOptionsMenu(false); }}>
+                  Comparar inmuebles
                 </button>
               </div>
             )}
