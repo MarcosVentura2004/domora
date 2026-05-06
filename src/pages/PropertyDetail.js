@@ -47,6 +47,10 @@ function getExpensesForMonth(expenses, year, month) {
       const paymentIndex = monthsDiff / step;
       if (paymentIndex >= (e.duration_payments || 0)) return false;
     }
+    if (e.skipped_months && Array.isArray(e.skipped_months)) {
+      const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+      if (e.skipped_months.includes(monthStr)) return false;
+    }
     return true;
   });
 }
@@ -57,6 +61,27 @@ function getMonthlyEquivalent(expense) {
   if (expense.frequency === 'anual') return amt / 12;
   if (expense.frequency === 'custom') return amt / (expense.custom_frequency_months || 1);
   return amt;
+}
+
+function calcPaymentsMade(expense) {
+  if (!expense.start_date) return expense.payments_made || 0;
+  const start = new Date(expense.start_date.substring(0, 10) + 'T12:00:00');
+  const now = new Date();
+  const sy = start.getFullYear(), sm = start.getMonth();
+  const ny = now.getFullYear(), nm = now.getMonth();
+  const step = expense.frequency === 'trimestral' ? 3 : expense.frequency === 'anual' ? 12 : expense.frequency === 'custom' ? (expense.custom_frequency_months || 1) : 1;
+  const skipped = expense.skipped_months || [];
+  let made = 0;
+  let y = sy, m = sm;
+  while (y < ny || (y === ny && m <= nm)) {
+    const diff = (y - sy) * 12 + (m - sm);
+    if (diff % step === 0) {
+      const monthStr = `${y}-${String(m + 1).padStart(2, '0')}`;
+      if (!skipped.includes(monthStr)) made++;
+    }
+    if (m === 11) { m = 0; y++; } else { m++; }
+  }
+  return made;
 }
 
 function exportToExcel(propertyName, historyMonths, accumulated) {
@@ -276,6 +301,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [showMortgageExpensePrompt, setShowMortgageExpensePrompt] = useState(false);
   const [pendingMortgageAmount, setPendingMortgageAmount] = useState(null);
   const [mortgagePrefillValues, setMortgagePrefillValues] = useState(null);
+  const [deleteExpenseModal, setDeleteExpenseModal] = useState(null); // { expense }
 
   useEffect(() => {
     if (!tenants.length || (property.status !== 'alquilado' && property.status !== 'otros')) return;
@@ -696,9 +722,30 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     setShowAddExpense(false);
   };
 
-  const handleDeleteExpense = async (expenseId) => {
+  const handleDeleteExpense = (expense) => {
+    const isRecurring = expense.type === 'recurrente_fijo' || expense.type === 'recurrente_temporal';
+    if (isRecurring) {
+      setDeleteExpenseModal({ expense });
+    } else {
+      supabase.from('expenses').delete().eq('id', expense.id);
+      setExpenses(prev => prev.filter(e => e.id !== expense.id));
+    }
+  };
+
+  const handleSkipExpenseMonth = async (expenseId) => {
+    const monthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+    const expense = expenses.find(e => e.id === expenseId);
+    const currentSkipped = expense?.skipped_months || [];
+    const updatedSkipped = [...currentSkipped, monthStr];
+    await supabase.from('expenses').update({ skipped_months: updatedSkipped }).eq('id', expenseId);
+    setExpenses(prev => prev.map(e => e.id === expenseId ? { ...e, skipped_months: updatedSkipped } : e));
+    setDeleteExpenseModal(null);
+  };
+
+  const handleDeleteExpensePermanently = async (expenseId) => {
     await supabase.from('expenses').delete().eq('id', expenseId);
     setExpenses(prev => prev.filter(e => e.id !== expenseId));
+    setDeleteExpenseModal(null);
   };
 
   const handleUpdateExpense = async (expenseId, expenseData) => {
@@ -1374,9 +1421,9 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                           </a>
                         )}
                         {typeLabel && <span className={`frequency-badge ${expense.type}`} style={{ fontSize: 10 }}>{typeLabel}</span>}
-                        {freqLabel && <span className={`frequency-badge ${expense.frequency}`}>{freqLabel}</span>}
+                        {freqLabel && expense.frequency !== 'unico' && <span className={`frequency-badge ${expense.frequency}`}>{freqLabel}</span>}
                         {expense.type === 'recurrente_temporal' && expense.duration_payments && (
-                          <span style={{ fontSize: 10, color: '#aaa' }}>({expense.payments_made || 0}/{expense.duration_payments} pagos)</span>
+                          <span style={{ fontSize: 10, color: '#aaa' }}>({calcPaymentsMade(expense)}/{expense.duration_payments} pagos)</span>
                         )}
                         {expPct !== ownershipPct && (
                           <span style={{ fontSize: 10, color: '#888' }}>{expPct}%</span>
@@ -1403,7 +1450,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                         openMenuId={openMenuExpenseId}
                         setOpenMenuId={setOpenMenuExpenseId}
                         onEdit={() => { setEditingExpense(expense); setOpenMenuExpenseId(null); }}
-                        onDelete={() => handleDeleteExpense(expense.id)}
+                        onDelete={() => handleDeleteExpense(expense)}
                       />
                     </div>
                   </div>
@@ -1714,6 +1761,39 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           }}
           onDelete={handleDeleteTenant}
         />
+      )}
+      {deleteExpenseModal && (
+        <div className="modal-overlay" onClick={() => setDeleteExpenseModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Eliminar gasto</h2>
+              <button className="modal-close" onClick={() => setDeleteExpenseModal(null)}>×</button>
+            </div>
+            <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
+              ¿Cómo quieres eliminar <strong>{deleteExpenseModal.expense.name}</strong>?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                onClick={() => handleSkipExpenseMonth(deleteExpenseModal.expense.id)}
+                style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#333', textAlign: 'left' }}
+              >
+                <span style={{ display: 'block', fontWeight: 600 }}>Solo este mes</span>
+                <span style={{ display: 'block', fontSize: '12px', color: '#888', marginTop: 2 }}>
+                  El gasto se omite en {new Date(currentYear, currentMonth, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })} pero sigue activo los demás meses
+                </span>
+              </button>
+              <button
+                onClick={() => handleDeleteExpensePermanently(deleteExpenseModal.expense.id)}
+                style={{ padding: '12px', borderRadius: '10px', border: 'none', background: '#F44336', fontSize: '15px', cursor: 'pointer', color: 'white', textAlign: 'left' }}
+              >
+                <span style={{ display: 'block', fontWeight: 600 }}>Definitivamente</span>
+                <span style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
+                  Elimina el gasto de forma permanente
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {showMortgageExpensePrompt && (
         <div className="modal-overlay" onClick={() => setShowMortgageExpensePrompt(false)}>
@@ -2641,4 +2721,8 @@ export default PropertyDetail;
  *   monthly_mortgage      = (data->'investmentData'->>'monthlyMortgage')::NUMERIC,
  *   monthly_amortization  = (data->'investmentData'->>'monthlyAmortization')::NUMERIC
  * WHERE data->'investmentData' IS NOT NULL;
+ *
+ * -- Campo skipped_months para omitir meses concretos en gastos recurrentes:
+ * ALTER TABLE expenses
+ *   ADD COLUMN IF NOT EXISTS skipped_months TEXT[] DEFAULT '{}';
  */
