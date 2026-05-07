@@ -855,11 +855,33 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 // Modal reporte anual
 // ─────────────────────────────────────────────
 const CATEGORY_LABELS = {
-  ibi: 'IBI', comunidad: 'Comunidad de propietarios', seguro: 'Seguro del hogar',
+  ibi: 'IBI', comunidad: 'Comunidad de propietarios',
+  seguro: 'Seguro del hogar', seguros: 'Seguros',
   reparaciones: 'Reparaciones y conservación', suministros: 'Suministros',
-  amortizacion: 'Amortización del inmueble', hipoteca: 'Intereses hipotecarios',
-  gestion: 'Gastos de gestión', otros: 'Otros',
+  amortizacion: 'Amortización del inmueble', hipoteca: 'Hipoteca/Préstamo',
+  gestion: 'Gastos de gestión', impuestos: 'Impuestos',
+  publicidad: 'Publicidad', otros: 'Otros',
 };
+
+// Reglas de deducibilidad por categoría de gasto
+function getDeductibilityInfo(categoryKey, isUsoPropioFiscal) {
+  if (isUsoPropioFiscal) return { status: 'No', note: null };
+  const rules = {
+    ibi:          { status: 'Si',      note: null },
+    comunidad:    { status: 'Si',      note: null },
+    seguro:       { status: 'Si',      note: null },
+    seguros:      { status: 'Si',      note: null },
+    reparaciones: { status: 'Si',      note: null },
+    gestion:      { status: 'Si',      note: null },
+    suministros:  { status: 'Si',      note: null },
+    publicidad:   { status: 'Si',      note: null },
+    impuestos:    { status: 'Si',      note: null },
+    amortizacion: { status: 'Si',      note: null },
+    hipoteca:     { status: 'Parcial', note: 'Solo los intereses son deducibles, no la amortizacion del capital' },
+    otros:        { status: 'Revisar', note: 'Confirmar deducibilidad con asesor fiscal' },
+  };
+  return rules[categoryKey] || { status: 'Revisar', note: null };
+}
 
 function ReportModal({ properties, supabaseExpenses, onClose }) {
   const currentYear = now.getFullYear();
@@ -940,6 +962,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
         const startDate = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
         return {
           date: startDate.toLocaleDateString('es-ES'),
+          categoryKey: e.category || 'otros',
           category: CATEGORY_LABELS[e.category] || e.category || 'Otros',
           name: e.description || '',
           frequency: e.frequency,
@@ -1159,6 +1182,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
 
       allData.forEach(({ p: property, d: data }) => {
         const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : fiscalTypes[property.id] === 'comercial' ? 'Uso comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
+        const isUsoPropioFiscal = fiscalTypes[property.id] === 'propio';
         const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
         const netPrevio = data.totalCobrado - data.totalExpenses;
 
@@ -1219,7 +1243,6 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
           doc.setFont('helvetica', 'bold');
           doc.text(row.value, pageW - 18, ry, { align: 'right' });
 
-          // Línea separadora suave solo entre filas (no al final)
           if (!row.bold) {
             doc.setDrawColor(238); doc.line(22, ry + 2, pageW - 18, ry + 2);
           }
@@ -1227,6 +1250,84 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
         });
 
         y += boxH + 10;
+
+        // ── Tabla de gastos con deducibilidad ──
+        if (data.expenseDetail.length > 0) {
+          // Cabecera tabla
+          const tableHeaderH = 14;
+          const rowH = 7;
+          const tableRows = data.expenseDetail.map(e => ({
+            label: e.category + (e.name ? ` — ${e.name}` : ''),
+            amount: e.amount,
+            deduct: getDeductibilityInfo(e.categoryKey, isUsoPropioFiscal),
+          }));
+
+          const totalDeducible = tableRows.reduce((sum, r) => {
+            if (r.deduct.status === 'Si' || r.deduct.status === 'Parcial') return sum + r.amount;
+            return sum;
+          }, 0);
+
+          const tableH = tableHeaderH + tableRows.length * rowH + 10;
+          checkSpace(tableH + 6);
+
+          // Fondo cabecera tabla
+          doc.setFillColor(235, 235, 235);
+          doc.rect(14, y, pageW - 28, tableHeaderH, 'F');
+
+          const colGasto   = 18;
+          const colImporte = pageW - 56;
+          const colDeduct  = pageW - 16;
+
+          doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(90);
+          doc.text('GASTO', colGasto, y + 9);
+          doc.text('IMPORTE', colImporte, y + 9, { align: 'right' });
+          doc.text('DEDUCIBLE', colDeduct, y + 9, { align: 'right' });
+          y += tableHeaderH;
+
+          tableRows.forEach(r => {
+            checkSpace(rowH + 2);
+            doc.setFont('helvetica', 'normal'); doc.setTextColor(60); doc.setFontSize(7.5);
+            const labelTrunc = r.label.length > 52 ? r.label.substring(0, 52) + '…' : r.label;
+            doc.text(labelTrunc, colGasto, y + 5);
+            doc.setTextColor(198, 40, 40);
+            doc.text(`-${r.amount.toFixed(2)} €`, colImporte, y + 5, { align: 'right' });
+
+            // Badge DEDUCIBLE con color
+            const s = r.deduct.status;
+            const badgeColor =
+              s === 'Si'      ? [220, 242, 224] :
+              s === 'No'      ? [250, 220, 218] :
+              s === 'Parcial' ? [255, 240, 210] :
+                                [235, 235, 235];
+            const textColor =
+              s === 'Si'      ? [30, 100, 40]   :
+              s === 'No'      ? [160, 30, 30]    :
+              s === 'Parcial' ? [150, 80, 0]     :
+                                [80, 80, 80];
+
+            const bw = doc.getTextWidth(s) + 6;
+            doc.setFillColor(...badgeColor);
+            doc.roundedRect(colDeduct - bw, y + 1, bw, 6, 1, 1, 'F');
+            doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...textColor);
+            doc.text(s, colDeduct - bw / 2, y + 5.5, { align: 'center' });
+
+            doc.setDrawColor(245); doc.line(14, y + rowH, pageW - 14, y + rowH);
+            y += rowH;
+          });
+
+          // Total deducible real
+          checkSpace(10);
+          doc.setFillColor(245, 250, 245);
+          doc.rect(14, y, pageW - 28, 10, 'F');
+          doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
+          doc.text('Total deducible real', colGasto, y + 7);
+          doc.setTextColor(46, 125, 50);
+          doc.text(`-${totalDeducible.toFixed(2)} €`, colImporte, y + 7, { align: 'right' });
+          y += 14;
+        }
+
+        y += 4;
       });
 
       // Caja resumen IRPF total
@@ -1250,7 +1351,21 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       globalNet >= 0 ? doc.setTextColor(150, 230, 150) : doc.setTextColor(230, 100, 100);
       doc.text(`${globalNet >= 0 ? '+' : ''}${globalNet.toFixed(2)} €`, tc[2], y + 27);
 
-      y += 40;
+      y += 44;
+
+      // Nota sobre gastos parciales y a revisar
+      checkSpace(18);
+      doc.setFontSize(7); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
+      doc.text(
+        "Los gastos marcados como 'Parcial' o 'Revisar' requieren confirmacion con un asesor fiscal.",
+        14, y
+      );
+      y += 5;
+      doc.text(
+        "'Parcial' (hipoteca): solo los intereses son deducibles, no la amortizacion del capital.",
+        14, y
+      );
+      y += 10;
 
       // Nota legal final
       doc.setFontSize(6.5); doc.setTextColor(170); doc.setFont('helvetica', 'italic');
