@@ -374,41 +374,29 @@ function generateAnalysis(colData1, colData2) {
 
 // ─── Sección de análisis (colapsable) ────────────────────────────────────────
 
-function AnalysisSection({ colData1, colData2 }) {
-  const [open, setOpen] = useState(false);
-  const result    = generateAnalysis(colData1, colData2);
-  const canAnalyze = colData1?.property && colData2?.property;
+function AnalysisSection({ colData1, colData2, open }) {
+  const result = generateAnalysis(colData1, colData2);
+
+  if (!open) return null;
 
   return (
-    <div className="comparador-analysis-footer">
-      {open && (
-        <div className="comparador-analysis-panel">
-          {result?.type === 'same_period' ? (
-            <p className="comparador-analysis-empty">
-              Selecciona dos períodos diferentes para ver el análisis.
-            </p>
-          ) : result?.type === 'analysis' ? (
-            result.sections.map((s, i) => (
-              <p key={i} className="comparador-analysis-para">
-                <span className="comparador-analysis-label">{s.label}:</span>{' '}
-                {s.text}
-              </p>
-            ))
-          ) : (
-            <p className="comparador-analysis-empty">
-              Selecciona dos períodos para ver el análisis.
-            </p>
-          )}
-        </div>
+    <div className="comparador-analysis-panel">
+      {result?.type === 'same_period' ? (
+        <p className="comparador-analysis-empty">
+          Selecciona dos períodos diferentes para ver el análisis.
+        </p>
+      ) : result?.type === 'analysis' ? (
+        result.sections.map((s, i) => (
+          <p key={i} className="comparador-analysis-para">
+            <span className="comparador-analysis-label">{s.label}:</span>{' '}
+            {s.text}
+          </p>
+        ))
+      ) : (
+        <p className="comparador-analysis-empty">
+          Selecciona dos períodos para ver el análisis.
+        </p>
       )}
-      <div className="comparador-analysis-btn-row">
-        <button
-          className={`comparador-analysis-toggle${!canAnalyze ? ' comparador-analysis-toggle--disabled' : ''}`}
-          onClick={() => { if (canAnalyze) setOpen(o => !o); }}
-        >
-          {open ? 'Ocultar análisis' : 'Ver análisis de diferencias'}
-        </button>
-      </div>
     </div>
   );
 }
@@ -636,6 +624,8 @@ function Comparador({ properties, onBack }) {
   const rentableProperties = properties.filter(p => p.status !== 'uso_propio');
   const [colData1, setColData1] = useState(null);
   const [colData2, setColData2] = useState(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const canAnalyze = colData1?.property && colData2?.property;
 
   return (
     <div className="comparador-page">
@@ -647,6 +637,12 @@ function Comparador({ properties, onBack }) {
           Volver
         </button>
         <span className="comparador-title">Comparar inmuebles</span>
+        <button
+          className={`comparador-analysis-toggle${!canAnalyze ? ' comparador-analysis-toggle--disabled' : ''}`}
+          onClick={() => { if (canAnalyze) setAnalysisOpen(o => !o); }}
+        >
+          {analysisOpen ? 'Ocultar análisis' : 'Análisis'}
+        </button>
       </div>
 
       {rentableProperties.length === 0 ? (
@@ -659,7 +655,7 @@ function Comparador({ properties, onBack }) {
               <ComparadorColumn properties={rentableProperties} onDataChange={setColData2} />
             </div>
           </div>
-          <AnalysisSection colData1={colData1} colData2={colData2} />
+          <AnalysisSection colData1={colData1} colData2={colData2} open={analysisOpen} />
         </div>
       )}
     </div>
