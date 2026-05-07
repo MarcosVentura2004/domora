@@ -342,7 +342,9 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
       const updated = properties.map(p => p.id === updatedProperty.id ? updatedProperty : p);
       setProperties(updated);
       syncToLocalStorage(updated);
-      setViewingProperty(updatedProperty);
+      if (viewingProperty?.id === updatedProperty.id) {
+        setViewingProperty(updatedProperty);
+      }
     }
   };
 
@@ -404,6 +406,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
           onAvatarLoad={() => setAvatarValid(true)}
           onAvatarError={() => setAvatarValid(false)}
           hideHeader={hideHeader}
+          onUpdateProperty={handleUpdateProperty}
         />
       )}
 
