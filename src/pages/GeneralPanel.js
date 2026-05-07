@@ -893,6 +893,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
   const [fiscalTypes, setFiscalTypes] = useState(() =>
     Object.fromEntries(reportableProperties.map(p => [p.id, p.status === 'vacacional' ? 'turistico' : 'residencial']))
   );
+  const [declaredAmounts, setDeclaredAmounts] = useState({});
 
   const years = [];
   const minYear = reportableProperties.reduce((min, p) => {
@@ -986,17 +987,30 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     return { monthsData, totalCobrado, totalPendiente, totalExpenses, net: totalCobrado - totalExpenses, expenseDetail, expensesByCategory };
   };
 
+  useEffect(() => {
+    const defaults = {};
+    reportableProperties.forEach(p => {
+      const d = getYearlyData(p);
+      defaults[String(p.id)] = d.totalCobrado;
+    });
+    setDeclaredAmounts(defaults);
+  }, [selectedYear]); // eslint-disable-line
+
   // ── Exportar Excel ──
   const generateExcel = () => {
     import('xlsx').then(XLSX => {
       const rows = [];
       reportableProperties.forEach(property => {
         const data = getYearlyData(property);
+        const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
         // Ingresos
         data.monthsData.forEach(({ month, cobrado, pendiente }) => {
           if (cobrado > 0) rows.push({ Fecha: `${monthNames[month]} ${selectedYear}`, Inmueble: property.name, Tipo: 'Ingreso', Categoría: 'Alquiler', Concepto: 'Ingreso cobrado', Importe: cobrado, Estado: 'Cobrado' });
           if (pendiente > 0) rows.push({ Fecha: `${monthNames[month]} ${selectedYear}`, Inmueble: property.name, Tipo: 'Ingreso', Categoría: 'Alquiler', Concepto: 'Ingreso pendiente', Importe: pendiente, Estado: 'Pendiente' });
         });
+        if (Math.abs(declared - data.totalCobrado) > 0.01) {
+          rows.push({ Fecha: `${selectedYear}`, Inmueble: property.name, Tipo: 'Ajuste', Categoría: 'Declaracion', Concepto: 'Importe a declarar (ajustado por propietario)', Importe: declared, Estado: 'Declarado' });
+        }
         // Gastos
         data.expenseDetail.forEach(e => {
           rows.push({ Fecha: e.date, Inmueble: property.name, Tipo: 'Gasto', Categoría: e.category, Concepto: e.name, Importe: -e.amount, Estado: 'Pagado' });
@@ -1054,6 +1068,8 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       const globalPendiente = allData.reduce((s, { d }) => s + d.totalPendiente, 0);
       const globalExpenses = allData.reduce((s, { d }) => s + d.totalExpenses, 0);
       const globalNet = globalCobrado - globalExpenses;
+      const globalDeclared = allData.reduce((s, { p: prop, d }) => s + (declaredAmounts[String(prop.id)] ?? d.totalCobrado), 0);
+      const globalDeclaredNet = globalDeclared - globalExpenses;
 
       // Caja resumen
       doc.setFillColor(245, 245, 245);
@@ -1184,10 +1200,15 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
         const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : fiscalTypes[property.id] === 'comercial' ? 'Uso comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
         const isUsoPropioFiscal = fiscalTypes[property.id] === 'propio';
         const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
-        const netPrevio = data.totalCobrado - data.totalExpenses;
+        const declaredForProp = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+        const hasDeclaredAdjustment = Math.abs(declaredForProp - data.totalCobrado) > 0.01;
+        const netPrevio = declaredForProp - data.totalExpenses;
 
         const rows2 = [
-          { label: 'Ingresos íntegros (cobrados)', value: `${data.totalCobrado.toFixed(2)} €`, color: [46, 125, 50] },
+          hasDeclaredAdjustment
+            ? { label: 'Ingresos cobrados (real)', value: `${data.totalCobrado.toFixed(2)} €`, color: [160, 160, 160] }
+            : { label: 'Ingresos íntegros (cobrados)', value: `${data.totalCobrado.toFixed(2)} €`, color: [46, 125, 50] },
+          ...(hasDeclaredAdjustment ? [{ label: 'Importe a declarar (ajustado)', value: `${declaredForProp.toFixed(2)} €`, color: [46, 125, 50] }] : []),
           { label: 'Gastos deducibles', value: `-${data.totalExpenses.toFixed(2)} €`, color: [198, 40, 40] },
           { label: 'Rendimiento neto previo', value: `${netPrevio >= 0 ? '+' : ''}${netPrevio.toFixed(2)} €`, color: netPrevio >= 0 ? [46, 125, 50] : [198, 40, 40], bold: !reduction },
         ];
@@ -1341,15 +1362,15 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       // Tres columnas dentro de la caja oscura
       const tc = [20, 85, 155];
       doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(170, 170, 170);
-      doc.text('INGRESOS COBRADOS', tc[0], y + 18);
+      doc.text('INGRESOS A DECLARAR', tc[0], y + 18);
       doc.text('GASTOS DEDUCIBLES', tc[1], y + 18);
       doc.text('RENDIMIENTO NETO', tc[2], y + 18);
 
       doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-      doc.setTextColor(150, 230, 150); doc.text(`+${globalCobrado.toFixed(2)} €`, tc[0], y + 27);
+      doc.setTextColor(150, 230, 150); doc.text(`+${globalDeclared.toFixed(2)} €`, tc[0], y + 27);
       doc.setTextColor(230, 100, 100); doc.text(`-${globalExpenses.toFixed(2)} €`, tc[1], y + 27);
-      globalNet >= 0 ? doc.setTextColor(150, 230, 150) : doc.setTextColor(230, 100, 100);
-      doc.text(`${globalNet >= 0 ? '+' : ''}${globalNet.toFixed(2)} €`, tc[2], y + 27);
+      globalDeclaredNet >= 0 ? doc.setTextColor(150, 230, 150) : doc.setTextColor(230, 100, 100);
+      doc.text(`${globalDeclaredNet >= 0 ? '+' : ''}${globalDeclaredNet.toFixed(2)} €`, tc[2], y + 27);
 
       y += 44;
 
@@ -1365,6 +1386,12 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
         "'Parcial' (hipoteca): solo los intereses son deducibles, no la amortizacion del capital.",
         14, y
       );
+      y += 8;
+
+      // Nota importes declarados por propietario
+      checkSpace(8);
+      doc.setFontSize(7); doc.setFont('helvetica', 'italic'); doc.setTextColor(80);
+      doc.text('Los importes declarados han sido revisados y confirmados por el propietario.', 14, y);
       y += 10;
 
       // Nota legal final
@@ -1429,6 +1456,47 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
           <p style={{ margin: 0, fontSize: '12px', color: '#aaa', lineHeight: '1.5' }}>
             El reporte incluye ingresos con estado de cobro, gastos desglosados por categoría, resumen global y página de datos para el IRPF.
           </p>
+
+          {/* Revisar importes */}
+          {reportableProperties.length > 0 && (
+            <div className="form-group">
+              <label>Revisar importes a declarar</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                {reportableProperties.map(p => {
+                  const data = getYearlyData(p);
+                  const cobrado = data.totalCobrado;
+                  const declared = declaredAmounts[String(p.id)] ?? cobrado;
+                  const diff = declared - cobrado;
+                  return (
+                    <div key={p.id} style={{ background: '#F9F9F9', borderRadius: '10px', padding: '12px 14px' }}>
+                      <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 600, color: '#222' }}>{p.name}</p>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '110px' }}>
+                          <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#bbb' }}>Ingresos cobrados</p>
+                          <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#bbb' }}>{cobrado.toFixed(2)} €</p>
+                        </div>
+                        <div style={{ flex: 1, minWidth: '130px' }}>
+                          <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#555' }}>Importe a declarar</p>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={declared}
+                            onChange={e => setDeclaredAmounts(prev => ({ ...prev, [String(p.id)]: parseFloat(e.target.value) || 0 }))}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', fontSize: '14px', fontWeight: 600, color: '#111', background: 'white', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                      </div>
+                      {Math.abs(diff) > 0.01 && (
+                        <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#aaa' }}>
+                          Diferencia: {diff >= 0 ? '+' : ''}{diff.toFixed(2)} €
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '10px' }}>
             <button className="submit-button" style={{ flex: 1 }} onClick={generatePDF}>Descargar PDF</button>
