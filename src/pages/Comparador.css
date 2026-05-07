@@ -1,19 +1,20 @@
 /* ─── Comparador de inmuebles ─── */
 
 .comparador-page {
-  min-height: 100vh;
+  height: 100vh;
   background: #f2f2f7;
   display: flex;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  overflow: hidden;
 }
 
 /* ── Header ── */
 .comparador-header {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
+  position: relative;
   z-index: 100;
-  background: rgba(242, 242, 247, 0.92);
+  background: rgba(242, 242, 247, 0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   display: flex;
@@ -49,30 +50,46 @@
   transform: translateX(-50%);
 }
 
-/* ── Columns container ── */
+/* ── Content area (columns + analysis) ── */
+.comparador-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Columns wrapper — horizontal scroll, vertical hidden ── */
 .comparador-columns-wrapper {
   flex: 1;
+  min-height: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  padding: 16px;
+  padding: 16px 16px 0;
 }
 
 .comparador-columns {
   display: flex;
   gap: 12px;
-  min-width: 600px;
+  min-width: 540px;
+  height: 100%;
 }
 
-/* ── Single column ── */
+/* ── Single column — scrolls independently ── */
 .comparador-column {
   flex: 1;
-  min-width: 260px;
+  min-width: 250px;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-bottom: 16px;
 }
 
-/* ── Selector card (immueble + month) ── */
+/* ── Selector card ── */
 .comparador-selector-card {
   background: white;
   border-radius: 16px;
@@ -80,7 +97,15 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
+/* Mes + Año en dos columnas */
+.comparador-period-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .comparador-selector-label {
@@ -94,7 +119,7 @@
 
 .comparador-select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 28px 10px 10px;
   border-radius: 10px;
   border: 1px solid #e5e5ea;
   background: #f9f9fb;
@@ -105,13 +130,14 @@
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23aaa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 12px center;
+  background-position: right 10px center;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .comparador-select:focus {
   outline: none;
-  border-color: #007aff;
+  border-color: #3B6CF8;
 }
 
 /* ── Section card ── */
@@ -119,16 +145,19 @@
   background: white;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
 }
 
 .comparador-section-header {
-  padding: 12px 16px 8px;
+  padding: 10px 16px 9px;
   font-size: 11px;
-  font-weight: 600;
-  color: #8e8e93;
+  font-weight: 700;
+  color: #3B6CF8;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  border-bottom: 2px solid rgba(59, 108, 248, 0.10);
+  background: rgba(59, 108, 248, 0.03);
 }
 
 /* ── Row ── */
@@ -157,19 +186,11 @@
   text-align: right;
 }
 
-.comparador-row-value.positive {
-  color: #34c759;
-}
+.comparador-row-value.positive { color: #34c759; }
+.comparador-row-value.negative { color: #ff3b30; }
+.comparador-row-value.neutral  { color: #8e8e93; }
 
-.comparador-row-value.negative {
-  color: #ff3b30;
-}
-
-.comparador-row-value.neutral {
-  color: #8e8e93;
-}
-
-/* ── ROI semáforo badge ── */
+/* ── ROI badge ── */
 .comparador-roi-badge {
   display: inline-flex;
   align-items: center;
@@ -187,25 +208,14 @@
   flex-shrink: 0;
 }
 
-.comparador-roi-badge.green {
-  background: #f0faf3;
-  color: #1c7d3c;
-}
-.comparador-roi-badge.green .comparador-roi-dot { background: #34c759; }
-
-.comparador-roi-badge.yellow {
-  background: #fffbf0;
-  color: #9a6700;
-}
+.comparador-roi-badge.green  { background: #f0faf3; color: #1c7d3c; }
+.comparador-roi-badge.green  .comparador-roi-dot { background: #34c759; }
+.comparador-roi-badge.yellow { background: #fffbf0; color: #9a6700; }
 .comparador-roi-badge.yellow .comparador-roi-dot { background: #ff9f0a; }
+.comparador-roi-badge.red    { background: #fff2f1; color: #c0392b; }
+.comparador-roi-badge.red    .comparador-roi-dot { background: #ff3b30; }
 
-.comparador-roi-badge.red {
-  background: #fff2f1;
-  color: #c0392b;
-}
-.comparador-roi-badge.red .comparador-roi-dot { background: #ff3b30; }
-
-/* ── Loading / empty state ── */
+/* ── Loading / empty states ── */
 .comparador-loading {
   padding: 20px 16px;
   text-align: center;
@@ -220,7 +230,6 @@
   text-align: center;
 }
 
-/* ── No property selected ── */
 .comparador-placeholder {
   flex: 1;
   display: flex;
@@ -232,13 +241,59 @@
   text-align: center;
 }
 
-/* ── Desktop: full width ── */
+.comparador-placeholder-col {
+  padding: 28px 12px;
+  font-size: 14px;
+  color: #c7c7cc;
+  text-align: center;
+}
+
+/* ── Análisis de diferencias ── */
+.comparador-analysis-section {
+  flex-shrink: 0;
+  background: white;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 14px 16px 18px;
+  max-height: 170px;
+  overflow-y: auto;
+}
+
+.comparador-analysis-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #3B6CF8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.comparador-analysis-text {
+  margin: 0;
+  font-size: 13px;
+  color: #3c3c43;
+  line-height: 1.65;
+}
+
+.comparador-analysis-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #c7c7cc;
+  line-height: 1.5;
+}
+
+/* ── Desktop ── */
 @media (min-width: 680px) {
   .comparador-columns-wrapper {
-    padding: 20px;
+    padding: 20px 20px 0;
   }
+
   .comparador-columns {
     min-width: unset;
     gap: 16px;
+  }
+
+  .comparador-analysis-section {
+    padding: 14px 20px 22px;
+    max-height: 200px;
   }
 }
