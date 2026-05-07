@@ -190,6 +190,22 @@
 .comparador-row-value.negative { color: #ff3b30; }
 .comparador-row-value.neutral  { color: #8e8e93; }
 
+/* ── Subcategory row (suministros: Luz, Agua, Gas, Internet) ── */
+.comparador-row-subcat {
+  padding-left: 28px;
+  background: #fafafa;
+}
+
+.comparador-row-subcat .comparador-row-label {
+  font-size: 13px;
+  color: #8e8e93;
+}
+
+.comparador-row-subcat .comparador-row-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* ── ROI badge ── */
 .comparador-roi-badge {
   display: inline-flex;
@@ -248,37 +264,73 @@
   text-align: center;
 }
 
-/* ── Análisis de diferencias ── */
-.comparador-analysis-section {
+/* ── Análisis de diferencias (colapsable) ── */
+.comparador-analysis-footer {
   flex-shrink: 0;
   background: white;
   border-top: 1px solid rgba(0, 0, 0, 0.07);
-  padding: 14px 16px 18px;
-  max-height: 170px;
+}
+
+.comparador-analysis-panel {
+  padding: 14px 16px 4px;
+  max-height: 260px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.comparador-analysis-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #3B6CF8;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 8px;
-}
-
-.comparador-analysis-text {
-  margin: 0;
+.comparador-analysis-para {
+  margin: 0 0 10px;
   font-size: 13px;
   color: #3c3c43;
   line-height: 1.65;
 }
 
+.comparador-analysis-para:last-child {
+  margin-bottom: 4px;
+}
+
+.comparador-analysis-label {
+  font-weight: 600;
+  color: #111;
+}
+
 .comparador-analysis-empty {
-  margin: 0;
+  margin: 6px 0 10px;
   font-size: 13px;
   color: #c7c7cc;
-  line-height: 1.5;
+  text-align: center;
+}
+
+.comparador-analysis-btn-row {
+  padding: 11px 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.comparador-analysis-toggle {
+  background: none;
+  border: 1.5px solid #3B6CF8;
+  border-radius: 20px;
+  color: #3B6CF8;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 24px;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  max-width: 300px;
+  letter-spacing: 0.01em;
+}
+
+.comparador-analysis-toggle:active {
+  opacity: 0.7;
+}
+
+.comparador-analysis-toggle--disabled {
+  border-color: #c7c7cc;
+  color: #c7c7cc;
+  cursor: default;
 }
 
 /* ── Desktop ── */
@@ -292,8 +344,12 @@
     gap: 16px;
   }
 
-  .comparador-analysis-section {
-    padding: 14px 20px 22px;
-    max-height: 200px;
+  .comparador-analysis-panel {
+    padding: 14px 20px 4px;
+    max-height: 300px;
+  }
+
+  .comparador-analysis-btn-row {
+    padding: 12px 20px;
   }
 }

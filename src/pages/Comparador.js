@@ -14,6 +14,13 @@ const EXPENSE_CATEGORIES = [
   { key: 'otros',        label: 'Otros' },
 ];
 
+const SUMINISTROS_SUBCATEGORIES = [
+  { key: 'luz',      label: 'Luz' },
+  { key: 'agua',     label: 'Agua' },
+  { key: 'gas',      label: 'Gas' },
+  { key: 'internet', label: 'Internet' },
+];
+
 // ─── Constantes de periodo ────────────────────────────────────────────────────
 const _now = new Date();
 const THIS_YEAR  = _now.getFullYear();
@@ -23,7 +30,6 @@ const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
-const MONTH_NAMES_LOWER = MONTH_NAMES.map(m => m.toLowerCase());
 
 const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => THIS_YEAR - i);
 
@@ -93,6 +99,15 @@ function computeMetrics(property, payments, allExpenses, year, month) {
     expensesByCategory[cat] = (expensesByCategory[cat] || 0) + getMonthlyEquivalentLocal(e) * pct / 100;
   });
 
+  const expensesBySubcategory = {};
+  activeForMonth.forEach(e => {
+    if (e.category === 'suministros' && e.subcategory) {
+      const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
+      const subKey = e.subcategory.toLowerCase().trim();
+      expensesBySubcategory[subKey] = (expensesBySubcategory[subKey] || 0) + getMonthlyEquivalentLocal(e) * pct / 100;
+    }
+  });
+
   const inv = property.investmentData || {};
   const initialInvestment =
     parseFloat(inv.initialInvestment) ||
@@ -122,7 +137,7 @@ function computeMetrics(property, payments, allExpenses, year, month) {
 
   return {
     totalIncome, confirmedCount, pendingCount, pendingAmount,
-    totalExpenses, expensesByCategory,
+    totalExpenses, expensesByCategory, expensesBySubcategory,
     hasInvestment, cashflowNeto, roiAnual, payback,
     tenantsActive, roomsOccupied, roomsTotal,
     isPorHabitaciones: property.status === 'por_habitaciones',
@@ -148,9 +163,9 @@ function roiBadge(roiAnual) {
 
 // ─── Componentes UI pequeños ──────────────────────────────────────────────────
 
-function MetricRow({ label, value, valueClass }) {
+function MetricRow({ label, value, valueClass, isSubcat }) {
   return (
-    <div className="comparador-row">
+    <div className={`comparador-row${isSubcat ? ' comparador-row-subcat' : ''}`}>
       <span className="comparador-row-label">{label}</span>
       <span className={`comparador-row-value${valueClass ? ' ' + valueClass : ''}`}>{value}</span>
     </div>
@@ -166,10 +181,21 @@ function Section({ title, children }) {
   );
 }
 
-// ─── Análisis de diferencias ──────────────────────────────────────────────────
+// ─── Generador de análisis ─────────────────────────────────────────────────────
 
-function generateAnalysisText(colData1, colData2) {
+function roiLabel(r) {
+  return r >= 8 ? 'Bueno' : r >= 4 ? 'Moderado' : 'Bajo';
+}
+
+function generateAnalysis(colData1, colData2) {
   if (!colData1?.property || !colData2?.property) return null;
+
+  const samePeriod =
+    String(colData1.property.id) === String(colData2.property.id) &&
+    colData1.selYear === colData2.selYear &&
+    colData1.selMonth === colData2.selMonth;
+
+  if (samePeriod) return { type: 'same_period' };
 
   const m1 = computeMetrics(
     colData1.property, colData1.payments, colData1.expenses, colData1.selYear, colData1.selMonth
@@ -179,91 +205,210 @@ function generateAnalysisText(colData1, colData2) {
   );
   if (!m1 || !m2) return null;
 
-  const period1  = `${MONTH_NAMES_LOWER[colData1.selMonth]} ${colData1.selYear}`;
-  const period2  = `${MONTH_NAMES_LOWER[colData2.selMonth]} ${colData2.selYear}`;
   const sameProp = String(colData1.property.id) === String(colData2.property.id);
+  const prop1Name = colData1.property.name || colData1.property.address || 'Inmueble A';
+  const prop2Name = colData2.property.name || colData2.property.address || 'Inmueble B';
+  const ref1 = sameProp ? `${MONTH_NAMES[colData1.selMonth]} ${colData1.selYear}` : prop1Name;
+  const ref2 = sameProp ? `${MONTH_NAMES[colData2.selMonth]} ${colData2.selYear}` : prop2Name;
 
-  const refLeft  = sameProp ? `en ${period1}` : 'en la columna izquierda';
-  const refRight = sameProp ? `en ${period2}` : 'en la columna derecha';
-
-  const parts = [];
+  const sections = [];
 
   // — Ingresos —
-  const incDiff = m2.totalIncome - m1.totalIncome;
-  if (m1.totalIncome > 0 && m2.totalIncome > 0) {
-    if (Math.abs(incDiff) < 0.5) {
-      parts.push('Los ingresos son idénticos en ambas columnas.');
+  const inc1 = m1.totalIncome, inc2 = m2.totalIncome;
+  if (inc1 > 0 || inc2 > 0) {
+    let text;
+    if (Math.abs(inc2 - inc1) < 0.5) {
+      text = `Se mantienen estables en ambos períodos (${fmt(inc1)}).`;
+    } else if (inc1 > 0 && inc2 > 0) {
+      const diff = inc2 - inc1;
+      const pct = Math.abs((diff / inc1) * 100).toFixed(0);
+      const dir = diff > 0 ? 'superiores' : 'inferiores';
+      const higher = diff > 0 ? ref2 : ref1;
+      const lower  = diff > 0 ? ref1  : ref2;
+      const hiAmt  = fmt(diff > 0 ? inc2 : inc1);
+      const loAmt  = fmt(diff > 0 ? inc1 : inc2);
+      text = `${higher} registra ${hiAmt}, un ${pct}% ${dir} a ${lower} (${loAmt}).`;
+    } else if (inc2 > 0) {
+      text = `${ref2} registra ${fmt(inc2)}; ${ref1} no registra ingresos en ese período.`;
     } else {
-      const incPct = Math.abs(incDiff / m1.totalIncome * 100).toFixed(0);
-      const dir    = incDiff > 0 ? 'superiores' : 'inferiores';
-      const high   = incDiff > 0 ? refRight : refLeft;
-      const low    = incDiff > 0 ? refLeft  : refRight;
-      const highAmt = fmt(incDiff > 0 ? m2.totalIncome : m1.totalIncome);
-      const lowAmt  = fmt(incDiff > 0 ? m1.totalIncome : m2.totalIncome);
-      parts.push(
-        `Los ingresos ${high} (${highAmt}) son un ${incPct}% ${dir} a los de ${low} (${lowAmt}).`
+      text = `${ref1} registra ${fmt(inc1)}; ${ref2} no registra ingresos en ese período.`;
+    }
+    sections.push({ label: 'Ingresos', text });
+  }
+
+  // — Gastos totales —
+  const exp1 = m1.totalExpenses, exp2 = m2.totalExpenses;
+  if (exp1 > 0 || exp2 > 0) {
+    let text;
+    if (Math.abs(exp2 - exp1) < 0.5) {
+      text = `Idénticos en ambos períodos (${fmt(exp1)}).`;
+    } else {
+      const diff = exp2 - exp1;
+      const pct  = exp1 > 0.5 ? ` (${diff > 0 ? '+' : '-'}${Math.abs(diff / exp1 * 100).toFixed(0)}%)` : '';
+      const dir  = diff > 0 ? 'más altos' : 'más bajos';
+      text = `Los gastos en ${ref2} (${fmt(exp2)}) son ${fmt(Math.abs(diff))} ${dir} que en ${ref1} (${fmt(exp1)})${pct}.`;
+    }
+    sections.push({ label: 'Gastos totales', text });
+  }
+
+  // — Desglose por categoría —
+  const allCats = new Set([
+    ...Object.keys(m1.expensesByCategory),
+    ...Object.keys(m2.expensesByCategory),
+  ]);
+
+  const catDiffs = [];
+  const stableCats = [];
+
+  allCats.forEach(cat => {
+    const v1 = m1.expensesByCategory[cat] || 0;
+    const v2 = m2.expensesByCategory[cat] || 0;
+    const diff = v2 - v1;
+    if (Math.abs(diff) > 0.5) {
+      catDiffs.push({ cat, v1, v2, diff });
+    } else if (v1 > 0.5 && v2 > 0.5) {
+      stableCats.push(cat);
+    }
+  });
+
+  catDiffs.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+
+  if (catDiffs.length > 0 || stableCats.length > 0) {
+    const sentences = catDiffs.slice(0, 5).map(({ cat, v1, diff }) => {
+      const label = EXPENSE_CATEGORIES.find(c => c.key === cat)?.label || cat;
+      const verb  = diff > 0 ? 'aumentaron' : 'bajaron';
+      const inRef = diff > 0 ? ref2 : ref1;
+      const pct   = v1 > 0.5 ? ` (${diff > 0 ? '+' : '-'}${Math.abs(diff / v1 * 100).toFixed(0)}%)` : '';
+      return `${label} ${verb} ${fmt(Math.abs(diff))}${pct} en ${inRef} respecto al otro período.`;
+    });
+
+    if (stableCats.length > 0) {
+      const labels = stableCats
+        .slice(0, 3)
+        .map(cat => {
+          const found = EXPENSE_CATEGORIES.find(c => c.key === cat);
+          return found ? found.label : cat;
+        });
+      const plural = labels.length > 1;
+      const joined = labels.length === 1
+        ? labels[0]
+        : labels.slice(0, -1).join(', ') + ' y ' + labels[labels.length - 1];
+      sentences.push(
+        `${joined} se mantiene${plural ? 'n' : ''} estable${plural ? 's' : ''} en ambos períodos.`
       );
     }
-  } else if (m1.totalIncome === 0 && m2.totalIncome === 0) {
-    parts.push('Ninguna de las dos columnas registra ingresos en el período seleccionado.');
-  } else if (m2.totalIncome > 0) {
-    parts.push(`${refRight.charAt(0).toUpperCase() + refRight.slice(1)} hay ${fmt(m2.totalIncome)} de ingresos; ${refLeft} no se registra ninguno.`);
-  } else {
-    parts.push(`${refLeft.charAt(0).toUpperCase() + refLeft.slice(1)} hay ${fmt(m1.totalIncome)} de ingresos; ${refRight} no se registra ninguno.`);
+
+    sections.push({ label: 'Desglose por categoría', text: sentences.join(' ') });
   }
 
-  // — Gastos —
-  const expDiff = m2.totalExpenses - m1.totalExpenses;
-  if (m1.totalExpenses > 0 || m2.totalExpenses > 0) {
-    if (Math.abs(expDiff) < 0.5) {
-      parts.push('Los gastos son idénticos en ambas columnas.');
+  // — Cashflow neto —
+  const cf1 = m1.cashflowNeto, cf2 = m2.cashflowNeto;
+  if (Math.abs(cf1) > 0.5 || Math.abs(cf2) > 0.5) {
+    let text;
+    if (Math.abs(cf2 - cf1) < 0.5) {
+      text = `Idéntico en ambos períodos (${cf1 >= 0 ? '+' : ''}${fmt(cf1)}).`;
     } else {
-      const allCats = new Set([
-        ...Object.keys(m1.expensesByCategory),
-        ...Object.keys(m2.expensesByCategory),
-      ]);
-      let maxDiffCat = null, maxDiffVal = 0;
-      allCats.forEach(cat => {
-        const d = Math.abs((m2.expensesByCategory[cat] || 0) - (m1.expensesByCategory[cat] || 0));
-        if (d > maxDiffVal) { maxDiffVal = d; maxDiffCat = cat; }
-      });
-      const catLabel = maxDiffCat
-        ? (EXPENSE_CATEGORIES.find(c => c.key === maxDiffCat)?.label?.toLowerCase() || maxDiffCat)
-        : null;
-      const col = expDiff > 0 ? refRight : refLeft;
-      let expMsg = `Los gastos son ${fmt(Math.abs(expDiff))} ${expDiff > 0 ? 'mayores' : 'menores'} ${col}`;
-      if (catLabel && maxDiffVal > 1) expMsg += `, principalmente por ${catLabel}`;
-      parts.push(expMsg + '.');
+      const diff = cf2 - cf1;
+      const verb = diff > 0 ? 'mejoró' : 'empeoró';
+      const pct  = Math.abs(cf1) > 0.5
+        ? ` — variación del ${Math.abs(diff / Math.abs(cf1) * 100).toFixed(0)}%`
+        : '';
+      text = `El cashflow ${verb} en ${ref2} (${cf2 >= 0 ? '+' : ''}${fmt(cf2)}) frente a ${ref1} (${cf1 >= 0 ? '+' : ''}${fmt(cf1)})${pct}.`;
     }
+    sections.push({ label: 'Cashflow neto', text });
   }
 
-  // — Cashflow —
-  const cashDiff = m2.cashflowNeto - m1.cashflowNeto;
-  if (Math.abs(m1.cashflowNeto) > 0.5 || Math.abs(m2.cashflowNeto) > 0.5) {
-    if (Math.abs(cashDiff) < 0.5) {
-      parts.push('El cashflow neto es idéntico en ambas columnas.');
-    } else if (Math.abs(m1.cashflowNeto) > 0.5) {
-      const cashPct = Math.abs(cashDiff / Math.abs(m1.cashflowNeto) * 100).toFixed(0);
-      const verb    = cashDiff > 0 ? 'mejora' : 'empeora';
-      parts.push(`El cashflow neto ${verb} un ${cashPct}% ${refRight} (${fmt(m2.cashflowNeto)}).`);
+  // — ROI —
+  const roi1 = m1.roiAnual, roi2 = m2.roiAnual;
+  if (roi1 !== null || roi2 !== null) {
+    let text;
+    if (roi1 !== null && roi2 !== null) {
+      const l1 = roiLabel(roi1), l2 = roiLabel(roi2);
+      if (l1 !== l2) {
+        text = `Cambió de categoría: de ${l1} (${roi1.toFixed(1)}%) en ${ref1} a ${l2} (${roi2.toFixed(1)}%) en ${ref2}.`;
+      } else {
+        text = `Se mantiene en categoría ${l1} en ambos períodos (${roi1.toFixed(1)}% → ${roi2.toFixed(1)}%).`;
+      }
+    } else if (roi2 !== null) {
+      text = `${ref2} muestra un ROI de ${roi2.toFixed(1)}% (${roiLabel(roi2)}); ${ref1} no tiene datos de inversión suficientes.`;
     } else {
-      parts.push(`El cashflow neto ${refRight} es de ${fmt(m2.cashflowNeto)}.`);
+      text = `${ref1} muestra un ROI de ${roi1.toFixed(1)}% (${roiLabel(roi1)}); ${ref2} no tiene datos de inversión suficientes.`;
     }
+    sections.push({ label: 'ROI', text });
   }
 
-  return parts.length > 0 ? parts.join(' ') : null;
+  // — Ocupación —
+  const oc1 = m1.tenantsActive, oc2 = m2.tenantsActive;
+  if (oc1 > 0 || oc2 > 0) {
+    let text;
+    if (oc1 === oc2) {
+      text = `Se mantiene igual en ambos períodos (${oc1} inquilino${oc1 !== 1 ? 's' : ''} activo${oc1 !== 1 ? 's' : ''}).`;
+    } else {
+      const diff = oc2 - oc1;
+      const verb = diff > 0 ? 'mejoró' : 'bajó';
+      text = `La ocupación ${verb} en ${ref2} (${oc2} inquilino${oc2 !== 1 ? 's' : ''}) frente a ${ref1} (${oc1} inquilino${oc1 !== 1 ? 's' : ''}).`;
+    }
+    sections.push({ label: 'Ocupación', text });
+  }
+
+  // — Conclusión —
+  if (Math.abs(cf2 - cf1) > 0.5) {
+    const winner = cf2 > cf1 ? ref2 : ref1;
+    const loser  = cf2 > cf1 ? ref1 : ref2;
+    let mainReason = null;
+    if (catDiffs.length > 0) {
+      const { cat, diff } = catDiffs[0];
+      const label = (EXPENSE_CATEGORIES.find(c => c.key === cat)?.label || cat).toLowerCase();
+      mainReason = `${diff > 0 ? 'mayores' : 'menores'} gastos en ${label}`;
+    } else if (Math.abs(inc2 - inc1) > 0.5) {
+      mainReason = `${inc2 > inc1 ? 'mayores' : 'menores'} ingresos en ${inc2 > inc1 ? ref2 : ref1}`;
+    }
+    const text = `${winner} presenta mejor rentabilidad que ${loser}${mainReason ? `, principalmente por ${mainReason}` : ''}.`;
+    sections.push({ label: 'Conclusión', text });
+  } else if (sections.length > 0) {
+    sections.push({ label: 'Conclusión', text: 'Ambos períodos presentan una rentabilidad similar.' });
+  }
+
+  return { type: 'analysis', sections };
 }
 
+// ─── Sección de análisis (colapsable) ────────────────────────────────────────
+
 function AnalysisSection({ colData1, colData2 }) {
-  const text = generateAnalysisText(colData1, colData2);
+  const [open, setOpen] = useState(false);
+  const result    = generateAnalysis(colData1, colData2);
+  const canAnalyze = colData1?.property && colData2?.property;
+
   return (
-    <div className="comparador-analysis-section">
-      <div className="comparador-analysis-title">Análisis de diferencias</div>
-      {text ? (
-        <p className="comparador-analysis-text">{text}</p>
-      ) : (
-        <p className="comparador-analysis-empty">Selecciona dos períodos para ver el análisis.</p>
+    <div className="comparador-analysis-footer">
+      {open && (
+        <div className="comparador-analysis-panel">
+          {result?.type === 'same_period' ? (
+            <p className="comparador-analysis-empty">
+              Selecciona dos períodos diferentes para ver el análisis.
+            </p>
+          ) : result?.type === 'analysis' ? (
+            result.sections.map((s, i) => (
+              <p key={i} className="comparador-analysis-para">
+                <span className="comparador-analysis-label">{s.label}:</span>{' '}
+                {s.text}
+              </p>
+            ))
+          ) : (
+            <p className="comparador-analysis-empty">
+              Selecciona dos períodos para ver el análisis.
+            </p>
+          )}
+        </div>
       )}
+      <div className="comparador-analysis-btn-row">
+        <button
+          className={`comparador-analysis-toggle${!canAnalyze ? ' comparador-analysis-toggle--disabled' : ''}`}
+          onClick={() => { if (canAnalyze) setOpen(o => !o); }}
+        >
+          {open ? 'Ocultar análisis' : 'Ver análisis de diferencias'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -412,12 +557,26 @@ function ComparadorColumn({ properties, onDataChange }) {
           <Section title="Gastos">
             <MetricRow label="Total del mes" value={fmt(metrics.totalExpenses)} />
             {EXPENSE_CATEGORIES.filter(c => metrics.expensesByCategory[c.key] > 0).map(c => (
-              <MetricRow
-                key={c.key}
-                label={c.label}
-                value={fmt(metrics.expensesByCategory[c.key])}
-                valueClass="neutral"
-              />
+              <React.Fragment key={c.key}>
+                <MetricRow
+                  label={c.label}
+                  value={fmt(metrics.expensesByCategory[c.key])}
+                  valueClass="neutral"
+                />
+                {c.key === 'suministros' &&
+                  SUMINISTROS_SUBCATEGORIES
+                    .filter(s => (metrics.expensesBySubcategory[s.key] || 0) > 0)
+                    .map(s => (
+                      <MetricRow
+                        key={s.key}
+                        label={s.label}
+                        value={fmt(metrics.expensesBySubcategory[s.key])}
+                        valueClass="neutral"
+                        isSubcat
+                      />
+                    ))
+                }
+              </React.Fragment>
             ))}
             {Object.keys(metrics.expensesByCategory).length === 0 && (
               <div className="comparador-empty">Sin gastos este mes</div>
