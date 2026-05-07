@@ -886,9 +886,10 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     const ownership = property.ownershipPercentage || 100;
     const ownershipFraction = ownership / 100;
     const propertyExpenses = (supabaseExpenses || []).filter(e => String(e.property_id) === String(property.id));
+    const lastMonth = selectedYear < currentYear ? 11 : currentMonth;
     const monthsData = [];
 
-    for (let m = 0; m < 12; m++) {
+    for (let m = 0; m <= lastMonth; m++) {
       let cobrado = 0, pendiente = 0;
 
       if (property.status === 'vacacional') {
@@ -928,7 +929,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       .filter(e => e.active !== false)
       .map(e => {
         let annualTotal = 0;
-        for (let m = 0; m < 12; m++) {
+        for (let m = 0; m <= lastMonth; m++) {
           const active = getExpensesForMonth([e], selectedYear, m);
           if (active.length > 0) {
             const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
