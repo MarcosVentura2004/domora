@@ -29,29 +29,173 @@ function buildPaymentRows(expenses, year, CATEGORY_LABELS) {
 }
 
 async function exportToExcel({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses }) {
-  const XLSX = await import('xlsx');
+  const ExcelJSMod = await import('exceljs');
+  const ExcelJS = ExcelJSMod.default || ExcelJSMod;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Domio';
+  const euro = '#,##0.00 "€"';
+  const mkFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+  const NC = MONTH_NAMES.length + 2; // Categoría + 12 meses + Total
 
-  // Hoja 1: Resumen por categoría y mes
-  const header = ['Categoría', ...MONTH_NAMES, 'Total'];
-  const rows = [header];
-  catData.forEach(({ cat, byMonth, total }) => {
-    rows.push([CATEGORY_LABELS[cat] || cat, ...byMonth.map(v => v > 0 ? parseFloat(v.toFixed(2)) : ''), parseFloat(total.toFixed(2))]);
+  // ── HOJA 1: RESUMEN POR CATEGORÍA ──
+  const ws1 = wb.addWorksheet(`Resumen ${year}`, { views: [{ showGridLines: false }] });
+
+  // Título
+  const tRow = ws1.addRow([`GASTOS ${year}${propertyName ? ` — ${propertyName}` : ''}`]); tRow.height = 30;
+  ws1.mergeCells(1, 1, 1, NC);
+  tRow.getCell(1).fill = mkFill('FF111111');
+  tRow.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 13 };
+  tRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  const dRow = ws1.addRow([`Exportado el ${new Date().toLocaleDateString('es-ES')}`]); dRow.height = 17;
+  ws1.mergeCells(2, 1, 2, NC);
+  dRow.getCell(1).fill = mkFill('FF111111');
+  dRow.getCell(1).font = { size: 8, italic: true, color: { argb: 'FFAAAAAA' } };
+  dRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws1.addRow([]).height = 6;
+
+  // Cabecera de columnas (Categoría + meses + Total)
+  const hRow = ws1.addRow(['Categoría', ...MONTH_NAMES, 'Total']); hRow.height = 22;
+  hRow.eachCell({ includeEmpty: true }, (cell, col) => {
+    cell.fill = mkFill('FF2C2C2C');
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 };
+    cell.alignment = { horizontal: col === 1 ? 'left' : 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FF444444' } } };
+  });
+
+  // Filas de categorías y subcategorías
+  catData.forEach(({ cat, byMonth, total }, catIdx) => {
+    const catBg = catIdx % 2 === 0 ? 'FFF7F7F7' : 'FFFFFFFF';
+    const catRow = ws1.addRow([CATEGORY_LABELS[cat] || cat, ...byMonth.map(v => v > 0 ? parseFloat(v.toFixed(2)) : null), parseFloat(total.toFixed(2))]);
+    catRow.height = 20;
+    catRow.getCell(1).fill = mkFill(catBg);
+    catRow.getCell(1).font = { bold: true, color: { argb: 'FF222222' } };
+    catRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+    for (let c = 2; c <= NC; c++) {
+      const cell = catRow.getCell(c);
+      cell.fill = mkFill(catBg);
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFEEEEEE' } } };
+      if (cell.value) {
+        cell.numFmt = euro;
+        cell.font = { color: { argb: c === NC ? 'FFC62828' : 'FF555555' }, bold: c === NC };
+      } else {
+        cell.value = null;
+        cell.font = { color: { argb: 'FFDDDDDD' } };
+        cell.value = '—';
+      }
+    }
+
+    // Subcategorías
     getSubcats(cat).forEach(({ sub, byMonth: sbm, total: st }) => {
-      rows.push([`  ${sub}`, ...sbm.map(v => v > 0 ? parseFloat(v.toFixed(2)) : ''), parseFloat(st.toFixed(2))]);
+      const subRow = ws1.addRow([`    ${sub}`, ...sbm.map(v => v > 0 ? parseFloat(v.toFixed(2)) : null), parseFloat(st.toFixed(2))]);
+      subRow.height = 17;
+      subRow.getCell(1).fill = mkFill('FFFAFAFA');
+      subRow.getCell(1).font = { color: { argb: 'FF666666' }, size: 8, italic: true };
+      subRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+      for (let c = 2; c <= NC; c++) {
+        const cell = subRow.getCell(c);
+        cell.fill = mkFill('FFFAFAFA');
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FFF5F5F5' } } };
+        if (cell.value) {
+          cell.numFmt = euro;
+          cell.font = { color: { argb: c === NC ? 'FFAA2222' : 'FF888888' }, size: 8 };
+        } else {
+          cell.value = null;
+        }
+      }
     });
   });
-  rows.push(['Total', ...totalByMonth.map(v => v > 0 ? parseFloat(v.toFixed(2)) : ''), parseFloat(yearTotal.toFixed(2))]);
 
-  // Hoja 2: Detalle con fecha exacta de cada pago
-  const detailRows = [['Fecha', 'Categoría', 'Subcategoría', 'Descripción', 'Importe (€)']];
-  buildPaymentRows(expenses, year, CATEGORY_LABELS).forEach(p =>
-    detailRows.push([p.dateStr, p.cat, p.sub, p.desc, p.amount])
-  );
+  // Fila total
+  const totRow = ws1.addRow(['TOTAL', ...totalByMonth.map(v => v > 0 ? parseFloat(v.toFixed(2)) : null), parseFloat(yearTotal.toFixed(2))]);
+  totRow.height = 24;
+  totRow.getCell(1).fill = mkFill('FF111111');
+  totRow.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+  totRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+  totRow.getCell(1).border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
+  for (let c = 2; c <= NC; c++) {
+    const cell = totRow.getCell(c);
+    cell.fill = mkFill('FF111111');
+    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    cell.border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
+    if (cell.value) {
+      cell.numFmt = euro;
+      cell.font = { bold: true, color: { argb: c === NC ? 'FFFF8080' : 'FFDDDDDD' } };
+    } else {
+      cell.value = null;
+      cell.font = { color: { argb: 'FF333333' } };
+    }
+  }
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), `Resumen ${year}`);
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detailRows), `Detalle ${year}`);
-  XLSX.writeFile(wb, `gastos_${propertyName || 'propiedad'}_${year}.xlsx`);
+  // Anchos de columna
+  ws1.getColumn(1).width = 28;
+  MONTH_NAMES.forEach((_, i) => { ws1.getColumn(i + 2).width = 10; });
+  ws1.getColumn(NC).width = 12;
+
+  // ── HOJA 2: DETALLE CRONOLÓGICO ──
+  const ws2 = wb.addWorksheet(`Detalle ${year}`, { views: [{ showGridLines: false }] });
+  const NC2 = 5;
+
+  const t2Row = ws2.addRow([`DETALLE DE GASTOS ${year}${propertyName ? ` — ${propertyName}` : ''}`]); t2Row.height = 30;
+  ws2.mergeCells(1, 1, 1, NC2);
+  t2Row.getCell(1).fill = mkFill('FF111111');
+  t2Row.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 13 };
+  t2Row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws2.addRow([]).height = 6;
+
+  const h2Row = ws2.addRow(['Fecha', 'Categoría', 'Subcategoría', 'Descripción', 'Importe']); h2Row.height = 20;
+  h2Row.eachCell({ includeEmpty: true }, (cell, col) => {
+    cell.fill = mkFill('FFF0F0F0');
+    cell.font = { bold: true, color: { argb: 'FF555555' }, size: 9 };
+    cell.alignment = { horizontal: col >= 5 ? 'right' : (col === 1 ? 'center' : 'left'), vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } };
+  });
+
+  buildPaymentRows(expenses, year, CATEGORY_LABELS).forEach((p, idx) => {
+    const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFFBE9E7');
+    const r = ws2.addRow([p.dateStr, p.cat, p.sub || '—', p.desc || '—', p.amount]);
+    r.height = 18;
+    for (let c = 1; c <= NC2; c++) {
+      r.getCell(c).fill = bg;
+      r.getCell(c).alignment = { horizontal: c >= 5 ? 'right' : (c === 1 ? 'center' : 'left'), vertical: 'middle' };
+      r.getCell(c).border = { bottom: { style: 'thin', color: { argb: 'FFF5F5F5' } } };
+    }
+    r.getCell(2).font = { color: { argb: 'FF555555' }, size: 9 };
+    r.getCell(3).font = { color: { argb: 'FF888888' }, size: 8, italic: true };
+    r.getCell(5).font = { bold: true, color: { argb: 'FFC62828' } };
+    r.getCell(5).numFmt = euro;
+  });
+
+  ws2.addRow([]).height = 6;
+  const totalPayments = buildPaymentRows(expenses, year, CATEGORY_LABELS).reduce((s, p) => s + p.amount, 0);
+  const totR2 = ws2.addRow(['', 'TOTAL', '', '', totalPayments]); totR2.height = 24;
+  ws2.mergeCells(ws2.rowCount, 2, ws2.rowCount, 4);
+  for (let c = 1; c <= NC2; c++) {
+    totR2.getCell(c).fill = mkFill('FF111111');
+    totR2.getCell(c).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    totR2.getCell(c).alignment = { horizontal: c === 5 ? 'right' : 'center', vertical: 'middle' };
+  }
+  totR2.getCell(5).font = { bold: true, size: 12, color: { argb: 'FFFF8080' } };
+  totR2.getCell(5).numFmt = euro;
+
+  ws2.getColumn(1).width = 12;
+  ws2.getColumn(2).width = 26;
+  ws2.getColumn(3).width = 18;
+  ws2.getColumn(4).width = 34;
+  ws2.getColumn(5).width = 14;
+
+  // Guardar
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `gastos_${propertyName || 'propiedad'}_${year}.xlsx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 async function exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses }) {

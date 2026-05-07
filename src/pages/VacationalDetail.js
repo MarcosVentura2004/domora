@@ -47,22 +47,75 @@ function getMonthlyEquivalent(expense) {
   return amt;
 }
 
-function exportVacationalToExcel(name, historyMonths, accumulated) {
-  import('xlsx').then(XLSX => {
-    const data = historyMonths.map(item => ({
-      'Mes': formatMonthYear(item.year, item.month),
-      'Reservas': item.bookings,
-      'Ingresos (€)': item.income,
-      'Gastos (€)': -item.expenses,
-      'Neto (€)': item.net,
-    }));
-    data.push({ 'Mes': '', 'Reservas': '', 'Ingresos (€)': '', 'Gastos (€)': 'Ganancia acumulada', 'Neto (€)': accumulated });
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Historial');
-    ws['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-    XLSX.writeFile(wb, `historial_${name.replace(/\s+/g, '_')}.xlsx`);
+async function exportVacationalToExcel(name, historyMonths, accumulated) {
+  const ExcelJSMod = await import('exceljs');
+  const ExcelJS = ExcelJSMod.default || ExcelJSMod;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Historial', { views: [{ showGridLines: false }] });
+  const euro = '#,##0.00 "€"';
+  const mkFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+  const tRow = ws.addRow([`HISTORIAL VACACIONAL — ${name}`]); tRow.height = 30;
+  ws.mergeCells(1, 1, 1, 5);
+  tRow.getCell(1).fill = mkFill('FF111111');
+  tRow.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 13 };
+  tRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  const dRow = ws.addRow([`Exportado el ${new Date().toLocaleDateString('es-ES')}`]); dRow.height = 17;
+  ws.mergeCells(2, 1, 2, 5);
+  dRow.getCell(1).fill = mkFill('FF111111');
+  dRow.getCell(1).font = { size: 8, italic: true, color: { argb: 'FFAAAAAA' } };
+  dRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws.addRow([]).height = 6;
+
+  const hRow = ws.addRow(['Mes', 'Reservas', 'Ingresos', 'Gastos', 'Neto']); hRow.height = 20;
+  hRow.eachCell({ includeEmpty: true }, (cell, col) => {
+    cell.fill = mkFill('FFF0F0F0');
+    cell.font = { bold: true, color: { argb: 'FF555555' }, size: 9 };
+    cell.alignment = { horizontal: col === 1 ? 'left' : 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } };
   });
+
+  historyMonths.forEach((item, idx) => {
+    const net = item.net;
+    const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFF9F9F9');
+    const bdr = { bottom: { style: 'thin', color: { argb: 'FFF0F0F0' } } };
+    const r = ws.addRow([formatMonthYear(item.year, item.month), item.bookings, item.income, -item.expenses, net]);
+    r.height = 20;
+    for (let c = 1; c <= 5; c++) {
+      r.getCell(c).fill = bg;
+      r.getCell(c).alignment = { horizontal: c >= 3 ? 'right' : (c === 2 ? 'center' : 'left'), vertical: 'middle' };
+      r.getCell(c).border = bdr;
+    }
+    r.getCell(2).font = { color: { argb: item.bookings > 0 ? 'FF1565C0' : 'FF999999' }, bold: item.bookings > 0 };
+    r.getCell(3).font = { color: { argb: 'FF2E7D32' } }; r.getCell(3).numFmt = euro;
+    r.getCell(4).font = { color: { argb: 'FFC62828' } }; r.getCell(4).numFmt = euro;
+    r.getCell(5).font = { bold: true, color: { argb: net >= 0 ? 'FF2E7D32' : 'FFC62828' } }; r.getCell(5).numFmt = euro;
+  });
+
+  ws.addRow([]).height = 6;
+  const accRowNum = ws.rowCount + 1;
+  const accRow = ws.addRow(['', 'Ganancia acumulada', '', '', accumulated]); accRow.height = 26;
+  ws.mergeCells(accRowNum, 2, accRowNum, 4);
+  for (let c = 1; c <= 5; c++) {
+    accRow.getCell(c).fill = mkFill('FF111111');
+    accRow.getCell(c).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    accRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+  }
+  accRow.getCell(5).font = { bold: true, size: 12, color: { argb: accumulated >= 0 ? 'FF90EE90' : 'FFFF8080' } };
+  accRow.getCell(5).numFmt = euro;
+  accRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
+
+  [20, 10, 14, 14, 14].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `historial_${name.replace(/\s+/g, '_')}.xlsx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function exportVacationalToPDF(name, historyMonths, accumulated) {

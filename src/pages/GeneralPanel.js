@@ -997,137 +997,196 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
   }, [selectedYear]); // eslint-disable-line
 
   // ── Exportar Excel ──
-  const generateExcel = () => {
-    import('xlsx').then(XLSX => {
-      const wb = XLSX.utils.book_new();
-      const currFmt = '#,##0.00 €';
-
-      const applyNumFmt = (ws) => {
-        Object.keys(ws).forEach(ref => {
-          if (ref[0] === '!') return;
-          const cell = ws[ref];
-          if (cell && cell.t === 'n') cell.z = currFmt;
-        });
-      };
-
-      // ── HOJA 1: RESUMEN ──
-      const summaryAoa = [];
-      summaryAoa.push([`REPORTE FISCAL ${selectedYear}`]);
-      summaryAoa.push([`Generado por Domio — ${new Date().toLocaleDateString('es-ES')}`]);
-      if (ownerName) summaryAoa.push([`Propietario: ${ownerName}`]);
-      if (ownerNif)  summaryAoa.push([`NIF: ${ownerNif}`]);
-      summaryAoa.push([]);
-      summaryAoa.push(['Inmueble', 'Tipo fiscal', 'Ingresos cobrados', 'Importe a declarar', 'Gastos deducibles', 'Rendimiento neto']);
-
-      let sumCobrado = 0, sumDeclared = 0, sumExpenses = 0;
-      reportableProperties.forEach(property => {
-        const data = getYearlyData(property);
-        const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
-        const fiscalLabel = fiscalTypes[property.id] === 'turistico' ? 'Turístico' : fiscalTypes[property.id] === 'comercial' ? 'Comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
-        const net = declared - data.totalExpenses;
-        summaryAoa.push([property.name, fiscalLabel, data.totalCobrado, declared, data.totalExpenses, net]);
-        sumCobrado  += data.totalCobrado;
-        sumDeclared += declared;
-        sumExpenses += data.totalExpenses;
+  const generateExcel = async () => {
+    const ExcelJSMod = await import('exceljs');
+    const ExcelJS = ExcelJSMod.default || ExcelJSMod;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Domio';
+    const euro = '#,##0.00 "€"';
+    const mkFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+    const mkFont = (bold, argb, size = 10) => ({ bold, color: { argb }, size });
+    const sc = (cell, fill, font, align, border, numFmt) => {
+      if (fill)   cell.fill      = fill;
+      if (font)   cell.font      = font;
+      if (align)  cell.alignment = align;
+      if (border) cell.border    = border;
+      if (numFmt) cell.numFmt    = numFmt;
+    };
+    const styleRow = (row, nCols, fill, font, align, border) => {
+      for (let c = 1; c <= nCols; c++) sc(row.getCell(c), fill, font, align, border);
+    };
+    const addTitleRow = (ws, text, nCols, h = 30) => {
+      const r = ws.addRow([text]); r.height = h;
+      ws.mergeCells(ws.rowCount, 1, ws.rowCount, nCols);
+      sc(r.getCell(1), mkFill('FF111111'), mkFont(true, 'FFFFFFFF', 13), { horizontal: 'left', vertical: 'middle' });
+      return r;
+    };
+    const addSubtitleRow = (ws, text, nCols) => {
+      const r = ws.addRow([text]); r.height = 17;
+      ws.mergeCells(ws.rowCount, 1, ws.rowCount, nCols);
+      sc(r.getCell(1), mkFill('FF111111'), { size: 8, italic: true, color: { argb: 'FFAAAAAA' } }, { horizontal: 'left', vertical: 'middle' });
+      return r;
+    };
+    const addColHeaders = (ws, headers) => {
+      const r = ws.addRow(headers); r.height = 20;
+      r.eachCell({ includeEmpty: true }, (cell, col) => {
+        sc(cell, mkFill('FFF0F0F0'), mkFont(true, 'FF555555', 9),
+          { horizontal: col === 1 ? 'left' : 'center', vertical: 'middle' },
+          { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } });
       });
-      summaryAoa.push([]);
-      summaryAoa.push(['TOTAL', '', sumCobrado, sumDeclared, sumExpenses, sumDeclared - sumExpenses]);
+      return r;
+    };
 
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
-      applyNumFmt(wsSummary);
-      wsSummary['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
-      ];
-      wsSummary['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen');
+    // ── HOJA 1: RESUMEN ──
+    const ws1 = wb.addWorksheet('Resumen', { views: [{ showGridLines: false }] });
+    const NC1 = 6;
+    addTitleRow(ws1, `REPORTE FISCAL ${selectedYear}`, NC1);
+    const subParts = [`Domio — ${new Date().toLocaleDateString('es-ES')}`];
+    if (ownerName) subParts.push(ownerName);
+    if (ownerNif)  subParts.push(`NIF: ${ownerNif}`);
+    addSubtitleRow(ws1, subParts.join('   ·   '), NC1);
+    ws1.addRow([]).height = 6;
+    addColHeaders(ws1, ['Inmueble', 'Tipo fiscal', 'Ingresos cobrados', 'Importe a declarar', 'Gastos deducibles', 'Rendimiento neto']);
 
-      // ── HOJA 2: DETALLE POR INMUEBLE ──
-      const detailAoa = [];
-      detailAoa.push([`DETALLE DE TRANSACCIONES — ${selectedYear}`]);
-      detailAoa.push([]);
-
-      const detailMerges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
-      let currentRow = 2;
-
-      reportableProperties.forEach(property => {
-        const data = getYearlyData(property);
-        const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
-
-        // Cabecera del inmueble (fusionada)
-        detailAoa.push([property.name, '', '', '', '', '']);
-        detailMerges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 5 } });
-        currentRow++;
-
-        // Cabecera columnas
-        detailAoa.push(['Fecha', 'Tipo', 'Categoría', 'Concepto', 'Importe', 'Estado']);
-        currentRow++;
-
-        // Ingresos
-        data.monthsData.forEach(({ month, cobrado, pendiente }) => {
-          if (cobrado > 0)   { detailAoa.push([`${monthNames[month]} ${selectedYear}`, 'Ingreso', 'Alquiler', 'Ingreso cobrado', cobrado, 'Cobrado']); currentRow++; }
-          if (pendiente > 0) { detailAoa.push([`${monthNames[month]} ${selectedYear}`, 'Ingreso', 'Alquiler', 'Ingreso pendiente', pendiente, 'Pendiente']); currentRow++; }
-        });
-        if (Math.abs(declared - data.totalCobrado) > 0.01) {
-          detailAoa.push([`${selectedYear}`, 'Ajuste', 'Declaracion', 'Importe a declarar (ajustado por propietario)', declared, 'Declarado']);
-          currentRow++;
-        }
-
-        // Gastos
-        data.expenseDetail.forEach(e => {
-          detailAoa.push([e.date, 'Gasto', e.category, e.name || '—', -e.amount, 'Pagado']);
-          currentRow++;
-        });
-
-        // Subtotal
-        const net = declared - data.totalExpenses;
-        detailAoa.push(['', 'SUBTOTAL', '', `${property.name}`, net, '']);
-        currentRow++;
-
-        // Separador
-        detailAoa.push([]);
-        currentRow++;
-      });
-
-      const wsDetail = XLSX.utils.aoa_to_sheet(detailAoa);
-      applyNumFmt(wsDetail);
-      wsDetail['!merges'] = detailMerges;
-      wsDetail['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 28 }, { wch: 34 }, { wch: 16 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsDetail, 'Detalle');
-
-      // ── HOJA 3: DATOS PARA EL IRPF ──
-      const irpfAoa = [];
-      irpfAoa.push([`DATOS PARA LA DECLARACIÓN DE LA RENTA (IRPF) — ${selectedYear}`]);
-      irpfAoa.push([]);
-      irpfAoa.push(['Inmueble', 'Tipo fiscal', 'Ingresos a declarar', 'Gastos deducibles', 'Rendimiento neto previo', 'Reducción (60%)', 'Rendimiento neto reducido']);
-
-      const irpfMerges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
-
-      reportableProperties.forEach(property => {
-        const data = getYearlyData(property);
-        const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
-        const fiscalLabel = fiscalTypes[property.id] === 'turistico' ? 'Turístico' : fiscalTypes[property.id] === 'comercial' ? 'Comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
-        const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
-        const netPrevio = declared - data.totalExpenses;
-        const reductionAmt = reduction > 0 && netPrevio > 0 ? netPrevio * reduction : 0;
-        const netReducido = netPrevio - reductionAmt;
-        irpfAoa.push([property.name, fiscalLabel, declared, data.totalExpenses, netPrevio, reductionAmt > 0 ? -reductionAmt : '—', netReducido]);
-      });
-
-      irpfAoa.push([]);
-      irpfAoa.push(['TOTAL', '', sumDeclared, sumExpenses, sumDeclared - sumExpenses, '', '']);
-      irpfAoa.push([]);
-      irpfAoa.push(['Nota: los importes declarados han sido revisados y confirmados por el propietario.']);
-      irpfAoa.push(['Documento informativo generado por Domio. No constituye asesoramiento fiscal.']);
-
-      const wsIrpf = XLSX.utils.aoa_to_sheet(irpfAoa);
-      applyNumFmt(wsIrpf);
-      wsIrpf['!merges'] = irpfMerges;
-      wsIrpf['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 24 }];
-      XLSX.utils.book_append_sheet(wb, wsIrpf, 'IRPF');
-
-      XLSX.writeFile(wb, `reporte_fiscal_${selectedYear}.xlsx`);
+    let sumCobrado = 0, sumDeclared = 0, sumExpenses = 0;
+    reportableProperties.forEach((property, idx) => {
+      const data = getYearlyData(property);
+      const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+      const fiscalLabel = ({ turistico: 'Turístico', comercial: 'Comercial', propio: 'Uso propio' }[fiscalTypes[property.id]] || 'Residencial');
+      const net = declared - data.totalExpenses;
+      const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFF9F9F9');
+      const bdr = { bottom: { style: 'thin', color: { argb: 'FFF0F0F0' } } };
+      const r = ws1.addRow([property.name, fiscalLabel, data.totalCobrado, declared, data.totalExpenses, net]);
+      r.height = 22;
+      styleRow(r, NC1, bg, null, { vertical: 'middle', horizontal: 'center' }, bdr);
+      sc(r.getCell(1), null, mkFont(true, 'FF111111'), { horizontal: 'left', vertical: 'middle' });
+      sc(r.getCell(2), null, mkFont(false, 'FF888888', 9));
+      sc(r.getCell(3), null, mkFont(false, 'FF2E7D32'), null, null, euro);
+      const hasDiff = Math.abs(declared - data.totalCobrado) > 0.01;
+      sc(r.getCell(4), null, mkFont(hasDiff, hasDiff ? 'FF1565C0' : 'FF2E7D32'), null, null, euro);
+      sc(r.getCell(5), null, mkFont(false, 'FFC62828'), null, null, euro);
+      sc(r.getCell(6), null, mkFont(true, net >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+      sumCobrado += data.totalCobrado; sumDeclared += declared; sumExpenses += data.totalExpenses;
     });
+    ws1.addRow([]).height = 6;
+    const totalNet1 = sumDeclared - sumExpenses;
+    const tRow1 = ws1.addRow(['TOTAL', '', sumCobrado, sumDeclared, sumExpenses, totalNet1]);
+    tRow1.height = 24;
+    styleRow(tRow1, NC1, mkFill('FFE8E8E8'), mkFont(true, 'FF333333'), { vertical: 'middle', horizontal: 'center' }, { top: { style: 'medium', color: { argb: 'FFAAAAAA' } } });
+    sc(tRow1.getCell(1), null, null, { horizontal: 'left', vertical: 'middle' });
+    sc(tRow1.getCell(3), null, mkFont(true, 'FF2E7D32'), null, null, euro);
+    sc(tRow1.getCell(4), null, mkFont(true, 'FF1565C0'), null, null, euro);
+    sc(tRow1.getCell(5), null, mkFont(true, 'FFC62828'), null, null, euro);
+    sc(tRow1.getCell(6), null, mkFont(true, totalNet1 >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+    [28, 14, 20, 20, 20, 20].forEach((w, i) => { ws1.getColumn(i + 1).width = w; });
+
+    // ── HOJA 2: DETALLE ──
+    const ws2 = wb.addWorksheet('Detalle', { views: [{ showGridLines: false }] });
+    const NC2 = 6;
+    addTitleRow(ws2, `DETALLE DE TRANSACCIONES — ${selectedYear}`, NC2);
+    ws2.addRow([]).height = 6;
+    let r2 = 3;
+
+    reportableProperties.forEach(property => {
+      const data = getYearlyData(property);
+      const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+      const secRow = ws2.addRow([property.name]); secRow.height = 24;
+      ws2.mergeCells(r2, 1, r2, NC2);
+      sc(secRow.getCell(1), mkFill('FF2C2C2C'), mkFont(true, 'FFFFFFFF', 11), { horizontal: 'left', vertical: 'middle' });
+      r2++;
+      const ch = ws2.addRow(['Fecha', 'Tipo', 'Categoría', 'Concepto', 'Importe', 'Estado']); ch.height = 17;
+      ch.eachCell({ includeEmpty: true }, (cell, col) => {
+        sc(cell, mkFill('FFE8E8E8'), mkFont(true, 'FF666666', 8),
+          { horizontal: col === 1 || col === 4 ? 'left' : (col === 5 ? 'right' : 'center'), vertical: 'middle' },
+          { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } });
+      });
+      r2++;
+      const addR2 = (vals, bgArgb, amtArgb) => {
+        const row = ws2.addRow(vals); row.height = 18;
+        for (let c = 1; c <= NC2; c++) {
+          sc(row.getCell(c), mkFill(bgArgb), null,
+            { horizontal: c === 1 || c === 4 ? 'left' : (c === 5 ? 'right' : 'center'), vertical: 'middle' },
+            { bottom: { style: 'thin', color: { argb: 'FFF5F5F5' } } });
+        }
+        sc(row.getCell(5), null, mkFont(false, amtArgb), null, null, euro);
+        r2++;
+      };
+      data.monthsData.forEach(({ month, cobrado, pendiente }) => {
+        if (cobrado > 0)   addR2([`${monthNames[month]} ${selectedYear}`, 'Ingreso',  'Alquiler', 'Ingreso cobrado',    cobrado,   'Cobrado'],  'FFF1F8E9', 'FF2E7D32');
+        if (pendiente > 0) addR2([`${monthNames[month]} ${selectedYear}`, 'Ingreso',  'Alquiler', 'Ingreso pendiente',  pendiente, 'Pendiente'],'FFFFF9E6', 'FFF57F17');
+      });
+      if (Math.abs(declared - data.totalCobrado) > 0.01) {
+        addR2([`${selectedYear}`, 'Ajuste', 'Declaracion', 'Importe a declarar (ajustado por propietario)', declared, 'Declarado'], 'FFE8F4FD', 'FF1565C0');
+      }
+      data.expenseDetail.forEach(e => {
+        addR2([e.date, 'Gasto', e.category, e.name || '—', -e.amount, 'Pagado'], 'FFFBE9E7', 'FFC62828');
+      });
+      const net2 = declared - data.totalExpenses;
+      const stRow = ws2.addRow(['', 'SUBTOTAL', '', property.name, net2, '']); stRow.height = 22;
+      styleRow(stRow, NC2, mkFill('FFF0F0F0'), mkFont(true, 'FF444444'), { vertical: 'middle' }, { top: { style: 'thin', color: { argb: 'FFBBBBBB' } } });
+      sc(stRow.getCell(5), null, mkFont(true, net2 >= 0 ? 'FF2E7D32' : 'FFC62828'), { horizontal: 'right', vertical: 'middle' }, null, euro);
+      r2++;
+      ws2.addRow([]).height = 8; r2++;
+    });
+    [20, 10, 28, 34, 16, 12].forEach((w, i) => { ws2.getColumn(i + 1).width = w; });
+
+    // ── HOJA 3: IRPF ──
+    const ws3 = wb.addWorksheet('IRPF', { views: [{ showGridLines: false }] });
+    const NC3 = 7;
+    addTitleRow(ws3, `DATOS PARA EL IRPF — ${selectedYear}`, NC3);
+    ws3.addRow([]).height = 6;
+    addColHeaders(ws3, ['Inmueble', 'Tipo fiscal', 'Ingresos a declarar', 'Gastos deducibles', 'Rend. neto previo', 'Reducción 60%', 'Rend. neto reducido']);
+
+    let irpfSumDec = 0, irpfSumExp = 0;
+    reportableProperties.forEach((property, idx) => {
+      const data = getYearlyData(property);
+      const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+      const fiscalLabel = ({ turistico: 'Turístico', comercial: 'Comercial', propio: 'Uso propio' }[fiscalTypes[property.id]] || 'Residencial');
+      const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
+      const netPrevio = declared - data.totalExpenses;
+      const reductionAmt = reduction > 0 && netPrevio > 0 ? netPrevio * reduction : 0;
+      const netReducido = netPrevio - reductionAmt;
+      const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFF9F9F9');
+      const bdr = { bottom: { style: 'thin', color: { argb: 'FFF0F0F0' } } };
+      const r = ws3.addRow([property.name, fiscalLabel, declared, data.totalExpenses, netPrevio, reductionAmt > 0 ? -reductionAmt : '—', netReducido]);
+      r.height = 22;
+      styleRow(r, NC3, bg, null, { vertical: 'middle', horizontal: 'center' }, bdr);
+      sc(r.getCell(1), null, mkFont(true, 'FF111111'), { horizontal: 'left', vertical: 'middle' });
+      sc(r.getCell(2), null, mkFont(false, 'FF888888', 9));
+      sc(r.getCell(3), null, mkFont(false, 'FF2E7D32'), null, null, euro);
+      sc(r.getCell(4), null, mkFont(false, 'FFC62828'), null, null, euro);
+      sc(r.getCell(5), null, mkFont(true, netPrevio >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+      if (reductionAmt > 0) sc(r.getCell(6), null, mkFont(false, 'FFF57F17'), null, null, euro);
+      else r.getCell(6).font = { color: { argb: 'FFBBBBBB' } };
+      sc(r.getCell(7), null, mkFont(true, netReducido >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+      irpfSumDec += declared; irpfSumExp += data.totalExpenses;
+    });
+    ws3.addRow([]).height = 6;
+    const irpfNet = irpfSumDec - irpfSumExp;
+    const tRow3 = ws3.addRow(['TOTAL', '', irpfSumDec, irpfSumExp, irpfNet, '', '']);
+    tRow3.height = 24;
+    styleRow(tRow3, NC3, mkFill('FFE8E8E8'), mkFont(true, 'FF333333'), { vertical: 'middle', horizontal: 'center' }, { top: { style: 'medium', color: { argb: 'FFAAAAAA' } } });
+    sc(tRow3.getCell(1), null, null, { horizontal: 'left', vertical: 'middle' });
+    sc(tRow3.getCell(3), null, mkFont(true, 'FF2E7D32'), null, null, euro);
+    sc(tRow3.getCell(4), null, mkFont(true, 'FFC62828'), null, null, euro);
+    sc(tRow3.getCell(5), null, mkFont(true, irpfNet >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+    ws3.addRow([]).height = 12;
+    const noteR = ws3.addRow(['Nota: los importes declarados han sido revisados y confirmados por el propietario.']);
+    ws3.mergeCells(ws3.rowCount, 1, ws3.rowCount, NC3);
+    noteR.getCell(1).font = { italic: true, color: { argb: 'FF888888' }, size: 8 };
+    const legalR = ws3.addRow(['Documento informativo generado por Domio. No constituye asesoramiento fiscal.']);
+    ws3.mergeCells(ws3.rowCount, 1, ws3.rowCount, NC3);
+    legalR.getCell(1).font = { italic: true, color: { argb: 'FFBBBBBB' }, size: 7 };
+    [28, 14, 20, 20, 18, 16, 22].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reporte_fiscal_${selectedYear}.xlsx`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
   };
 
   // ── Generar PDF ──

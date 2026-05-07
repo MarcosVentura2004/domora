@@ -5,21 +5,73 @@ import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
 
-function exportRoomToExcel(roomName, historyMonths, accumulated) {
-  import('xlsx').then(XLSX => {
-    const data = historyMonths.map(item => ({
-      'Mes': formatMonthYear(item.year, item.month),
-      'Ingresos (€)': item.income,
-      'Gastos (€)': -item.expenses,
-      'Neto (€)': item.net,
-    }));
-    data.push({ 'Mes': '', 'Ingresos (€)': '', 'Gastos (€)': 'Ganancia acumulada', 'Neto (€)': accumulated });
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Historial');
-    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
-    XLSX.writeFile(wb, `historial_${roomName.replace(/\s+/g, '_')}.xlsx`);
+async function exportRoomToExcel(roomName, historyMonths, accumulated) {
+  const ExcelJSMod = await import('exceljs');
+  const ExcelJS = ExcelJSMod.default || ExcelJSMod;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Historial', { views: [{ showGridLines: false }] });
+  const euro = '#,##0.00 "€"';
+  const mkFill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+
+  const tRow = ws.addRow([`HISTORIAL HABITACIÓN — ${roomName}`]); tRow.height = 30;
+  ws.mergeCells(1, 1, 1, 4);
+  tRow.getCell(1).fill = mkFill('FF111111');
+  tRow.getCell(1).font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 13 };
+  tRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  const dRow = ws.addRow([`Exportado el ${new Date().toLocaleDateString('es-ES')}`]); dRow.height = 17;
+  ws.mergeCells(2, 1, 2, 4);
+  dRow.getCell(1).fill = mkFill('FF111111');
+  dRow.getCell(1).font = { size: 8, italic: true, color: { argb: 'FFAAAAAA' } };
+  dRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  ws.addRow([]).height = 6;
+
+  const hRow = ws.addRow(['Mes', 'Ingresos', 'Gastos', 'Neto']); hRow.height = 20;
+  hRow.eachCell({ includeEmpty: true }, (cell, col) => {
+    cell.fill = mkFill('FFF0F0F0');
+    cell.font = { bold: true, color: { argb: 'FF555555' }, size: 9 };
+    cell.alignment = { horizontal: col === 1 ? 'left' : 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } };
   });
+
+  historyMonths.forEach((item, idx) => {
+    const net = item.net;
+    const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFF9F9F9');
+    const bdr = { bottom: { style: 'thin', color: { argb: 'FFF0F0F0' } } };
+    const r = ws.addRow([formatMonthYear(item.year, item.month), item.income, -item.expenses, net]);
+    r.height = 20;
+    for (let c = 1; c <= 4; c++) {
+      r.getCell(c).fill = bg;
+      r.getCell(c).alignment = { horizontal: c >= 2 ? 'right' : 'left', vertical: 'middle' };
+      r.getCell(c).border = bdr;
+    }
+    r.getCell(2).font = { color: { argb: 'FF2E7D32' } }; r.getCell(2).numFmt = euro;
+    r.getCell(3).font = { color: { argb: 'FFC62828' } }; r.getCell(3).numFmt = euro;
+    r.getCell(4).font = { bold: true, color: { argb: net >= 0 ? 'FF2E7D32' : 'FFC62828' } }; r.getCell(4).numFmt = euro;
+  });
+
+  ws.addRow([]).height = 6;
+  const accRowNum = ws.rowCount + 1;
+  const accRow = ws.addRow(['Ganancia acumulada', '', '', accumulated]); accRow.height = 26;
+  ws.mergeCells(accRowNum, 1, accRowNum, 3);
+  for (let c = 1; c <= 4; c++) {
+    accRow.getCell(c).fill = mkFill('FF111111');
+    accRow.getCell(c).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    accRow.getCell(c).alignment = { horizontal: c === 1 ? 'left' : 'right', vertical: 'middle' };
+  }
+  accRow.getCell(4).font = { bold: true, size: 12, color: { argb: accumulated >= 0 ? 'FF90EE90' : 'FFFF8080' } };
+  accRow.getCell(4).numFmt = euro;
+
+  [20, 14, 14, 14].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `historial_${roomName.replace(/\s+/g, '_')}.xlsx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function exportRoomToPDF(roomName, historyMonths, accumulated) {
