@@ -353,7 +353,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
       )}
 
       {showReportModal && (
-        <ReportModal properties={properties} onClose={() => setShowReportModal(false)} />
+        <ReportModal properties={properties} supabaseExpenses={supabaseExpenses} onClose={() => setShowReportModal(false)} />
       )}
       {showRentabilityModal && (
         <RentabilityModal
@@ -861,7 +861,7 @@ const CATEGORY_LABELS = {
   gestion: 'Gastos de gestión', otros: 'Otros',
 };
 
-function ReportModal({ properties, onClose }) {
+function ReportModal({ properties, supabaseExpenses, onClose }) {
   const currentYear = now.getFullYear();
   const reportableProperties = properties.filter(p => p.status !== 'uso_propio');
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -883,7 +883,9 @@ function ReportModal({ properties, onClose }) {
   const monthShort = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   const getYearlyData = (property) => {
-    const ownership = (property.ownershipPercentage || 100) / 100;
+    const ownership = property.ownershipPercentage || 100;
+    const ownershipFraction = ownership / 100;
+    const propertyExpenses = (supabaseExpenses || []).filter(e => String(e.property_id) === String(property.id));
     const monthsData = [];
 
     for (let m = 0; m < 12; m++) {
@@ -892,56 +894,58 @@ function ReportModal({ properties, onClose }) {
       if (property.status === 'vacacional') {
         cobrado = (property.bookings || [])
           .filter(b => { const s = new Date(b.startDate); return b.status === 'confirmed' && s.getFullYear() === selectedYear && s.getMonth() === m; })
-          .reduce((sum, b) => sum + (b.amount || 0), 0) * ownership;
+          .reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipFraction;
         pendiente = (property.bookings || [])
           .filter(b => { const s = new Date(b.startDate); return b.status === 'pending' && s.getFullYear() === selectedYear && s.getMonth() === m; })
-          .reduce((sum, b) => sum + (b.amount || 0), 0) * ownership;
+          .reduce((sum, b) => sum + (b.amount || 0), 0) * ownershipFraction;
       } else if (property.status === 'por_habitaciones') {
         cobrado = (property.payments || [])
           .filter(p => p.year === selectedYear && p.month === m && p.status === 'confirmed' && p.roomId)
-          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
+          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownershipFraction;
         pendiente = (property.payments || [])
           .filter(p => p.year === selectedYear && p.month === m && p.status === 'pending' && p.roomId)
-          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
+          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownershipFraction;
       } else if (property.status === 'alquilado' || property.status === 'otros') {
         cobrado = (property.payments || [])
           .filter(p => p.year === selectedYear && p.month === m && p.status === 'confirmed')
-          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
+          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownershipFraction;
         pendiente = (property.payments || [])
           .filter(p => p.year === selectedYear && p.month === m && p.status === 'pending')
-          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownership;
+          .reduce((sum, p) => sum + (p.amount || 0), 0) * ownershipFraction;
       }
 
-      const expenses = (property.expenses || []).reduce((sum, e) => {
-        const created = new Date(e.createdAt);
-        const cy = created.getFullYear(), cm = created.getMonth();
-        if (selectedYear < cy || (selectedYear === cy && m < cm)) return sum;
-        if (e.frequency === 'unico' && !(selectedYear === cy && m === cm)) return sum;
-        const pct = e.expensePercentage || (property.ownershipPercentage || 100);
-        return sum + (e.amount * pct / 100);
+      const active = getExpensesForMonth(propertyExpenses, selectedYear, m);
+      const expenses = active.reduce((sum, e) => {
+        const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
+        return sum + getMonthlyEquivalentGP(e) * pct / 100;
       }, 0);
 
       monthsData.push({ month: m, cobrado, pendiente, expenses });
     }
 
-    // Detalle de gastos con fecha
-    const expenseDetail = (property.expenses || []).map(e => {
-      const created = new Date(e.createdAt);
-      const cy = created.getFullYear();
-      if (cy > selectedYear) return null;
-      const annual = e.frequency === 'unico'
-        ? (cy === selectedYear ? e.amount * (e.expensePercentage || property.ownershipPercentage || 100) / 100 : 0)
-        : e.amount * 12 * (e.expensePercentage || property.ownershipPercentage || 100) / 100;
-      if (annual === 0) return null;
-      return {
-        date: created.toLocaleDateString('es-ES'),
-        category: CATEGORY_LABELS[e.category] || e.category || 'Otros',
-        name: e.description || e.name || '',
-        frequency: e.frequency,
-        amount: annual,
-        monthly: e.amount,
-      };
-    }).filter(Boolean);
+    // Detalle de gastos: calcular impacto anual real por gasto iterando los 12 meses
+    const expenseDetail = propertyExpenses
+      .filter(e => e.active !== false)
+      .map(e => {
+        let annualTotal = 0;
+        for (let m = 0; m < 12; m++) {
+          const active = getExpensesForMonth([e], selectedYear, m);
+          if (active.length > 0) {
+            const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
+            annualTotal += getMonthlyEquivalentGP(e) * pct / 100;
+          }
+        }
+        if (annualTotal === 0) return null;
+        const startDate = new Date((e.start_date || e.createdAt) + (e.start_date ? 'T12:00:00' : ''));
+        return {
+          date: startDate.toLocaleDateString('es-ES'),
+          category: CATEGORY_LABELS[e.category] || e.category || 'Otros',
+          name: e.description || '',
+          frequency: e.frequency,
+          amount: annualTotal,
+          monthly: getMonthlyEquivalentGP(e),
+        };
+      }).filter(Boolean);
 
     // Gastos por categoría
     const expensesByCategory = {};
