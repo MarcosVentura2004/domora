@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
 import { supabase } from '../supabaseClient';
+import { InvestmentForm } from '../components/InvestmentForm';
 
 const now = new Date();
 const currentYear = now.getFullYear();
@@ -362,6 +363,15 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
           initialPropertyId={rentabilityInitialPropertyId}
           onUpdateProperty={onUpdateProperty}
           onClose={() => { setShowRentabilityModal(false); setRentabilityInitialPropertyId(null); }}
+          onExpenseAdded={() => {
+            const propertyIds = properties.map(p => String(p.id));
+            if (propertyIds.length === 0) return;
+            supabase
+              .from('expenses')
+              .select('*')
+              .in('property_id', propertyIds)
+              .then(({ data }) => { if (data) setSupabaseExpenses(data); });
+          }}
         />
       )}
 
@@ -1676,92 +1686,38 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
 // ─────────────────────────────────────────────
 // Modal calculadora de rentabilidad
 // ─────────────────────────────────────────────
-function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onUpdateProperty, onClose }) {
+function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onUpdateProperty, onClose, onExpenseAdded }) {
   const [selectedPropertyId, setSelectedPropertyId] = useState(
     initialPropertyId ?? (properties.length > 0 ? String(properties[0].id) : '')
   );
-  const [investmentData, setInvestmentData] = useState({
-    purchasePrice: '',
-    initialInvestment: '',
-    monthlyMortgage: '',
-    monthlyAmortization: '',
-    loanCapital: '',
-    interestRate: '',
-    rateType: 'fijo',
-    loanYears: '',
-    loanStartDate: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [historyPayments, setHistoryPayments] = useState([]);
-  const [showMortgageExpensePrompt, setShowMortgageExpensePrompt] = useState(false);
-  const [pendingMortgageAmount, setPendingMortgageAmount] = useState(null);
-  const [showAddMortgageExpense, setShowAddMortgageExpense] = useState(false);
 
   const property = properties.find(p => String(p.id) === String(selectedPropertyId));
 
   useEffect(() => {
-    if (property?.investmentData) {
-      setInvestmentData({
-        purchasePrice: property.investmentData.purchasePrice ?? '',
-        initialInvestment: property.investmentData.initialInvestment ?? '',
-        monthlyMortgage: property.investmentData.monthlyMortgage ?? '',
-        monthlyAmortization: property.investmentData.monthlyAmortization ?? '',
-        loanCapital: property.investmentData.loanCapital ?? '',
-        interestRate: property.investmentData.interestRate ?? '',
-        rateType: property.investmentData.rateType ?? 'fijo',
-        loanYears: property.investmentData.loanYears ?? '',
-        loanStartDate: property.investmentData.loanStartDate ?? '',
-      });
-    } else {
-      setInvestmentData({ purchasePrice: '', initialInvestment: '', monthlyMortgage: '', monthlyAmortization: '', loanCapital: '', interestRate: '', rateType: 'fijo', loanYears: '', loanStartDate: '' });
-    }
-    setSaved(false);
     setHistoryPayments([]);
-    if (!property) return;
+    if (!property?.id) return;
     supabase
       .from('payments')
       .select('year, month, amount, status')
       .eq('property_id', String(property.id))
       .eq('status', 'confirmed')
       .then(({ data }) => { if (data) setHistoryPayments(data); });
-  }, [selectedPropertyId]);
+  }, [selectedPropertyId]); // eslint-disable-line
 
-  const handleSave = async () => {
-    if (!property) return;
-    setSaving(true);
-    const updatedProperty = { ...property, investmentData };
-    await supabase
-      .from('properties')
-      .update({
-        data: updatedProperty,
-        updated_at: new Date().toISOString(),
-        purchase_price: parseFloat(investmentData.purchasePrice) || null,
-        monthly_mortgage: parseFloat(investmentData.monthlyMortgage) || null,
-        monthly_amortization: parseFloat(investmentData.monthlyAmortization) || null,
-      })
-      .eq('id', property.id);
-    setSaving(false);
-    setSaved(true);
-    if (onUpdateProperty) onUpdateProperty(updatedProperty);
+  const propertyExpenses = (supabaseExpenses || []).filter(
+    e => String(e.property_id) === String(property?.id)
+  );
 
-    const newMortgage = parseFloat(investmentData.monthlyMortgage);
-    const hasHipotecaExpense = (supabaseExpenses || []).some(
-      e => String(e.property_id) === String(property.id) && e.active !== false && e.category === 'hipoteca'
-    );
-    if (newMortgage > 0 && !hasHipotecaExpense && !mortgageIsAutoDetected) {
-      setPendingMortgageAmount(newMortgage);
-      setShowMortgageExpensePrompt(true);
-    }
-  };
-
+  // ── PDF export — reads from property.investmentData after save ──────────────
   const handleExportPDF = () => {
+    if (!property) return;
     import('jspdf').then(({ jsPDF }) => {
+      const inv = property.investmentData || {};
       const doc = new jsPDF();
       const pageW = doc.internal.pageSize.getWidth();
       let y = 0;
 
-      // Header
       doc.setFillColor(17, 17, 17);
       doc.rect(0, 0, pageW, 38, 'F');
       doc.setTextColor(255, 255, 255);
@@ -1773,11 +1729,13 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onU
       doc.text(new Date().toLocaleDateString('es-ES'), pageW - 14, 26, { align: 'right' });
       y = 48;
 
-      // Nombre propiedad
       doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
       doc.text(property.name, 14, y); y += 8;
       doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
-      const statusLabel = property.status === 'alquilado' ? 'Alquilado' : property.status === 'por_habitaciones' ? 'Por habitaciones' : property.status === 'vacacional' ? 'Vacacional' : property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío';
+      const statusLabel = property.status === 'alquilado' ? 'Alquilado'
+        : property.status === 'por_habitaciones' ? 'Por habitaciones'
+        : property.status === 'vacacional' ? 'Vacacional'
+        : property.status === 'otros' ? (property.customType || 'Otros') : 'Vacío';
       doc.text(statusLabel, 14, y); y += 12;
 
       const row = (label, value, color) => {
@@ -1797,195 +1755,92 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onU
         y += 8;
       };
 
-      // Cashflow
-      section('Cashflow mensual');
-      row('Cashflow bruto (alquiler − hipoteca)',
-        `${cashflowBruto >= 0 ? '+' : ''}${cashflowBruto.toFixed(2)} €`,
-        cashflowBruto >= 0 ? [46, 125, 50] : [198, 40, 40]);
-      if (hasHistoricalData) {
-        row(`Cashflow neto (promedio ${monthsWithData.length} meses reales)`,
-          `${cashflowNeto >= 0 ? '+' : ''}${cashflowNeto.toFixed(2)} €`,
-          cashflowNeto >= 0 ? [46, 125, 50] : [198, 40, 40]);
+      const purchasePrice = parseFloat(inv.purchasePrice) || 0;
+      const downPayment = parseFloat(inv.downPayment) || 0;
+      const acquisitionCosts = parseFloat(inv.acquisitionCosts) || 0;
+      const initialInvestment = downPayment + acquisitionCosts;
+
+      if (purchasePrice > 0) {
+        section('Datos de inversión');
+        row('Precio de compra', `${purchasePrice.toFixed(0)} €`);
+        if (downPayment > 0) row('Entrada', `${downPayment.toFixed(0)} €`);
+        if (acquisitionCosts > 0) row('Gastos de adquisición', `${acquisitionCosts.toFixed(0)} €`);
+        if (initialInvestment > 0) row('Inversión total', `${initialInvestment.toFixed(0)} €`);
       }
 
-      // Rentabilidad
-      section('Indicadores de rentabilidad');
-      if (initialInvestment > 0) row('Inversión inicial', `${initialInvestment.toFixed(2)} €`);
-      if (roiAnual !== null) {
-        row(`ROI anual (${hasHistoricalData ? 'neto' : 'bruto'})`,
-          `${roiAnual.toFixed(2)}%`,
-          roiAnual < 3 ? [198, 40, 40] : roiAnual < 6 ? [230, 120, 0] : [46, 125, 50]);
-      }
-      if (payback !== null) row(`Payback (${hasHistoricalData ? 'neto' : 'bruto'})`, `${payback.toFixed(1)} años`);
-      if (monthsElapsed > 0) {
-        row(`Equity acumulado (${monthsElapsed} meses)`,
-          `${equityAcumulado >= 0 ? '+' : ''}${equityAcumulado.toFixed(2)} €`,
-          equityAcumulado >= 0 ? [46, 125, 50] : [198, 40, 40]);
-      }
-
-      // Hipoteca
-      if (mortgageCalc) {
-        section(`Hipoteca — fórmula francesa (${investmentData.rateType === 'variable' ? 'tipo variable' : 'tipo fijo'})`);
-        row('Capital inicial', `${(parseFloat(investmentData.loanCapital) || 0).toFixed(2)} €`);
-        row('Tipo de interés', `${investmentData.interestRate}%`);
-        row('Plazo', `${investmentData.loanYears} años`);
-        row('Cuota mensual', `${mortgageCalc.monthlyPayment.toFixed(2)} €`);
-        row('Capital pendiente actual', `${mortgageCalc.remainingCapital.toFixed(2)} €`);
-        row('Amortización mensual actual', `${mortgageCalc.monthlyAmortization.toFixed(2)} €`);
-        row('Intereses mensuales actuales', `${mortgageCalc.monthlyInterest.toFixed(2)} €`);
-      } else if (mortgageIsAutoDetected) {
+      if (inv.mortgageEnabled && inv.monthlyMortgage) {
         section('Hipoteca');
-        row('Cuota (detectada en gastos)', `${detectedMortgageAmount.toFixed(2)} €`);
+        row('Cuota mensual', `${parseFloat(inv.monthlyMortgage).toFixed(0)} €`);
+        if (inv.interestRate) row('Tipo de interés', `${inv.interestRate}% (${inv.rateType === 'variable' ? 'variable' : 'fijo'})`);
+        if (inv.loanYears) row('Plazo', `${inv.loanYears} años`);
+        if (inv.loanCapital) row('Capital del préstamo', `${parseFloat(inv.loanCapital).toFixed(0)} €`);
       }
 
-      // Nota legal
+      const ownership = (property.ownershipPercentage || 100) / 100;
+      const ownershipPct = property.ownershipPercentage || 100;
+      const monthlyMortgage = parseFloat(inv.monthlyMortgage) || 0;
+      const mortgageInExp = propertyExpenses.some(e => e.active !== false && e.category === 'hipoteca');
+      const effectiveMortgage = mortgageInExp ? 0 : monthlyMortgage;
+      const configuredIncome = (() => {
+        if (property.status === 'por_habitaciones')
+          return (property.rooms || []).reduce((s, r) => s + (Number(r.price) || 0), 0) * ownership;
+        if (property.status === 'alquilado' || property.status === 'otros') {
+          const t = (property.tenants || []).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+          return (t || Number(property.price) || 0) * ownership;
+        }
+        return 0;
+      })();
+      const monthlyExpenses = propertyExpenses
+        .filter(e => e.active !== false)
+        .reduce((sum, e) => {
+          const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPct;
+          const amt = Number(e.amount) || 0;
+          const freq = e.frequency;
+          const equiv = freq === 'trimestral' ? amt / 3 : freq === 'anual' ? amt / 12
+            : freq === 'custom' ? amt / (e.custom_frequency_months || 1) : amt;
+          return sum + equiv * pct / 100;
+        }, 0);
+      const cashflowBruto = configuredIncome - effectiveMortgage;
+      const nowD = new Date();
+      const last6 = [];
+      let fy = nowD.getFullYear(), fm = nowD.getMonth();
+      for (let i = 0; i < 6; i++) {
+        last6.push({ year: fy, month: fm });
+        if (fm === 0) { fm = 11; fy--; } else { fm--; }
+      }
+      const mwd = last6.filter(({ year, month }) => historyPayments.some(p => p.year === year && p.month === month));
+      const avgIncome = mwd.length > 0
+        ? mwd.reduce((t, { year, month }) =>
+            t + historyPayments.filter(p => p.year === year && p.month === month).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+          , 0) / mwd.length * ownership
+        : null;
+      const cashflowNeto = avgIncome !== null ? avgIncome - monthlyExpenses - effectiveMortgage : null;
+      const effectiveCF = cashflowNeto ?? cashflowBruto;
+      const roi = initialInvestment > 0 ? (effectiveCF * 12 / initialInvestment) * 100 : null;
+      const payback = initialInvestment > 0 && effectiveCF * 12 > 0 ? initialInvestment / (effectiveCF * 12) : null;
+      const rentBruta = purchasePrice > 0 ? (configuredIncome * 12 / purchasePrice) * 100 : null;
+
+      section('Indicadores');
+      row('Cashflow bruto', `${cashflowBruto >= 0 ? '+' : ''}${cashflowBruto.toFixed(0)} €/mes`,
+        cashflowBruto >= 0 ? [46, 125, 50] : [198, 40, 40]);
+      if (cashflowNeto !== null) row(`Cashflow neto (${mwd.length} meses)`,
+        `${cashflowNeto >= 0 ? '+' : ''}${cashflowNeto.toFixed(0)} €/mes`,
+        cashflowNeto >= 0 ? [46, 125, 50] : [198, 40, 40]);
+      if (rentBruta !== null) row('Rentabilidad bruta', `${rentBruta.toFixed(2)}%`);
+      if (roi !== null) row('ROI', `${roi.toFixed(2)}%`,
+        roi < 3 ? [198, 40, 40] : roi < 6 ? [230, 120, 0] : [46, 125, 50]);
+      if (payback !== null) row('Payback', `${payback.toFixed(1)} años`);
+
       doc.setFontSize(6.5); doc.setTextColor(170); doc.setFont('helvetica', 'italic');
       doc.text('Documento informativo generado por Domio. No constituye asesoramiento financiero.', 14, 291);
-
       doc.save(`rentabilidad_${(property.name || 'propiedad').replace(/\s+/g, '_')}.pdf`);
     });
   };
 
-  // Ingresos configurados (alquiler base, no pagos confirmados — igual que el gauge)
-  const getConfiguredIncome = (p) => {
-    const ownership = (p.ownershipPercentage || 100) / 100;
-    if (p.status === 'por_habitaciones') {
-      return (p.rooms || []).reduce((sum, r) => sum + (Number(r.price) || 0), 0) * ownership;
-    }
-    if (p.status === 'alquilado' || p.status === 'otros') {
-      const tenantsTotal = (p.tenants || []).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-      return (tenantsTotal || Number(p.price) || 0) * ownership;
-    }
-    return 0;
-  };
-
-  // Gastos normalizados mensualmente (equivalente mensual de todos los gastos activos — igual que el gauge)
-  const getNormalizedExpenses = (p) => {
-    const ownershipPct = p.ownershipPercentage || 100;
-    const propExpenses = (supabaseExpenses || []).filter(
-      e => String(e.property_id) === String(p.id) && e.active !== false
-    );
-    return propExpenses.reduce((sum, e) => {
-      const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPct;
-      return sum + getMonthlyEquivalentGP(e) * pct / 100;
-    }, 0);
-  };
-
-  // Detección automática de hipoteca en los gastos
-  const mortgageExpense = property
-    ? (supabaseExpenses || []).find(
-        e => String(e.property_id) === String(property.id) &&
-             e.active !== false &&
-             e.category === 'hipoteca'
-      )
-    : null;
-  const mortgageIsAutoDetected = !!mortgageExpense;
-  const detectedMortgageAmount = mortgageExpense ? getMonthlyEquivalentGP(mortgageExpense) : 0;
-
-  // Calculadora de hipoteca (fórmula francesa) — sólo si no hay hipoteca auto-detectada
-  const computeMortgage = () => {
-    const K = parseFloat(investmentData.loanCapital) || 0;
-    const annualRate = parseFloat(investmentData.interestRate) || 0;
-    const years = parseFloat(investmentData.loanYears) || 0;
-    const startStr = investmentData.loanStartDate;
-    if (!K || !years || !startStr) return null;
-    const r = (annualRate / 100) / 12;
-    const n = Math.round(years * 12);
-    const P = r === 0 ? K / n : K * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
-    const loanStart = new Date(startStr);
-    const t = Math.max(0,
-      (currentYear - loanStart.getFullYear()) * 12 + (currentMonth - loanStart.getMonth())
-    );
-    const K_t = r === 0
-      ? Math.max(0, K - P * t)
-      : Math.max(0, K * Math.pow(1 + r, t) - P * (Math.pow(1 + r, t) - 1) / r);
-    const monthlyInterest = K_t * r;
-    const monthlyAmort = Math.max(0, P - monthlyInterest);
-    return { monthlyPayment: P, remainingCapital: K_t, monthlyAmortization: monthlyAmort, monthlyInterest, t };
-  };
-  const mortgageCalc = (!mortgageIsAutoDetected && property) ? computeMortgage() : null;
-
-  const effectiveMortgage = mortgageIsAutoDetected
-    ? detectedMortgageAmount
-    : (mortgageCalc ? mortgageCalc.monthlyPayment : (parseFloat(investmentData.monthlyMortgage) || 0));
-
-  // Ingresos y gastos base
-  const monthlyIncome = property ? getConfiguredIncome(property) : 0;
-  const monthlyExpenses = property ? getNormalizedExpenses(property) : 0;
-  const monthlyAmortization = mortgageCalc
-    ? mortgageCalc.monthlyAmortization
-    : (parseFloat(investmentData.monthlyAmortization) || 0);
-  const initialInvestment = parseFloat(investmentData.initialInvestment) || 0;
-
-  // Cashflow bruto: alquiler configurado − hipoteca
-  const cashflowBruto = monthlyIncome - effectiveMortgage;
-
-  // Cashflow neto: promedio de (pagos confirmados − gastos) de los últimos 6 meses
-  const last6Months = [];
-  let fy = currentYear, fm = currentMonth;
-  for (let i = 0; i < 6; i++) {
-    last6Months.push({ year: fy, month: fm });
-    if (fm === 0) { fm = 11; fy--; } else { fm--; }
-  }
-  const ownership = (property?.ownershipPercentage || 100) / 100;
-  const monthsWithData = last6Months.filter(({ year, month }) =>
-    historyPayments.some(p => p.year === year && p.month === month)
-  );
-  const avgConfirmedIncome = monthsWithData.length > 0
-    ? monthsWithData.reduce((total, { year, month }) => {
-        return total + historyPayments
-          .filter(p => p.year === year && p.month === month)
-          .reduce((s, p) => s + (Number(p.amount) || 0), 0);
-      }, 0) / monthsWithData.length * ownership
-    : null;
-
-  // Si hipoteca auto-detectada ya está en monthlyExpenses, no restar dos veces
-  const cashflowNeto = avgConfirmedIncome !== null
-    ? avgConfirmedIncome - monthlyExpenses - (mortgageIsAutoDetected ? 0 : effectiveMortgage)
-    : null;
-
-  const hasHistoricalData = cashflowNeto !== null;
-  const effectiveCashflow = hasHistoricalData ? cashflowNeto : cashflowBruto;
-
-  // ROI y Payback sobre el cashflow más preciso disponible
-  const beneficioAnual = effectiveCashflow * 12;
-  const roiAnual = initialInvestment > 0 ? (beneficioAnual / initialInvestment) * 100 : null;
-  const payback = initialInvestment > 0 && beneficioAnual > 0 ? initialInvestment / beneficioAnual : null;
-
-  // Equity acumulado
-  const startDateStr = property?.investmentData?.purchaseDate || property?.createdAt;
-  const startDate = startDateStr ? new Date(startDateStr) : new Date();
-  const monthsElapsed = Math.max(0,
-    (currentYear - startDate.getFullYear()) * 12 + (currentMonth - startDate.getMonth())
-  );
-  const equityAcumulado = effectiveCashflow * monthsElapsed + monthlyAmortization * monthsElapsed;
-
-  // Semáforo ROI
-  const roiColor = roiAnual === null ? '#999'
-    : roiAnual < 3 ? '#C62828' : roiAnual < 6 ? '#F57F17' : '#2E7D32';
-  const roiBg = roiAnual === null ? '#F5F5F5'
-    : roiAnual < 3 ? '#FBE9E7' : roiAnual < 6 ? '#FFF8E1' : '#F1F8E9';
-  const roiLabel = roiAnual === null ? null
-    : roiAnual < 3 ? 'Bajo' : roiAnual < 6 ? 'Moderado' : 'Bueno';
-
-  const cashflowCard = (value, label, subtitle) => {
-    const color = value >= 0 ? '#2E7D32' : '#C62828';
-    const bg = value >= 0 ? '#F1F8E9' : '#FBE9E7';
-    return (
-      <div style={{ background: bg, borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
-        <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>{label}</p>
-        <p style={{ margin: 0, fontSize: '22px', fontWeight: 700, color }}>
-          {value >= 0 ? '+' : ''}{value.toFixed(0)} €
-        </p>
-        {subtitle && <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#aaa' }}>{subtitle}</p>}
-      </div>
-    );
-  };
-
+  // ── Styles ────────────────────────────────────────────────────────────────────
   const inputStyle = {
     width: '100%', padding: '12px', borderRadius: '10px',
-    border: '1px solid #ddd', fontSize: '15px', background: 'white',
-    boxSizing: 'border-box',
+    border: '1px solid #ddd', fontSize: '15px', background: 'white', boxSizing: 'border-box',
   };
   const labelStyle = {
     display: 'block', fontSize: '13px', fontWeight: 500, color: '#555', marginBottom: '6px',
@@ -2003,7 +1858,7 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onU
 
           {/* Selector de inmueble */}
           <div>
-            <label style={labelStyle}>Inmueble a analizar</label>
+            <label style={labelStyle}>Inmueble</label>
             <select
               value={selectedPropertyId}
               onChange={e => setSelectedPropertyId(e.target.value)}
@@ -2015,362 +1870,42 @@ function RentabilityModal({ properties, supabaseExpenses, initialPropertyId, onU
             </select>
           </div>
 
-          {property && (
+          {property ? (
             <>
-              {/* Sección 1: Datos de inversión */}
-              <div style={{ background: '#F9F9F9', borderRadius: '16px', padding: '16px' }}>
-                <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 600, color: '#111' }}>
-                  Datos de inversión
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {[
-                    { key: 'purchasePrice',     label: 'Precio de compra',                               placeholder: 'Ej: 150000' },
-                    { key: 'initialInvestment', label: 'Inversión inicial (entrada + impuestos + reforma)', placeholder: 'Ej: 40000' },
-                  ].map(({ key, label, placeholder }) => (
-                    <div key={key}>
-                      <label style={labelStyle}>{label}</label>
-                      <div style={{ position: 'relative' }}>
-                        <input
-                          type="number" min="0" placeholder={placeholder}
-                          value={investmentData[key]}
-                          onChange={e => { setInvestmentData(prev => ({ ...prev, [key]: e.target.value })); setSaved(false); }}
-                          style={{ ...inputStyle, paddingRight: '36px' }}
-                        />
-                        <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px' }}>€</span>
-                      </div>
-                    </div>
-                  ))}
+              <InvestmentForm
+                property={property}
+                expenses={propertyExpenses}
+                onUpdate={onUpdateProperty}
+                landlordEmail={property.landlord_email}
+                onExpenseAdded={onExpenseAdded}
+              />
 
-                  {mortgageIsAutoDetected ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#E8F5E9', borderRadius: '10px', padding: '12px 14px' }}>
-                      <span style={{ fontSize: '16px', color: '#2E7D32' }}>✓</span>
-                      <p style={{ margin: 0, fontSize: '13px', color: '#2E7D32', lineHeight: 1.4 }}>
-                        <strong>Hipoteca detectada en tus gastos:</strong> {detectedMortgageAmount.toFixed(0)} €/mes
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Calculadora de hipoteca */}
-                      <div style={{ background: '#F0F4FF', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#3949AB' }}>Calculadora de hipoteca</p>
-
-                        <div>
-                          <label style={labelStyle}>Capital inicial del préstamo</label>
-                          <div style={{ position: 'relative' }}>
-                            <input type="number" min="0" placeholder="Ej: 120000"
-                              value={investmentData.loanCapital}
-                              onChange={e => { setInvestmentData(prev => ({ ...prev, loanCapital: e.target.value })); setSaved(false); }}
-                              style={{ ...inputStyle, paddingRight: '36px' }} />
-                            <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px' }}>€</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label style={labelStyle}>Tipo de interés</label>
-                          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                            {['fijo', 'variable'].map(type => (
-                              <button key={type} type="button"
-                                onClick={() => { setInvestmentData(prev => ({ ...prev, rateType: type })); setSaved(false); }}
-                                style={{
-                                  flex: 1, padding: '9px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer',
-                                  border: `1.5px solid ${investmentData.rateType === type ? '#3949AB' : '#ddd'}`,
-                                  background: investmentData.rateType === type ? '#3949AB' : 'white',
-                                  color: investmentData.rateType === type ? 'white' : '#666',
-                                  fontWeight: investmentData.rateType === type ? 600 : 400,
-                                }}>
-                                {type === 'fijo' ? 'Fijo' : 'Variable'}
-                              </button>
-                            ))}
-                          </div>
-                          <div style={{ position: 'relative' }}>
-                            <input type="number" min="0" step="0.01"
-                              placeholder={investmentData.rateType === 'variable' ? 'Ej: 3.5 (Euribor + diferencial)' : 'Ej: 2.5'}
-                              value={investmentData.interestRate}
-                              onChange={e => { setInvestmentData(prev => ({ ...prev, interestRate: e.target.value })); setSaved(false); }}
-                              style={{ ...inputStyle, paddingRight: '36px' }} />
-                            <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px' }}>%</span>
-                          </div>
-                          {investmentData.rateType === 'variable' && (
-                            <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#F57F17', lineHeight: 1.4 }}>
-                              Este cálculo es una aproximación basada en el tipo actual. Actualízalo cuando cambie tu cuota.
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label style={labelStyle}>Años totales de la hipoteca</label>
-                          <input type="number" min="1" max="40" placeholder="Ej: 25"
-                            value={investmentData.loanYears}
-                            onChange={e => { setInvestmentData(prev => ({ ...prev, loanYears: e.target.value })); setSaved(false); }}
-                            style={inputStyle} />
-                        </div>
-
-                        <div>
-                          <label style={labelStyle}>Fecha de inicio de la hipoteca</label>
-                          <input type="date"
-                            value={investmentData.loanStartDate}
-                            onChange={e => { setInvestmentData(prev => ({ ...prev, loanStartDate: e.target.value })); setSaved(false); }}
-                            style={inputStyle} />
-                        </div>
-
-                        {/* Resultados calculados */}
-                        {mortgageCalc && (
-                          <>
-                            {investmentData.rateType === 'variable' && (
-                              <div style={{ background: '#FFF3E0', borderRadius: '8px', padding: '10px 12px' }}>
-                                <p style={{ margin: 0, fontSize: '12px', color: '#E65100', fontWeight: 500 }}>
-                                  ⚠ Cálculo aproximado — tipo variable sujeto a revisión
-                                </p>
-                              </div>
-                            )}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
-                              {[
-                                { label: 'Cuota mensual', value: `${mortgageCalc.monthlyPayment.toFixed(0)} €` },
-                                { label: 'Capital pendiente', value: `${mortgageCalc.remainingCapital.toFixed(0)} €` },
-                                { label: 'Amortización/mes', value: `${mortgageCalc.monthlyAmortization.toFixed(0)} €` },
-                                { label: 'Intereses/mes', value: `${mortgageCalc.monthlyInterest.toFixed(0)} €` },
-                              ].map(({ label, value }) => (
-                                <div key={label} style={{ background: 'white', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
-                                  <p style={{ margin: '0 0 3px', fontSize: '10px', color: '#888' }}>{label}</p>
-                                  <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#3949AB' }}>{value}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Fallback manual si no hay datos para la calculadora */}
-                      {!mortgageCalc && (
-                        <>
-                          <div>
-                            <label style={labelStyle}>O introduce la cuota manualmente</label>
-                            <div style={{ position: 'relative' }}>
-                              <input type="number" min="0" placeholder="Ej: 650"
-                                value={investmentData.monthlyMortgage}
-                                onChange={e => { setInvestmentData(prev => ({ ...prev, monthlyMortgage: e.target.value })); setSaved(false); }}
-                                style={{ ...inputStyle, paddingRight: '36px' }} />
-                              <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px' }}>€</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label style={labelStyle}>De esa cuota, ¿cuánto es amortización?</label>
-                            <div style={{ position: 'relative' }}>
-                              <input type="number" min="0" placeholder="Ej: 300"
-                                value={investmentData.monthlyAmortization}
-                                onChange={e => { setInvestmentData(prev => ({ ...prev, monthlyAmortization: e.target.value })); setSaved(false); }}
-                                style={{ ...inputStyle, paddingRight: '36px' }} />
-                              <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px' }}>€</span>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    style={{
-                      padding: '12px', borderRadius: '10px', border: 'none',
-                      background: saved ? '#4CAF50' : '#111',
-                      color: 'white', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                      transition: 'background 0.2s',
-                    }}
-                  >
-                    {saving ? 'Guardando...' : saved ? 'Guardado ✓' : 'Guardar datos'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Sección 2: Resultados */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                  <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#111' }}>Resultados</h3>
-                  <button onClick={handleExportPDF} style={{
-                    padding: '7px 14px', borderRadius: '8px', border: 'none',
-                    background: '#111', color: 'white', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                  }}>
-                    Exportar PDF
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-
-                  {/* Cashflow bruto */}
-                  {cashflowCard(cashflowBruto, 'Cashflow bruto', 'Alquiler − hipoteca')}
-
-                  {/* Cashflow neto */}
-                  {hasHistoricalData
-                    ? cashflowCard(cashflowNeto, 'Cashflow neto', `Promedio ${monthsWithData.length} meses reales`)
-                    : (
-                      <div style={{ background: '#F5F5F5', borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
-                        <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>Cashflow neto</p>
-                        <p style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#bbb' }}>Sin historial</p>
-                        <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#ccc' }}>Confirma pagos para calcularlo</p>
-                      </div>
-                    )
-                  }
-
-                  {/* ROI anual */}
-                  <div style={{ background: roiBg, borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
-                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>
-                      ROI anual {hasHistoricalData ? '(neto)' : '(bruto)'}
-                    </p>
-                    <p style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: roiColor }}>
-                      {roiAnual !== null ? `${roiAnual.toFixed(1)}%` : '—'}
-                    </p>
-                    {roiLabel && (
-                      <p style={{ margin: '4px 0 0', fontSize: '11px', fontWeight: 600, color: roiColor }}>{roiLabel}</p>
-                    )}
-                  </div>
-
-                  {/* Payback */}
-                  <div style={{ background: '#F0F7FF', borderRadius: '14px', padding: '16px', textAlign: 'center' }}>
-                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>
-                      Payback {hasHistoricalData ? '(neto)' : '(bruto)'}
-                    </p>
-                    <p style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: '#1565C0' }}>
-                      {payback !== null ? `${payback.toFixed(1)} años` : '—'}
-                    </p>
-                  </div>
-
-                  {/* Equity acumulado */}
-                  <div style={{ background: '#F3F4F6', borderRadius: '14px', padding: '16px', textAlign: 'center', gridColumn: '1 / -1' }}>
-                    <p style={{ margin: '0 0 6px', fontSize: '11px', color: '#888', fontWeight: 500 }}>Equity acumulado</p>
-                    <p style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: equityAcumulado >= 0 ? '#2E7D32' : '#C62828' }}>
-                      {equityAcumulado >= 0 ? '+' : ''}{equityAcumulado.toFixed(0)} €
-                    </p>
-                    {monthsElapsed > 0 && (
-                      <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#aaa' }}>
-                        {monthsElapsed} meses · desde {startDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
+              {/* PDF Export */}
+              <button
+                onClick={handleExportPDF}
+                style={{
+                  padding: '11px 16px', borderRadius: '10px', border: '1px solid #ddd',
+                  background: 'white', fontSize: '13px', fontWeight: 600,
+                  cursor: 'pointer', color: '#333', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', gap: '6px',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Exportar PDF
+              </button>
             </>
-          )}
-
-          {properties.length === 0 && (
+          ) : (
             <p style={{ textAlign: 'center', color: '#aaa', fontSize: '14px' }}>
               No tienes inmuebles registrados.
             </p>
           )}
         </div>
       </div>
-
-      {showMortgageExpensePrompt && (
-        <div className="modal-overlay" onClick={() => setShowMortgageExpensePrompt(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Hipoteca como gasto</h2>
-              <button className="modal-close" onClick={() => setShowMortgageExpensePrompt(false)}>×</button>
-            </div>
-            <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
-              ¿Quieres añadir la hipoteca ({pendingMortgageAmount} €/mes) también como gasto recurrente?
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => { setShowMortgageExpensePrompt(false); setShowAddMortgageExpense(true); }}
-                style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#111', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}
-              >
-                Sí, añadir
-              </button>
-              <button
-                onClick={() => setShowMortgageExpensePrompt(false)}
-                style={{ padding: '12px 20px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', color: '#666', cursor: 'pointer' }}
-              >
-                No
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAddMortgageExpense && property && (
-        <AddMortgageExpenseModal
-          amount={pendingMortgageAmount}
-          propertyId={property.id}
-          landlordEmail={property.landlord_email}
-          defaultExpensePct={property.ownershipPercentage || 100}
-          onClose={() => setShowAddMortgageExpense(false)}
-        />
-      )}
     </div>
   );
 }
-
-function AddMortgageExpenseModal({ amount, propertyId, landlordEmail, defaultExpensePct, onClose }) {
-  const today = new Date().toISOString().split('T')[0];
-  const [durationType, setDurationType] = useState('indefinido');
-  const [durationPayments, setDurationPayments] = useState('');
-  const [startDate, setStartDate] = useState(today);
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    const expenseData = {
-      property_id: String(propertyId),
-      landlord_email: landlordEmail,
-      name: 'Hipoteca/Préstamo',
-      category: 'hipoteca',
-      subcategory: null,
-      description: '',
-      type: durationType === 'pagos' ? 'recurrente_temporal' : 'recurrente_fijo',
-      frequency: 'mensual',
-      custom_frequency_months: null,
-      amount: parseFloat(amount),
-      duration_payments: durationType === 'pagos' && durationPayments ? parseInt(durationPayments) : null,
-      start_date: startDate,
-      active: true,
-      expense_percentage: defaultExpensePct != null ? parseFloat(defaultExpensePct) : null,
-    };
-    await supabase.from('expenses').insert(expenseData);
-    setSaving(false);
-    onClose();
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Añadir hipoteca como gasto</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div style={{ background: '#F5F5F5', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
-            <p style={{ margin: 0, fontSize: '13px', color: '#555' }}>Categoría: <strong>Hipoteca/Préstamo</strong></p>
-            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#555' }}>Importe: <strong>{amount} €/mes</strong></p>
-          </div>
-          <div className="form-group">
-            <label>Duración</label>
-            <div className="frequency-options">
-              <button type="button" className={`frequency-option ${durationType === 'indefinido' ? 'selected' : ''}`} onClick={() => setDurationType('indefinido')}>Indefinido</button>
-              <button type="button" className={`frequency-option ${durationType === 'pagos' ? 'selected' : ''}`} onClick={() => setDurationType('pagos')}>N.º de pagos</button>
-            </div>
-            {durationType === 'pagos' && (
-              <div style={{ marginTop: 10 }}>
-                <input
-                  type="number" min="1" placeholder="Ej: 360 (30 años)" value={durationPayments}
-                  onChange={e => setDurationPayments(e.target.value)} required
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
-                />
-              </div>
-            )}
-          </div>
-          <div className="form-group">
-            <label>Fecha de inicio</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-          </div>
-          <button type="submit" className="submit-button" disabled={saving}>
-            {saving ? 'Guardando...' : 'Añadir gasto'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export default GeneralPanel;
