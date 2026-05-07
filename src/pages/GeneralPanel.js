@@ -999,27 +999,133 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
   // ── Exportar Excel ──
   const generateExcel = () => {
     import('xlsx').then(XLSX => {
-      const rows = [];
+      const wb = XLSX.utils.book_new();
+      const currFmt = '#,##0.00 €';
+
+      const applyNumFmt = (ws) => {
+        Object.keys(ws).forEach(ref => {
+          if (ref[0] === '!') return;
+          const cell = ws[ref];
+          if (cell && cell.t === 'n') cell.z = currFmt;
+        });
+      };
+
+      // ── HOJA 1: RESUMEN ──
+      const summaryAoa = [];
+      summaryAoa.push([`REPORTE FISCAL ${selectedYear}`]);
+      summaryAoa.push([`Generado por Domio — ${new Date().toLocaleDateString('es-ES')}`]);
+      if (ownerName) summaryAoa.push([`Propietario: ${ownerName}`]);
+      if (ownerNif)  summaryAoa.push([`NIF: ${ownerNif}`]);
+      summaryAoa.push([]);
+      summaryAoa.push(['Inmueble', 'Tipo fiscal', 'Ingresos cobrados', 'Importe a declarar', 'Gastos deducibles', 'Rendimiento neto']);
+
+      let sumCobrado = 0, sumDeclared = 0, sumExpenses = 0;
       reportableProperties.forEach(property => {
         const data = getYearlyData(property);
         const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+        const fiscalLabel = fiscalTypes[property.id] === 'turistico' ? 'Turístico' : fiscalTypes[property.id] === 'comercial' ? 'Comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
+        const net = declared - data.totalExpenses;
+        summaryAoa.push([property.name, fiscalLabel, data.totalCobrado, declared, data.totalExpenses, net]);
+        sumCobrado  += data.totalCobrado;
+        sumDeclared += declared;
+        sumExpenses += data.totalExpenses;
+      });
+      summaryAoa.push([]);
+      summaryAoa.push(['TOTAL', '', sumCobrado, sumDeclared, sumExpenses, sumDeclared - sumExpenses]);
+
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+      applyNumFmt(wsSummary);
+      wsSummary['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+      ];
+      wsSummary['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen');
+
+      // ── HOJA 2: DETALLE POR INMUEBLE ──
+      const detailAoa = [];
+      detailAoa.push([`DETALLE DE TRANSACCIONES — ${selectedYear}`]);
+      detailAoa.push([]);
+
+      const detailMerges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+      let currentRow = 2;
+
+      reportableProperties.forEach(property => {
+        const data = getYearlyData(property);
+        const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+
+        // Cabecera del inmueble (fusionada)
+        detailAoa.push([property.name, '', '', '', '', '']);
+        detailMerges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 5 } });
+        currentRow++;
+
+        // Cabecera columnas
+        detailAoa.push(['Fecha', 'Tipo', 'Categoría', 'Concepto', 'Importe', 'Estado']);
+        currentRow++;
+
         // Ingresos
         data.monthsData.forEach(({ month, cobrado, pendiente }) => {
-          if (cobrado > 0) rows.push({ Fecha: `${monthNames[month]} ${selectedYear}`, Inmueble: property.name, Tipo: 'Ingreso', Categoría: 'Alquiler', Concepto: 'Ingreso cobrado', Importe: cobrado, Estado: 'Cobrado' });
-          if (pendiente > 0) rows.push({ Fecha: `${monthNames[month]} ${selectedYear}`, Inmueble: property.name, Tipo: 'Ingreso', Categoría: 'Alquiler', Concepto: 'Ingreso pendiente', Importe: pendiente, Estado: 'Pendiente' });
+          if (cobrado > 0)   { detailAoa.push([`${monthNames[month]} ${selectedYear}`, 'Ingreso', 'Alquiler', 'Ingreso cobrado', cobrado, 'Cobrado']); currentRow++; }
+          if (pendiente > 0) { detailAoa.push([`${monthNames[month]} ${selectedYear}`, 'Ingreso', 'Alquiler', 'Ingreso pendiente', pendiente, 'Pendiente']); currentRow++; }
         });
         if (Math.abs(declared - data.totalCobrado) > 0.01) {
-          rows.push({ Fecha: `${selectedYear}`, Inmueble: property.name, Tipo: 'Ajuste', Categoría: 'Declaracion', Concepto: 'Importe a declarar (ajustado por propietario)', Importe: declared, Estado: 'Declarado' });
+          detailAoa.push([`${selectedYear}`, 'Ajuste', 'Declaracion', 'Importe a declarar (ajustado por propietario)', declared, 'Declarado']);
+          currentRow++;
         }
+
         // Gastos
         data.expenseDetail.forEach(e => {
-          rows.push({ Fecha: e.date, Inmueble: property.name, Tipo: 'Gasto', Categoría: e.category, Concepto: e.name, Importe: -e.amount, Estado: 'Pagado' });
+          detailAoa.push([e.date, 'Gasto', e.category, e.name || '—', -e.amount, 'Pagado']);
+          currentRow++;
         });
+
+        // Subtotal
+        const net = declared - data.totalExpenses;
+        detailAoa.push(['', 'SUBTOTAL', '', `${property.name}`, net, '']);
+        currentRow++;
+
+        // Separador
+        detailAoa.push([]);
+        currentRow++;
       });
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{ wch: 18 }, { wch: 24 }, { wch: 10 }, { wch: 28 }, { wch: 28 }, { wch: 12 }, { wch: 12 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `Fiscal ${selectedYear}`);
+
+      const wsDetail = XLSX.utils.aoa_to_sheet(detailAoa);
+      applyNumFmt(wsDetail);
+      wsDetail['!merges'] = detailMerges;
+      wsDetail['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 28 }, { wch: 34 }, { wch: 16 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsDetail, 'Detalle');
+
+      // ── HOJA 3: DATOS PARA EL IRPF ──
+      const irpfAoa = [];
+      irpfAoa.push([`DATOS PARA LA DECLARACIÓN DE LA RENTA (IRPF) — ${selectedYear}`]);
+      irpfAoa.push([]);
+      irpfAoa.push(['Inmueble', 'Tipo fiscal', 'Ingresos a declarar', 'Gastos deducibles', 'Rendimiento neto previo', 'Reducción (60%)', 'Rendimiento neto reducido']);
+
+      const irpfMerges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+
+      reportableProperties.forEach(property => {
+        const data = getYearlyData(property);
+        const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+        const fiscalLabel = fiscalTypes[property.id] === 'turistico' ? 'Turístico' : fiscalTypes[property.id] === 'comercial' ? 'Comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
+        const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
+        const netPrevio = declared - data.totalExpenses;
+        const reductionAmt = reduction > 0 && netPrevio > 0 ? netPrevio * reduction : 0;
+        const netReducido = netPrevio - reductionAmt;
+        irpfAoa.push([property.name, fiscalLabel, declared, data.totalExpenses, netPrevio, reductionAmt > 0 ? -reductionAmt : '—', netReducido]);
+      });
+
+      irpfAoa.push([]);
+      irpfAoa.push(['TOTAL', '', sumDeclared, sumExpenses, sumDeclared - sumExpenses, '', '']);
+      irpfAoa.push([]);
+      irpfAoa.push(['Nota: los importes declarados han sido revisados y confirmados por el propietario.']);
+      irpfAoa.push(['Documento informativo generado por Domio. No constituye asesoramiento fiscal.']);
+
+      const wsIrpf = XLSX.utils.aoa_to_sheet(irpfAoa);
+      applyNumFmt(wsIrpf);
+      wsIrpf['!merges'] = irpfMerges;
+      wsIrpf['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 24 }];
+      XLSX.utils.book_append_sheet(wb, wsIrpf, 'IRPF');
+
       XLSX.writeFile(wb, `reporte_fiscal_${selectedYear}.xlsx`);
     });
   };
