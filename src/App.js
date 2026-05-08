@@ -33,34 +33,47 @@ function App() {
       return;
     }
 
-    const restoreFromUser = async (user) => {
+    const routeAuthenticatedUser = async (user) => {
       setUserEmail(user.email);
+
       const { data: accessData } = await supabase
         .from('property_access')
         .select('id')
         .eq('gestor_email', user.email)
         .limit(1);
+
       if (accessData && accessData.length > 0) {
         setUserType('gestor');
         localStorage.setItem('userType', 'gestor');
         setPage('gestor-dashboard');
-      } else {
+        return;
+      }
+
+      const { data: properties } = await supabase
+        .from('properties')
+        .select('id')
+        .eq('owner_id', user.id)
+        .limit(1);
+
+      if (properties && properties.length > 0) {
         setUserType('propietario');
         localStorage.setItem('userType', 'propietario');
         setPage('dashboard');
+      } else {
+        setPage('welcome');
       }
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && currentPageRef.current !== 'auth') restoreFromUser(session.user);
+      if (session?.user && currentPageRef.current !== 'auth') routeAuthenticatedUser(session.user);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // INITIAL_SESSION se dispara al montar junto a getSession — ignorarlo para evitar
-      // doble llamada a restoreFromUser. Solo reaccionar a SIGNED_IN real (post-login).
+      // doble llamada a routeAuthenticatedUser. Solo reaccionar a SIGNED_IN real (post-login).
       if (event === 'INITIAL_SESSION') return;
       if (event === 'SIGNED_IN' && session?.user && currentPageRef.current !== 'auth') {
-        restoreFromUser(session.user);
+        routeAuthenticatedUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setPage('welcome');
         setUserType(null);
@@ -84,20 +97,32 @@ function App() {
 
   const handleLogin = async (user) => {
     setUserEmail(user.email);
+
     const { data: accessData } = await supabase
       .from('property_access')
       .select('id')
       .eq('gestor_email', user.email)
       .limit(1);
+
     if (accessData && accessData.length > 0) {
       setUserType('gestor');
       localStorage.setItem('userType', 'gestor');
       setPage('gestor-dashboard');
-    } else {
+      return;
+    }
+
+    const { data: properties } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('owner_id', user.id)
+      .limit(1);
+
+    if (properties && properties.length > 0) {
       setUserType('propietario');
       localStorage.setItem('userType', 'propietario');
-      await supabase.auth.updateUser({ data: { userType: 'propietario' } });
       setPage('dashboard');
+    } else {
+      setPage('welcome');
     }
   };
 
