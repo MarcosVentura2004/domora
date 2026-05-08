@@ -333,6 +333,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [editingRoom, setEditingRoom] = useState(null);
   const [viewingRoomId, setViewingRoomId] = useState(null); // ✅ CAMBIADO: guardamos solo el ID
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const optionsMenuRef = React.useRef(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
   const [codeModal, setCodeModal] = useState(null); // { name, code }
@@ -343,6 +344,17 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [unreadCounts, setUnreadCounts] = useState({}); // { [tenantId]: number }
   const [showInvestmentSection, setShowInvestmentSection] = useState(false);
   const [deleteExpenseModal, setDeleteExpenseModal] = useState(null); // { expense }
+
+  React.useEffect(() => {
+    if (!showOptionsMenu) return;
+    const handleOutside = (e) => {
+      if (!optionsMenuRef.current?.contains(e.target)) {
+        setShowOptionsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showOptionsMenu]);
 
   useEffect(() => {
     if (!tenants.length || (property.status !== 'alquilado' && property.status !== 'otros')) return;
@@ -982,7 +994,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     <div className="property-detail-container">
 
       {/* Header */}
-      <div className="detail-header">
+      <div className="detail-header" ref={optionsMenuRef}>
         <button className="back-button" onClick={onBack}>←</button>
         <h1 className="detail-title">{property.name}</h1>
         {!readOnly && <button className="detail-options" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>}
