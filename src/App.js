@@ -49,13 +49,13 @@ function App() {
         return;
       }
 
-      const { data: properties } = await supabase
-        .from('properties')
+      const { data: landlord } = await supabase
+        .from('landlords')
         .select('id')
-        .eq('owner_id', user.id)
-        .limit(1);
+        .eq('user_id', user.id)
+        .single();
 
-      if (properties && properties.length > 0) {
+      if (landlord) {
         setUserType('propietario');
         localStorage.setItem('userType', 'propietario');
         setPage('dashboard');
@@ -111,13 +111,13 @@ function App() {
       return;
     }
 
-    const { data: properties } = await supabase
-      .from('properties')
+    const { data: landlord } = await supabase
+      .from('landlords')
       .select('id')
-      .eq('owner_id', user.id)
-      .limit(1);
+      .eq('user_id', user.id)
+      .single();
 
-    if (properties && properties.length > 0) {
+    if (landlord) {
       setUserType('propietario');
       localStorage.setItem('userType', 'propietario');
       setPage('dashboard');
