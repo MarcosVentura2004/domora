@@ -39,11 +39,9 @@ export default function MonthNavigator({
 
   const now = new Date();
   const atMinMonth = year === minYear && month === minMonth;
-  const atMaxMonth = year === now.getFullYear() && month === now.getMonth();
 
   const isCellDisabled = (y, m) => {
     if (y < minYear || (y === minYear && m < minMonth)) return true;
-    if (y > now.getFullYear() || (y === now.getFullYear() && m > now.getMonth())) return true;
     return false;
   };
 
@@ -64,7 +62,7 @@ export default function MonthNavigator({
         >
           {formatMonthYear(year, month)}
         </button>
-        <button className="month-nav-btn" type="button" onClick={onNext} disabled={atMaxMonth}>›</button>
+        <button className="month-nav-btn" type="button" onClick={onNext}>›</button>
       </div>
 
       {pickerOpen && (
@@ -75,7 +73,7 @@ export default function MonthNavigator({
               onClick={() => setPickerYear(y => y - 1)}>‹</button>
             <span className="month-picker-year-label">{pickerYear}</span>
             <button type="button" className="month-picker-year-btn"
-              disabled={pickerYear >= now.getFullYear()}
+              disabled={pickerYear >= now.getFullYear() + 2}
               onClick={() => setPickerYear(y => y + 1)}>›</button>
           </div>
           <div className="month-picker-grid">

@@ -223,39 +223,8 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   }, [showOptionsMenu]);
   const [showEditProperty, setShowEditProperty] = useState(false);
 
-  const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear() - 5, 0, 1);
-  const [minYear, setMinYear] = useState(createdAt.getFullYear());
-  const [minMonth, setMinMonth] = useState(createdAt.getMonth());
-
-  useEffect(() => {
-    const fallbackYear = createdAt.getFullYear();
-    const fallbackMonth = createdAt.getMonth();
-    Promise.all([
-      supabase.from('payments').select('year, month')
-        .eq('property_id', String(property.id)).eq('status', 'confirmed')
-        .order('year', { ascending: true }).order('month', { ascending: true }).limit(1),
-      supabase.from('expenses').select('start_date, created_at')
-        .eq('property_id', String(property.id))
-        .order('created_at', { ascending: true }).limit(1),
-    ]).then(([paymentsRes, expensesRes]) => {
-      let yr = fallbackYear, mo = fallbackMonth;
-      const p = paymentsRes.data?.[0];
-      if (p && (p.year < yr || (p.year === yr && p.month < mo))) { yr = p.year; mo = p.month; }
-      const e = expensesRes.data?.[0];
-      if (e) {
-        const dateStr = e.start_date || e.created_at;
-        if (dateStr) {
-          const d = new Date(dateStr.substring(0, 10) + 'T12:00:00');
-          if (!isNaN(d.getTime())) {
-            const ey = d.getFullYear(), em = d.getMonth();
-            if (ey < yr || (ey === yr && em < mo)) { yr = ey; mo = em; }
-          }
-        }
-      }
-      setMinYear(yr);
-      setMinMonth(mo);
-    });
-  }, [property.id]); // eslint-disable-line
+  const minYear = 2020;
+  const minMonth = 0;
 
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
