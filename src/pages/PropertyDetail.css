@@ -660,9 +660,84 @@ input[type="number"] {
 .month-nav-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
   padding: 12px 16px;
+}
+
+.month-nav-side {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.month-nav-left {
+  justify-content: flex-start;
+}
+
+.month-nav-right {
+  justify-content: flex-end;
+}
+
+.month-nav-center {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+}
+
+.month-nav-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+}
+
+.month-nav-edit-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.month-nav-edit-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.month-nav-save-btn {
+  background: #111;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.month-nav-save-btn:hover {
+  background: #333;
+}
+
+.month-nav-cancel-btn {
+  background: none;
+  color: #888;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.month-nav-cancel-btn:hover {
+  background: #f5f5f5;
 }
 
 .month-nav-btn {

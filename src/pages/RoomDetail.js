@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import ChatConversation from './ChatConversation';
@@ -357,9 +357,8 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+  const isPastMonth = !isAtCurrentMonth && !isCurrentMonthFuture;
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
-  const pendingEditMode = useRef(false);
   const canEdit = isAtCurrentMonth || isEditMode;
 
   const goToPrevMonth = () => {
@@ -374,12 +373,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   };
 
   useEffect(() => {
-    if (pendingEditMode.current) {
-      pendingEditMode.current = false;
-      setIsEditMode(true);
-    } else {
-      setIsEditMode(false);
-    }
+    setIsEditMode(false);
   }, [currentYear, currentMonth]);
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
@@ -643,7 +637,6 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             }}>
               Eliminar
             </button>
-            <button className="detail-option-item" onClick={() => { setIsEditMonthPickerOpen(true); setShowOptionsMenu(false); }}>Editar mes pasado</button>
           </div>
         )}
         {codeModal && (
@@ -673,16 +666,12 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
         minMonth={minMonth}
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
-        onJump={(yr, mo) => {
-          const n = new Date();
-          const isPast = yr < n.getFullYear() || (yr === n.getFullYear() && mo < n.getMonth());
-          if (isPast) pendingEditMode.current = true;
-          setCurrentYear(yr);
-          setCurrentMonth(mo);
-          setIsEditMonthPickerOpen(false);
-        }}
-        forcePickerOpen={isEditMonthPickerOpen}
-        onPickerClose={() => setIsEditMonthPickerOpen(false)}
+        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
+        isPastMonth={isPastMonth}
+        isEditMode={isEditMode}
+        onEdit={() => setIsEditMode(true)}
+        onSave={() => setIsEditMode(false)}
+        onCancel={() => setIsEditMode(false)}
       />
 
       {/* Gauge */}

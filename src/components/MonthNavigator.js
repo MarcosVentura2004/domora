@@ -7,22 +7,22 @@ function formatMonthYear(year, month) {
   return `${names[month]} de ${year}`;
 }
 
+function PencilIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+    </svg>
+  );
+}
+
 export default function MonthNavigator({
   year, month, minYear, minMonth,
   onPrev, onNext, onJump,
-  forcePickerOpen, onPickerClose,
+  isPastMonth, isEditMode, onEdit, onSave, onCancel,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(year);
   const wrapperRef = useRef(null);
-
-  // Open picker when parent requests it (e.g. from ⋮ menu)
-  useEffect(() => {
-    if (forcePickerOpen) {
-      setPickerYear(year);
-      setPickerOpen(true);
-    }
-  }, [forcePickerOpen]); // eslint-disable-line
 
   // Close picker on outside click
   useEffect(() => {
@@ -30,12 +30,11 @@ export default function MonthNavigator({
     const handler = (e) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
         setPickerOpen(false);
-        onPickerClose?.();
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [pickerOpen]); // eslint-disable-line
+  }, [pickerOpen]);
 
   const now = new Date();
   const atMinMonth = year === minYear && month === minMonth;
@@ -54,15 +53,31 @@ export default function MonthNavigator({
   return (
     <div className="month-navigator" ref={wrapperRef}>
       <div className="month-nav-row">
-        <button className="month-nav-btn" type="button" onClick={onPrev} disabled={atMinMonth}>‹</button>
-        <button
-          className="month-label month-label-btn"
-          type="button"
-          onClick={() => { setPickerYear(year); setPickerOpen(o => !o); }}
-        >
-          {formatMonthYear(year, month)}
-        </button>
-        <button className="month-nav-btn" type="button" onClick={onNext}>›</button>
+        <div className="month-nav-side month-nav-left" />
+        <div className="month-nav-center">
+          <button className="month-nav-btn" type="button" onClick={onPrev} disabled={atMinMonth}>‹</button>
+          <button
+            className="month-label month-label-btn"
+            type="button"
+            onClick={() => { setPickerYear(year); setPickerOpen(o => !o); }}
+          >
+            {formatMonthYear(year, month)}
+          </button>
+          <button className="month-nav-btn" type="button" onClick={onNext}>›</button>
+        </div>
+        <div className="month-nav-side month-nav-right">
+          {isPastMonth && !isEditMode && onEdit && (
+            <button className="month-nav-edit-btn" type="button" onClick={onEdit} title="Editar mes">
+              <PencilIcon />
+            </button>
+          )}
+          {isPastMonth && isEditMode && (
+            <div className="month-nav-edit-actions">
+              <button className="month-nav-save-btn" type="button" onClick={onSave}>Guardar</button>
+              <button className="month-nav-cancel-btn" type="button" onClick={onCancel}>Descartar</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {pickerOpen && (
@@ -88,7 +103,6 @@ export default function MonthNavigator({
                   onClick={() => {
                     onJump(pickerYear, m);
                     setPickerOpen(false);
-                    onPickerClose?.();
                   }}>
                   {label}
                 </button>

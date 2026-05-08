@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
@@ -228,11 +228,10 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
 
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
-  const pendingEditMode = useRef(false);
-  const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
+  const isPastMonth = !isAtCurrentMonth && !isCurrentMonthFuture;
+  const [isEditMode, setIsEditMode] = useState(false);
+  const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
   const ownershipMultiplier = (property.ownershipPercentage || 100) / 100;
 
   const goToPrevMonth = () => {
@@ -246,12 +245,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   };
 
   useEffect(() => {
-    if (pendingEditMode.current) {
-      pendingEditMode.current = false;
-      setIsEditMode(true);
-    } else {
-      setIsEditMode(false);
-    }
+    setIsEditMode(false);
   }, [currentYear, currentMonth]);
 
   // Reservas del mes actual
@@ -495,7 +489,6 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
               if (window.confirm('¿Eliminar esta propiedad?')) { onUpdate({ ...property, deleted: true }); onBack(); }
               setShowOptionsMenu(false);
             }}>Eliminar propiedad</button>
-            <button className="detail-option-item" onClick={() => { setIsEditMonthPickerOpen(true); setShowOptionsMenu(false); }}>Editar mes pasado</button>
           </div>
         )}
       </div>
@@ -508,16 +501,12 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
         minMonth={minMonth}
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
-        onJump={(yr, mo) => {
-          const n = new Date();
-          const isPast = yr < n.getFullYear() || (yr === n.getFullYear() && mo < n.getMonth());
-          if (isPast) pendingEditMode.current = true;
-          setCurrentYear(yr);
-          setCurrentMonth(mo);
-          setIsEditMonthPickerOpen(false);
-        }}
-        forcePickerOpen={isEditMonthPickerOpen}
-        onPickerClose={() => setIsEditMonthPickerOpen(false)}
+        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
+        isPastMonth={isPastMonth}
+        isEditMode={isEditMode}
+        onEdit={readOnly ? undefined : () => setIsEditMode(true)}
+        onSave={() => setIsEditMode(false)}
+        onCancel={() => setIsEditMode(false)}
       />
 
       {/* Gauge */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import RoomDetail from './RoomDetail';
@@ -413,8 +413,6 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   }, [property.id, viewingRoomId]); // eslint-disable-line
 
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
-  const pendingEditMode = useRef(false);
 
   const minYear = 2020;
   const minMonth = 0;
@@ -422,6 +420,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+  const isPastMonth = !isAtCurrentMonth && !isCurrentMonthFuture;
   const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
 
   // ✅ NUEVO: manejador de update que también sincroniza rooms localmente
@@ -657,12 +656,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   };
 
   useEffect(() => {
-    if (pendingEditMode.current) {
-      pendingEditMode.current = false;
-      setIsEditMode(true);
-    } else {
-      setIsEditMode(false);
-    }
+    setIsEditMode(false);
   }, [currentYear, currentMonth]);
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth).filter(e => e.active !== false);
@@ -1041,7 +1035,6 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
               }
               setShowOptionsMenu(false);
             }} className="detail-option-item delete">Eliminar propiedad</button>
-            <button className="detail-option-item" onClick={() => { setIsEditMonthPickerOpen(true); setShowOptionsMenu(false); }}>Editar mes pasado</button>
           </div>
         )}
         {codeModal && (
@@ -1071,16 +1064,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
         minMonth={minMonth}
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
-        onJump={(yr, mo) => {
-          const n = new Date();
-          const isPast = yr < n.getFullYear() || (yr === n.getFullYear() && mo < n.getMonth());
-          if (isPast) pendingEditMode.current = true;
-          setCurrentYear(yr);
-          setCurrentMonth(mo);
-          setIsEditMonthPickerOpen(false);
-        }}
-        forcePickerOpen={isEditMonthPickerOpen}
-        onPickerClose={() => setIsEditMonthPickerOpen(false)}
+        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
+        isPastMonth={isPastMonth}
+        isEditMode={isEditMode}
+        onEdit={readOnly ? undefined : () => setIsEditMode(true)}
+        onSave={() => setIsEditMode(false)}
+        onCancel={() => { setIsEditMode(false); fetchPaymentsForMonth(currentYear, currentMonth); }}
       />
 
       {/* Gauge */}
