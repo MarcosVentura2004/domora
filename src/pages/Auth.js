@@ -160,7 +160,14 @@ function Auth({ onLogin, onBack, initialStep }) {
     }
   };
 
-  const handleGoogleLogin = () => alert('Google login - Por implementar');
+  const handleGoogleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+  };
   const handleAppleLogin = () => alert('Apple login - Por implementar');
 
   return (
