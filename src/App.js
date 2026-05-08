@@ -54,15 +54,8 @@ function App() {
       setPage('dashboard');
     };
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user && currentPageRef.current !== 'auth') routeAuthenticatedUser(session.user);
-    });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // INITIAL_SESSION se dispara al montar junto a getSession — ignorarlo para evitar
-      // doble llamada a routeAuthenticatedUser. Solo reaccionar a SIGNED_IN real (post-login).
-      if (event === 'INITIAL_SESSION') return;
-      if (event === 'SIGNED_IN' && session?.user && currentPageRef.current !== 'auth') {
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && currentPageRef.current !== 'auth') {
         routeAuthenticatedUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setPage('welcome');
