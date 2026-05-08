@@ -49,24 +49,9 @@ function App() {
         return;
       }
 
-      console.log('[auth] user.id:', user.id);
-      const { data: landlord, error: landlordError } = await supabase
-        .from('landlords')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-      console.log('[auth] landlord:', landlord);
-      console.log('[auth] error:', landlordError);
-
-      if (landlord) {
-        console.log('[auth] → dashboard');
-        setUserType('propietario');
-        localStorage.setItem('userType', 'propietario');
-        setPage('dashboard');
-      } else {
-        console.log('[auth] → welcome');
-        setPage('welcome');
-      }
+      setUserType('propietario');
+      localStorage.setItem('userType', 'propietario');
+      setPage('dashboard');
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -116,19 +101,9 @@ function App() {
       return;
     }
 
-    const { data: landlord } = await supabase
-      .from('landlords')
-      .select('id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (landlord) {
-      setUserType('propietario');
-      localStorage.setItem('userType', 'propietario');
-      setPage('dashboard');
-    } else {
-      setPage('welcome');
-    }
+    setUserType('propietario');
+    localStorage.setItem('userType', 'propietario');
+    setPage('dashboard');
   };
 
   const handleCodeValid = (code) => {
