@@ -37,6 +37,7 @@ export default function MonthNavigator({
   }, [pickerOpen]);
 
   const now = new Date();
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
   const atMinMonth = year === minYear && month === minMonth;
 
   const isCellDisabled = (y, m) => {
@@ -57,7 +58,7 @@ export default function MonthNavigator({
         <div className="month-nav-center">
           <button className="month-nav-btn" type="button" onClick={onPrev} disabled={atMinMonth}>‹</button>
           <button
-            className="month-label month-label-btn"
+            className={`month-label month-label-btn${isCurrentMonth ? ' current-month' : ''}`}
             type="button"
             onClick={() => { setPickerYear(year); setPickerOpen(o => !o); }}
           >
@@ -94,11 +95,12 @@ export default function MonthNavigator({
           <div className="month-picker-grid">
             {MONTHS_ES.map((label, m) => {
               const selected = pickerYear === year && m === month;
+              const current = pickerYear === now.getFullYear() && m === now.getMonth();
               const disabled = isCellDisabled(pickerYear, m);
-              const past = !selected && isCellPast(pickerYear, m);
+              const past = !selected && !current && isCellPast(pickerYear, m);
               return (
                 <button key={m} type="button"
-                  className={`month-picker-cell${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}${past ? ' past' : ''}`}
+                  className={`month-picker-cell${selected && !current ? ' selected' : ''}${current ? ' current' : ''}${disabled ? ' disabled' : ''}${past ? ' past' : ''}`}
                   disabled={disabled}
                   onClick={() => {
                     onJump(pickerYear, m);

@@ -787,6 +787,10 @@ input[type="number"] {
   background: #f5f5f5;
 }
 
+.month-label-btn.current-month {
+  color: #3B6FE8;
+}
+
 /* ===== Month Picker ===== */
 .month-picker {
   position: absolute;
@@ -859,6 +863,12 @@ input[type="number"] {
 
 .month-picker-cell.selected {
   background: #111;
+  color: white;
+  font-weight: 600;
+}
+
+.month-picker-cell.current {
+  background: #3B6FE8;
   color: white;
   font-weight: 600;
 }
