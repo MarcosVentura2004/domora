@@ -209,6 +209,17 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   const [showHistory, setShowHistory] = useState(false);
   const [editingBooking, setEditingBooking] = useState(null);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const optionsMenuRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!showOptionsMenu) return;
+    const handleOutside = (e) => {
+      if (!optionsMenuRef.current?.contains(e.target)) {
+        setShowOptionsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showOptionsMenu]);
   const [showEditProperty, setShowEditProperty] = useState(false);
 
   const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
@@ -457,7 +468,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   return (
     <div className="property-detail-container">
       {/* Header */}
-      <div className="detail-header">
+      <div className="detail-header" ref={optionsMenuRef}>
         <button className="back-button" onClick={onBack}>←</button>
         <h1 className="detail-title">{property.name}</h1>
         <button className="detail-options" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>
