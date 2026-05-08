@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './Dashboard.css';
 import PropertyDetail from './PropertyDetail';
 import VacationalDetail from './VacationalDetail';
@@ -1289,6 +1289,40 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
 // ─────────────────────────────────────────────
 // Modal para añadir / editar propiedad
 // ─────────────────────────────────────────────
+function InfoTooltip({ text }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: 4 }}>
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onFocus={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onBlur={() => setShow(false)}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', lineHeight: 1 }}
+        aria-label="Más información"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="#bbb" strokeWidth="1.2"/>
+          <rect x="7.3" y="7" width="1.4" height="5" rx="0.7" fill="#bbb"/>
+          <circle cx="8" cy="5" r="0.9" fill="#bbb"/>
+        </svg>
+      </button>
+      {show && (
+        <span style={{
+          position: 'absolute', left: '50%', bottom: 'calc(100% + 6px)',
+          transform: 'translateX(-50%)',
+          background: '#333', color: 'white', fontSize: '12px', padding: '7px 10px',
+          borderRadius: '8px', width: '200px', zIndex: 200,
+          lineHeight: 1.5, pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+        }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function AddPropertyModal({ property, onClose, onSave, onDelete }) {
   const [name, setName] = useState(property?.name || '');
   const [status, setStatus] = useState(property?.status || 'vacio');
@@ -1297,6 +1331,8 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
   const [paymentStartDay, setPaymentStartDay] = useState(property?.paymentConfig?.startDay?.toString() || '1');
   const [paymentEndDay, setPaymentEndDay] = useState(property?.paymentConfig?.endDay?.toString() || '5');
   const [ownershipPercentage, setOwnershipPercentage] = useState(property?.ownershipPercentage?.toString() || '100');
+  const [hasVat, setHasVat] = useState(property?.has_vat ?? true);
+  const [hasIrpfRetention, setHasIrpfRetention] = useState(property?.has_irpf_retention ?? false);
 
   // ── Habitaciones ──
   const [numberOfRooms, setNumberOfRooms] = useState('');
@@ -1329,6 +1365,8 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
       price: effectivePrice,
       status,
       ...(status === 'otros' && { customType }),
+      has_vat: status === 'otros' ? hasVat : false,
+      has_irpf_retention: status === 'otros' ? hasIrpfRetention : false,
       ownershipPercentage: parseFloat(ownershipPercentage),
       createdAt: property?.createdAt || new Date().toISOString(),
       expenses: property?.expenses || [],
@@ -1494,6 +1532,61 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
               <p className="payment-range-note" style={{ marginTop: '8px' }}>
                 Este texto aparecerá como descripción del inmueble
               </p>
+            </div>
+          )}
+
+          {/* ── TOGGLES IVA / IRPF (solo para "Otros") ── */}
+          {status === 'otros' && (
+            <div className="form-group">
+              {/* Toggle IVA */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <span style={{ display: 'flex', alignItems: 'center', fontSize: '14px', color: '#333' }}>
+                  ¿Este inmueble lleva IVA?
+                  <InfoTooltip text="Locales, oficinas, naves, trasteros y parkings alquilados de forma independiente llevan IVA (21%)" />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHasVat(v => !v)}
+                  style={{
+                    width: '44px', height: '24px', borderRadius: '12px', border: 'none',
+                    background: hasVat ? '#111' : '#ddd', cursor: 'pointer', position: 'relative',
+                    transition: 'background 0.2s', flexShrink: 0,
+                  }}
+                  aria-label={hasVat ? 'IVA activado' : 'IVA desactivado'}
+                >
+                  <span style={{
+                    position: 'absolute', top: '3px',
+                    left: hasVat ? '23px' : '3px',
+                    width: '18px', height: '18px', borderRadius: '50%',
+                    background: 'white', transition: 'left 0.2s',
+                  }} />
+                </button>
+              </div>
+
+              {/* Toggle retención IRPF */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+                <span style={{ display: 'flex', alignItems: 'center', fontSize: '14px', color: '#333' }}>
+                  ¿El inquilino aplica retención IRPF?
+                  <InfoTooltip text="Si tu inquilino es empresa o autónomo, aplicará una retención del 19% (modelo 115). Recibirás menos cada mes pero ya habrás pagado parte del IRPF" />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHasIrpfRetention(v => !v)}
+                  style={{
+                    width: '44px', height: '24px', borderRadius: '12px', border: 'none',
+                    background: hasIrpfRetention ? '#111' : '#ddd', cursor: 'pointer', position: 'relative',
+                    transition: 'background 0.2s', flexShrink: 0,
+                  }}
+                  aria-label={hasIrpfRetention ? 'Retención IRPF activada' : 'Retención IRPF desactivada'}
+                >
+                  <span style={{
+                    position: 'absolute', top: '3px',
+                    left: hasIrpfRetention ? '23px' : '3px',
+                    width: '18px', height: '18px', borderRadius: '50%',
+                    background: 'white', transition: 'left 0.2s',
+                  }} />
+                </button>
+              </div>
             </div>
           )}
 

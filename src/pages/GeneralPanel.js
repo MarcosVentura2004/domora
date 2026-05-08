@@ -1189,6 +1189,80 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     legalR.getCell(1).font = { italic: true, color: { argb: 'FFBBBBBB' }, size: 7 };
     [28, 14, 20, 20, 18, 16, 22].forEach((w, i) => { ws3.getColumn(i + 1).width = w; });
 
+    // ── HOJA 4: IVA Y RETENCIONES ──
+    const vatProperties = reportableProperties.filter(p => p.has_vat === true);
+    if (vatProperties.length > 0) {
+      const ws4 = wb.addWorksheet('IVA y Retenciones', { views: [{ showGridLines: false }] });
+      const NC4 = 6;
+      addTitleRow(ws4, `IVA Y RETENCIONES — ${selectedYear}`, NC4);
+      ws4.addRow([]).height = 6;
+      addColHeaders(ws4, ['Inmueble', 'Base imponible', 'IVA (21%)', 'Retención IRPF (19%)', 'Total facturado', 'Total recibido']);
+
+      let vatSumBase = 0, vatSumIva = 0, vatSumRetencion = 0, vatSumFacturado = 0, vatSumRecibido = 0;
+
+      vatProperties.forEach((property, idx) => {
+        const data = getYearlyData(property);
+        const baseImponible = data.totalCobrado || 0;
+        const ivaRepercutido = baseImponible * 0.21;
+        const totalFacturado = baseImponible + ivaRepercutido;
+        const retencionIRPF = property.has_irpf_retention ? baseImponible * 0.19 : 0;
+        const totalRecibido = totalFacturado - retencionIRPF;
+
+        const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFF9F9F9');
+        const bdr = { bottom: { style: 'thin', color: { argb: 'FFF0F0F0' } } };
+        const r = ws4.addRow([
+          property.name,
+          baseImponible,
+          ivaRepercutido,
+          property.has_irpf_retention ? retencionIRPF : '—',
+          totalFacturado,
+          totalRecibido,
+        ]);
+        r.height = 22;
+        styleRow(r, NC4, bg, null, { vertical: 'middle', horizontal: 'center' }, bdr);
+        sc(r.getCell(1), null, mkFont(true, 'FF111111'), { horizontal: 'left', vertical: 'middle' });
+        sc(r.getCell(2), null, mkFont(false, 'FF2E7D32'), null, null, euro);
+        sc(r.getCell(3), null, mkFont(false, 'FF1565C0'), null, null, euro);
+        if (property.has_irpf_retention) {
+          sc(r.getCell(4), null, mkFont(false, 'FFF57F17'), null, null, euro);
+        } else {
+          r.getCell(4).font = { color: { argb: 'FFBBBBBB' } };
+          r.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        sc(r.getCell(5), null, mkFont(true, 'FF111111'), null, null, euro);
+        sc(r.getCell(6), null, mkFont(true, totalRecibido >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+
+        vatSumBase += baseImponible;
+        vatSumIva += ivaRepercutido;
+        vatSumRetencion += retencionIRPF;
+        vatSumFacturado += totalFacturado;
+        vatSumRecibido += totalRecibido;
+      });
+
+      ws4.addRow([]).height = 6;
+      const tRow4 = ws4.addRow(['TOTAL', vatSumBase, vatSumIva, vatSumRetencion > 0 ? vatSumRetencion : '—', vatSumFacturado, vatSumRecibido]);
+      tRow4.height = 24;
+      styleRow(tRow4, NC4, mkFill('FFE8E8E8'), mkFont(true, 'FF333333'), { vertical: 'middle', horizontal: 'center' }, { top: { style: 'medium', color: { argb: 'FFAAAAAA' } } });
+      sc(tRow4.getCell(1), null, null, { horizontal: 'left', vertical: 'middle' });
+      sc(tRow4.getCell(2), null, mkFont(true, 'FF2E7D32'), null, null, euro);
+      sc(tRow4.getCell(3), null, mkFont(true, 'FF1565C0'), null, null, euro);
+      if (vatSumRetencion > 0) {
+        sc(tRow4.getCell(4), null, mkFont(true, 'FFF57F17'), null, null, euro);
+      } else {
+        tRow4.getCell(4).font = { color: { argb: 'FFBBBBBB' }, bold: true };
+        tRow4.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+      sc(tRow4.getCell(5), null, mkFont(true, 'FF111111'), null, null, euro);
+      sc(tRow4.getCell(6), null, mkFont(true, vatSumRecibido >= 0 ? 'FF2E7D32' : 'FFC62828'), null, null, euro);
+
+      ws4.addRow([]).height = 8;
+      const noteVat = ws4.addRow(['El IVA repercutido debe declararse trimestralmente (modelo 303). La retención IRPF es ingresada por el inquilino (modelo 115).']);
+      ws4.mergeCells(ws4.rowCount, 1, ws4.rowCount, NC4);
+      noteVat.getCell(1).font = { italic: true, color: { argb: 'FF888888' }, size: 8 };
+
+      [28, 20, 16, 22, 18, 18].forEach((w, i) => { ws4.getColumn(i + 1).width = w; });
+    }
+
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -1572,6 +1646,75 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       // Nota legal final
       doc.setFontSize(6.5); doc.setTextColor(170); doc.setFont('helvetica', 'italic');
       doc.text('Documento informativo generado por Domio. No constituye asesoramiento fiscal ni tiene validez legal ante la Agencia Tributaria.', 14, 291);
+
+      // ── SECCIÓN IVA Y RETENCIONES ──
+      const vatPropertiesPDF = reportableProperties.filter(p => p.has_vat === true);
+      if (vatPropertiesPDF.length > 0) {
+        // Título de sección
+        checkSpace(16);
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
+        doc.text('Inmuebles con IVA y retenciones', 14, y); y += 6;
+        doc.setDrawColor(200); doc.line(14, y, pageW - 14, y); y += 8;
+
+        vatPropertiesPDF.forEach(property => {
+          const data = getYearlyData(property);
+          const baseImponible = data.totalCobrado || 0;
+          const ivaRepercutido = baseImponible * 0.21;
+          const totalFacturado = baseImponible + ivaRepercutido;
+          const retencionIRPF = property.has_irpf_retention ? baseImponible * 0.19 : 0;
+          const totalRecibido = totalFacturado - retencionIRPF;
+
+          const rowCount = property.has_irpf_retention ? 5 : 4;
+          const boxH = 16 + rowCount * 9 + 4;
+          checkSpace(boxH + 8);
+
+          // Caja con borde izquierdo
+          doc.setFillColor(248, 248, 248);
+          doc.roundedRect(14, y, pageW - 28, boxH, 3, 3, 'F');
+          doc.setFillColor(17, 17, 17);
+          doc.rect(14, y, 3, boxH, 'F');
+
+          // Nombre inmueble
+          doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(17);
+          doc.text(property.name, 22, y + 8);
+          doc.setDrawColor(230); doc.line(22, y + 12, pageW - 18, y + 12);
+
+          // Filas de datos
+          let ry = y + 20;
+          const vatRows = [
+            { label: 'Base imponible', value: `${baseImponible.toFixed(2)} €`, color: [17, 17, 17], bold: false },
+            { label: 'IVA repercutido (21%)  ->  Modelo 303', value: `${ivaRepercutido.toFixed(2)} €`, color: [21, 101, 192], bold: false },
+            ...(property.has_irpf_retention ? [{ label: 'Retenci\u00f3n IRPF (19%)  ->  Modelo 115', value: `-${retencionIRPF.toFixed(2)} €`, color: [180, 100, 0], bold: false }] : []),
+            { label: 'Total facturado', value: `${totalFacturado.toFixed(2)} €`, color: [17, 17, 17], bold: true },
+            { label: 'Total recibido', value: `${totalRecibido.toFixed(2)} €`, color: totalRecibido >= 0 ? [46, 125, 50] : [198, 40, 40], bold: true },
+          ];
+
+          vatRows.forEach(row => {
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', row.bold ? 'bold' : 'normal');
+            doc.setTextColor(row.bold ? 17 : 70);
+            doc.text(row.label, 22, ry);
+            doc.setTextColor(...row.color);
+            doc.setFont('helvetica', 'bold');
+            doc.text(row.value, pageW - 18, ry, { align: 'right' });
+            if (!row.bold) {
+              doc.setDrawColor(238); doc.line(22, ry + 2, pageW - 18, ry + 2);
+            }
+            ry += 9;
+          });
+
+          y += boxH + 10;
+        });
+
+        // Nota al pie
+        checkSpace(12);
+        doc.setFontSize(7.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
+        doc.text(
+          'El IVA repercutido debe declararse trimestralmente (modelo 303). La retenci\u00f3n IRPF es ingresada por el inquilino (modelo 115).',
+          14, y
+        );
+        y += 10;
+      }
 
       doc.save(`reporte_fiscal_${selectedYear}.pdf`);
     });
