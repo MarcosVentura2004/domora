@@ -70,9 +70,10 @@ function getPropertyIcon(status, size = 48) {
   );
   if (status === 'por_habitaciones') return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <line x1="12" y1="12" x2="12" y2="21" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-      <line x1="5.5" y1="16.5" x2="18.5" y2="16.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+      <rect x="3"  y="3"  width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <rect x="13" y="3"  width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <rect x="3"  y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+      <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
     </svg>
   );
   if (status === 'vacacional') return (
