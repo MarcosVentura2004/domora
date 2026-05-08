@@ -79,8 +79,8 @@ function getPropertyIcon(status, size = 48) {
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
       <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M9 21V12h6v9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="19" cy="5" r="2" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M19 2.5V2M19 8V7.5M21.5 5H22M16 5h0.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <circle cx="19" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M19 2.5V2M19 8V7.5M21.5 5H22M16 5h0.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
   if (status === 'vacio') return (
