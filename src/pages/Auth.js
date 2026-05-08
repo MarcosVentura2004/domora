@@ -164,7 +164,7 @@ function Auth({ onLogin, onBack, initialStep }) {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: 'https://trydomio.com',
       },
     });
   };
