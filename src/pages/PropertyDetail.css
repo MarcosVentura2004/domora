@@ -793,6 +793,15 @@ input[type="number"] {
   cursor: default;
 }
 
+.month-picker-cell.past {
+  background: #f5f5f5;
+  color: #888;
+}
+
+.month-picker-cell.past:hover:not(:disabled) {
+  background: #e8e8e8;
+}
+
 /* ===== Month Mode Banner ===== */
 .month-mode-banner {
   display: flex;

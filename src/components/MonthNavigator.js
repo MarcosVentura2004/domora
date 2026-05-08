@@ -47,6 +47,12 @@ export default function MonthNavigator({
     return false;
   };
 
+  const isCellPast = (y, m) => {
+    if (y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth())) return false;
+    if (isCellDisabled(y, m)) return false;
+    return true;
+  };
+
   return (
     <div className="month-navigator" ref={wrapperRef}>
       <div className="month-nav-row">
@@ -76,9 +82,10 @@ export default function MonthNavigator({
             {MONTHS_ES.map((label, m) => {
               const selected = pickerYear === year && m === month;
               const disabled = isCellDisabled(pickerYear, m);
+              const past = !selected && isCellPast(pickerYear, m);
               return (
                 <button key={m} type="button"
-                  className={`month-picker-cell${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}`}
+                  className={`month-picker-cell${selected ? ' selected' : ''}${disabled ? ' disabled' : ''}${past ? ' past' : ''}`}
                   disabled={disabled}
                   onClick={() => {
                     onJump(pickerYear, m);

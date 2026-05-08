@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './PropertyDetail.css';
 import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
@@ -223,7 +223,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   }, [showOptionsMenu]);
   const [showEditProperty, setShowEditProperty] = useState(false);
 
-  const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear() - 5, 0, 1);
   const [minYear, setMinYear] = useState(createdAt.getFullYear());
   const [minMonth, setMinMonth] = useState(createdAt.getMonth());
 
@@ -261,6 +261,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
   const [isEditMode, setIsEditMode] = useState(false);
   const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
+  const pendingEditMode = useRef(false);
   const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const ownershipMultiplier = (property.ownershipPercentage || 100) / 100;
@@ -276,7 +277,12 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   };
 
   useEffect(() => {
-    setIsEditMode(false);
+    if (pendingEditMode.current) {
+      pendingEditMode.current = false;
+      setIsEditMode(true);
+    } else {
+      setIsEditMode(false);
+    }
   }, [currentYear, currentMonth]);
 
   // Reservas del mes actual
@@ -534,12 +540,12 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
         onJump={(yr, mo) => {
+          const n = new Date();
+          const isPast = yr < n.getFullYear() || (yr === n.getFullYear() && mo < n.getMonth());
+          if (isPast) pendingEditMode.current = true;
           setCurrentYear(yr);
           setCurrentMonth(mo);
-          if (isEditMonthPickerOpen) {
-            setIsEditMode(true);
-            setIsEditMonthPickerOpen(false);
-          }
+          setIsEditMonthPickerOpen(false);
         }}
         forcePickerOpen={isEditMonthPickerOpen}
         onPickerClose={() => setIsEditMonthPickerOpen(false)}
