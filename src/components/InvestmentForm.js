@@ -722,6 +722,16 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
               />
             )}
           </div>
+          {property.has_vat === true && property.status === 'otros' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="7" stroke="#bbb" strokeWidth="1.2"/>
+                <rect x="7.3" y="7" width="1.4" height="5" rx="0.7" fill="#bbb"/>
+                <circle cx="8" cy="5" r="0.9" fill="#bbb"/>
+              </svg>
+              <span style={{ fontSize: 11, color: '#aaa' }}>Ingresos ajustados sin IVA (21%)</span>
+            </div>
+          )}
         </div>
       )}
 
