@@ -650,12 +650,19 @@ input[type="number"] {
 /* ===== Month Navigator ===== */
 .month-navigator {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  padding: 14px 20px;
+  flex-direction: column;
+  align-items: stretch;
   background: white;
   border-bottom: 1px solid #f0f0f0;
+  position: relative;
+}
+
+.month-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 16px;
 }
 
 .month-nav-btn {
@@ -672,6 +679,7 @@ input[type="number"] {
   border-radius: 50%;
   transition: background 0.15s;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .month-nav-btn:hover:not(:disabled) {
@@ -689,6 +697,182 @@ input[type="number"] {
   color: #333;
   min-width: 160px;
   text-align: center;
+}
+
+.month-label-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.month-label-btn:hover {
+  background: #f5f5f5;
+}
+
+/* ===== Month Picker ===== */
+.month-picker {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+  border: 1px solid #eee;
+  padding: 14px;
+  min-width: 220px;
+}
+
+.month-picker-year-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.month-picker-year-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: #333;
+  transition: background 0.15s;
+}
+
+.month-picker-year-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.month-picker-year-btn:disabled {
+  color: #ccc;
+  cursor: default;
+}
+
+.month-picker-year-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111;
+}
+
+.month-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.month-picker-cell {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 4px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #333;
+  text-align: center;
+  transition: background 0.12s;
+}
+
+.month-picker-cell:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.month-picker-cell.selected {
+  background: #111;
+  color: white;
+  font-weight: 600;
+}
+
+.month-picker-cell.disabled {
+  color: #ccc;
+  cursor: default;
+}
+
+/* ===== Month Mode Banner ===== */
+.month-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 16px;
+  background: #f9f9f9;
+  border-top: 1px solid #f0f0f0;
+  gap: 10px;
+}
+
+.month-mode-banner.edit {
+  background: #FFF8E1;
+  border-top: 1px solid #FFE082;
+}
+
+.month-mode-banner-text {
+  font-size: 12px;
+  color: #888;
+}
+
+.month-mode-banner.edit .month-mode-banner-text {
+  color: #F57C00;
+  font-weight: 500;
+}
+
+.month-mode-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.month-edit-btn {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.month-edit-btn:hover {
+  background: #f5f5f5;
+  border-color: #bbb;
+}
+
+.month-save-btn {
+  background: #111;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.month-save-btn:hover {
+  opacity: 0.85;
+}
+
+.month-cancel-btn {
+  background: none;
+  color: #888;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.month-cancel-btn:hover {
+  background: #f5f5f5;
 }
 
 /* ===== Net income future state ===== */

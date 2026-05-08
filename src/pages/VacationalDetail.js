@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './PropertyDetail.css';
 import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
+import MonthNavigator from '../components/MonthNavigator';
 
 function isFutureMonth(year, month) {
   const now = new Date();
@@ -223,8 +224,43 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   const [showEditProperty, setShowEditProperty] = useState(false);
 
   const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
-  const minYear = createdAt.getFullYear(), minMonth = createdAt.getMonth();
+  const [minYear, setMinYear] = useState(createdAt.getFullYear());
+  const [minMonth, setMinMonth] = useState(createdAt.getMonth());
+
+  useEffect(() => {
+    const fallbackYear = createdAt.getFullYear();
+    const fallbackMonth = createdAt.getMonth();
+    Promise.all([
+      supabase.from('payments').select('year, month')
+        .eq('property_id', String(property.id)).eq('status', 'confirmed')
+        .order('year', { ascending: true }).order('month', { ascending: true }).limit(1),
+      supabase.from('expenses').select('start_date, created_at')
+        .eq('property_id', String(property.id))
+        .order('created_at', { ascending: true }).limit(1),
+    ]).then(([paymentsRes, expensesRes]) => {
+      let yr = fallbackYear, mo = fallbackMonth;
+      const p = paymentsRes.data?.[0];
+      if (p && (p.year < yr || (p.year === yr && p.month < mo))) { yr = p.year; mo = p.month; }
+      const e = expensesRes.data?.[0];
+      if (e) {
+        const dateStr = e.start_date || e.created_at;
+        if (dateStr) {
+          const d = new Date(dateStr.substring(0, 10) + 'T12:00:00');
+          if (!isNaN(d.getTime())) {
+            const ey = d.getFullYear(), em = d.getMonth();
+            if (ey < yr || (ey === yr && em < mo)) { yr = ey; mo = em; }
+          }
+        }
+      }
+      setMinYear(yr);
+      setMinMonth(mo);
+    });
+  }, [property.id]); // eslint-disable-line
+
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
+  const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const ownershipMultiplier = (property.ownershipPercentage || 100) / 100;
 
@@ -236,6 +272,18 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   const goToNextMonth = () => {
     if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
     else setCurrentMonth(m => m + 1);
+  };
+
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [currentYear, currentMonth]);
+
+  const handleSavePastMonth = () => {
+    setIsEditMode(false);
+  };
+
+  const handleCancelPastMonth = () => {
+    setIsEditMode(false);
   };
 
   // Reservas del mes actual
@@ -484,11 +532,20 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
       </div>
 
       {/* Month navigator */}
-      <div className="month-navigator">
-        <button className="month-nav-btn" onClick={goToPrevMonth} disabled={isAtMinMonth}>‹</button>
-        <span className="month-label">{formatMonthYear(currentYear, currentMonth)}</span>
-        <button className="month-nav-btn" onClick={goToNextMonth}>›</button>
-      </div>
+      <MonthNavigator
+        year={currentYear}
+        month={currentMonth}
+        minYear={minYear}
+        minMonth={minMonth}
+        onPrev={goToPrevMonth}
+        onNext={goToNextMonth}
+        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
+        isPastMonth={!isAtCurrentMonth}
+        isEditMode={isEditMode}
+        onEdit={readOnly ? undefined : () => setIsEditMode(true)}
+        onSave={handleSavePastMonth}
+        onCancel={handleCancelPastMonth}
+      />
 
       {/* Gauge */}
       <div className="profitability-section">
@@ -522,10 +579,12 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
       <div className="info-card">
         <div className="card-header" style={{ marginBottom: '14px' }}>
           <h3>Calendario</h3>
-          <button className="payment-btn confirm small" style={{ flex: 'none', padding: '8px 14px' }}
-            onClick={() => { setEditingBooking(null); setShowAddBooking(true); }}>
-            + Reserva
-          </button>
+          {canEdit && (
+            <button className="payment-btn confirm small" style={{ flex: 'none', padding: '8px 14px' }}
+              onClick={() => { setEditingBooking(null); setShowAddBooking(true); }}>
+              + Reserva
+            </button>
+          )}
         </div>
 
         {/* Días semana */}
@@ -548,11 +607,11 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
                 textAlign: 'center', padding: '6px 2px', borderRadius: '8px', fontSize: '13px',
                 background: booking ? platformColor(booking.platform) + '22' : 'transparent',
                 border: isToday ? '2px solid #2196F3' : '2px solid transparent',
-                position: 'relative', cursor: booking ? 'pointer' : 'default',
+                position: 'relative', cursor: booking && canEdit ? 'pointer' : 'default',
                 fontWeight: isToday ? 700 : 400,
                 color: booking ? platformColor(booking.platform) : '#333',
               }}
-                onClick={() => booking && setEditingBooking(booking)}
+                onClick={() => { if (booking && canEdit) { setEditingBooking(booking); setShowAddBooking(true); } }}
               >
                 {day}
                 {booking && (
@@ -598,7 +657,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
                 <div key={booking.id} style={{
                   background: '#f9f9f9', borderRadius: '12px', padding: '12px 14px',
                   borderLeft: `3px solid ${color}`, cursor: 'pointer'
-                }} onClick={() => { setEditingBooking(booking); setShowAddBooking(true); }}>
+                }} onClick={() => { if (!canEdit) return; setEditingBooking(booking); setShowAddBooking(true); }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <p style={{ margin: 0, fontWeight: 600, fontSize: '14px', color: '#111' }}>{booking.guestName}</p>
@@ -677,7 +736,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
                     <span style={{ color: isPendingVariable ? '#FFA726' : undefined }}>
                       {isPendingVariable ? '— €' : `${monthly.toFixed(2)} €/mes`}
                     </span>
-                    {exp.type !== 'puntual' && (
+                    {canEdit && exp.type !== 'puntual' && (
                       <button
                         className="delete-expense"
                         style={{ background: exp.active === false ? '#E8F5E9' : '#FFF8E1', color: exp.active === false ? '#388E3C' : '#F57F17', borderRadius: 6, padding: '2px 7px', fontSize: 11 }}
@@ -686,7 +745,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
                         {exp.active === false ? '▶' : '⏸'}
                       </button>
                     )}
-                    <button className="delete-expense" onClick={() => handleDeleteExpense(exp.id)}>×</button>
+                    {canEdit && <button className="delete-expense" onClick={() => handleDeleteExpense(exp.id)}>×</button>}
                   </div>
                 </div>
               );
@@ -694,11 +753,11 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
             {visibleExpenses.length > 0 && (
               <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{myExpenses.toFixed(2)} €</strong></div>
             )}
-            <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
+            {canEdit && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
           </div>
         )}
         {!showExpenses && (
-          <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
+          canEdit && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
         )}
       </div>
 

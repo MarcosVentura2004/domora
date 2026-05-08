@@ -4,6 +4,7 @@ import PropertyDocuments from './PropertyDocuments';
 import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
+import MonthNavigator from '../components/MonthNavigator';
 
 async function exportRoomToExcel(roomName, historyMonths, accumulated) {
   const ExcelJSMod = await import('exceljs');
@@ -351,11 +352,44 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
 
   const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
-  const minYear = createdAt.getFullYear();
-  const minMonth = createdAt.getMonth();
+  const [minYear, setMinYear] = useState(createdAt.getFullYear());
+  const [minMonth, setMinMonth] = useState(createdAt.getMonth());
+
+  useEffect(() => {
+    const fallbackYear = createdAt.getFullYear();
+    const fallbackMonth = createdAt.getMonth();
+    Promise.all([
+      supabase.from('payments').select('year, month')
+        .eq('property_id', String(property.id)).eq('status', 'confirmed')
+        .order('year', { ascending: true }).order('month', { ascending: true }).limit(1),
+      supabase.from('expenses').select('start_date, created_at')
+        .eq('property_id', String(property.id))
+        .order('created_at', { ascending: true }).limit(1),
+    ]).then(([paymentsRes, expensesRes]) => {
+      let yr = fallbackYear, mo = fallbackMonth;
+      const p = paymentsRes.data?.[0];
+      if (p && (p.year < yr || (p.year === yr && p.month < mo))) { yr = p.year; mo = p.month; }
+      const e = expensesRes.data?.[0];
+      if (e) {
+        const dateStr = e.start_date || e.created_at;
+        if (dateStr) {
+          const d = new Date(dateStr.substring(0, 10) + 'T12:00:00');
+          if (!isNaN(d.getTime())) {
+            const ey = d.getFullYear(), em = d.getMonth();
+            if (ey < yr || (ey === yr && em < mo)) { yr = ey; mo = em; }
+          }
+        }
+      }
+      setMinYear(yr);
+      setMinMonth(mo);
+    });
+  }, [property.id]); // eslint-disable-line
 
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
+  const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const canEdit = isAtCurrentMonth || isEditMode;
 
   const goToPrevMonth = () => {
     if (isAtMinMonth) return;
@@ -367,6 +401,10 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
     else { setCurrentMonth(m => m + 1); }
   };
+
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [currentYear, currentMonth]);
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
   const totalExpenses = visibleExpenses.reduce((sum, e) => {
@@ -481,6 +519,14 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       !(p.year === currentYear && p.month === currentMonth && p.roomId === room.id)
     );
     onUpdate({ ...property, payments: updatedPayments });
+  };
+
+  const handleSavePastMonth = () => {
+    setIsEditMode(false);
+  };
+
+  const handleCancelPastMonth = () => {
+    setIsEditMode(false);
   };
 
   // Abre el modal de confirmar pago con importe editable
@@ -651,11 +697,20 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       </div>
 
       {/* Month Navigator */}
-      <div className="month-navigator">
-        <button className="month-nav-btn" onClick={goToPrevMonth} disabled={isAtMinMonth}>‹</button>
-        <span className="month-label">{formatMonthYear(currentYear, currentMonth)}</span>
-        <button className="month-nav-btn" onClick={goToNextMonth}>›</button>
-      </div>
+      <MonthNavigator
+        year={currentYear}
+        month={currentMonth}
+        minYear={minYear}
+        minMonth={minMonth}
+        onPrev={goToPrevMonth}
+        onNext={goToNextMonth}
+        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
+        isPastMonth={!isAtCurrentMonth}
+        isEditMode={isEditMode}
+        onEdit={() => setIsEditMode(true)}
+        onSave={handleSavePastMonth}
+        onCancel={handleCancelPastMonth}
+      />
 
       {/* Gauge */}
       <div className="profitability-section">
@@ -804,15 +859,17 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                           )}
                           {' · '}{new Date(p.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </p>
-                        <button className="payment-cancel-link" onClick={() => {
-                          const updated = payments.filter(x => !(x.year === p.year && x.month === p.month && x.roomId === p.roomId && x.confirmedAt === p.confirmedAt));
-                          onUpdate({ ...property, payments: updated });
-                        }}>Cancelar</button>
+                        {canEdit && (
+                          <button className="payment-cancel-link" onClick={() => {
+                            const updated = payments.filter(x => !(x.year === p.year && x.month === p.month && x.roomId === p.roomId && x.confirmedAt === p.confirmedAt));
+                            onUpdate({ ...property, payments: updated });
+                          }}>Cancelar</button>
+                        )}
                       </div>
                     ))}
 
                     {/* Pendiente de confirmar */}
-                    {isPending && (
+                    {canEdit && isPending && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small" onClick={() => setShowConfirmModal(true)}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -831,7 +888,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     )}
 
                     {/* Sin pago */}
-                    {!isPaid && !isPending && (
+                    {canEdit && !isPaid && !isPending && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small full-width" onClick={handleMarkAsPending}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -886,10 +943,12 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                       <p className="payment-confirmed-text">
                         ✓ {p.amount} € · {new Date(p.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                       </p>
-                      <button className="payment-cancel-link" onClick={() => {
-                        const updated = payments.filter(x => !(x.year === p.year && x.month === p.month && x.roomId === p.roomId && x.confirmedAt === p.confirmedAt));
-                        onUpdate({ ...property, payments: updated });
-                      }}>Cancelar</button>
+                      {canEdit && (
+                        <button className="payment-cancel-link" onClick={() => {
+                          const updated = payments.filter(x => !(x.year === p.year && x.month === p.month && x.roomId === p.roomId && x.confirmedAt === p.confirmedAt));
+                          onUpdate({ ...property, payments: updated });
+                        }}>Cancelar</button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -952,13 +1011,15 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     <span style={{ color: isPendingVariable ? '#FFA726' : undefined }}>
                       {isPendingVariable ? '— €' : `${monthly.toFixed(2)} €/mes`}
                     </span>
-                    <ExpenseMenu
-                      expenseId={exp.id}
-                      openMenuId={openMenuExpenseId}
-                      setOpenMenuId={setOpenMenuExpenseId}
-                      onEdit={() => { setEditingExpense(exp); setOpenMenuExpenseId(null); }}
-                      onDelete={() => handleDeleteExpense(exp.id)}
-                    />
+                    {canEdit && (
+                      <ExpenseMenu
+                        expenseId={exp.id}
+                        openMenuId={openMenuExpenseId}
+                        setOpenMenuId={setOpenMenuExpenseId}
+                        onEdit={() => { setEditingExpense(exp); setOpenMenuExpenseId(null); }}
+                        onDelete={() => handleDeleteExpense(exp.id)}
+                      />
+                    )}
                   </div>
                 </div>
               );
@@ -966,10 +1027,10 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             {visibleExpenses.length > 0 && (
               <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
             )}
-            <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
+            {canEdit && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
           </div>
         )}
-        {!showExpenses && (
+        {!showExpenses && canEdit && (
           <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
         )}
       </div>

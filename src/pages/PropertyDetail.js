@@ -6,6 +6,7 @@ import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
 import { InvestmentForm } from '../components/InvestmentForm';
+import MonthNavigator from '../components/MonthNavigator';
 
 function isFutureMonth(year, month) {
   const now = new Date();
@@ -383,16 +384,23 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [payments, setPayments] = useState(property.payments || []);
   const [pendingSupabasePayments, setPendingSupabasePayments] = useState([]);
 
-  useEffect(() => {
-    const nowDate = new Date();
+  const now = new Date();
+  const [currentYear, setCurrentYear] = useState(now.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(now.getMonth());
+
+  const fetchPaymentsForMonth = React.useCallback((yr, mo) => {
     supabase
       .from('payments')
       .select('tenant_id, room_id, status, amount, confirmed_at')
       .eq('property_id', String(property.id))
-      .eq('year', nowDate.getFullYear())
-      .eq('month', nowDate.getMonth())
+      .eq('year', yr)
+      .eq('month', mo)
       .then(({ data }) => { if (data) setPendingSupabasePayments(data); });
-  }, [property.id]);
+  }, [property.id]); // eslint-disable-line
+
+  useEffect(() => {
+    fetchPaymentsForMonth(currentYear, currentMonth);
+  }, [currentYear, currentMonth, fetchPaymentsForMonth]);
 
   useEffect(() => {
     if (viewingRoomId !== null) return; // re-fetch when returning from room view, not while inside it
@@ -404,17 +412,46 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
       .then(({ data }) => { if (data) setExpenses(data); });
   }, [property.id, viewingRoomId]); // eslint-disable-line
 
-  const now = new Date();
-  const [currentYear, setCurrentYear] = useState(now.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(now.getMonth());
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
-  const minYear = createdAt.getFullYear();
-  const minMonth = createdAt.getMonth();
+  const [minYear, setMinYear] = useState(createdAt.getFullYear());
+  const [minMonth, setMinMonth] = useState(createdAt.getMonth());
+
+  useEffect(() => {
+    const fallbackYear = createdAt.getFullYear();
+    const fallbackMonth = createdAt.getMonth();
+    Promise.all([
+      supabase.from('payments').select('year, month')
+        .eq('property_id', String(property.id)).eq('status', 'confirmed')
+        .order('year', { ascending: true }).order('month', { ascending: true }).limit(1),
+      supabase.from('expenses').select('start_date, created_at')
+        .eq('property_id', String(property.id))
+        .order('created_at', { ascending: true }).limit(1),
+    ]).then(([paymentsRes, expensesRes]) => {
+      let yr = fallbackYear, mo = fallbackMonth;
+      const p = paymentsRes.data?.[0];
+      if (p && (p.year < yr || (p.year === yr && p.month < mo))) { yr = p.year; mo = p.month; }
+      const e = expensesRes.data?.[0];
+      if (e) {
+        const dateStr = e.start_date || e.created_at;
+        if (dateStr) {
+          const d = new Date(dateStr.substring(0, 10) + 'T12:00:00');
+          if (!isNaN(d.getTime())) {
+            const ey = d.getFullYear(), em = d.getMonth();
+            if (ey < yr || (ey === yr && em < mo)) { yr = ey; mo = em; }
+          }
+        }
+      }
+      setMinYear(yr);
+      setMinMonth(mo);
+    });
+  }, [property.id]); // eslint-disable-line
 
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+  const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
 
   // ✅ NUEVO: manejador de update que también sincroniza rooms localmente
   const handleUpdate = (updatedProperty) => {
@@ -625,6 +662,16 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     }
   };
 
+  const handleSavePastMonth = () => {
+    setIsEditMode(false);
+    fetchPaymentsForMonth(currentYear, currentMonth);
+  };
+
+  const handleCancelPastMonth = () => {
+    setIsEditMode(false);
+    fetchPaymentsForMonth(currentYear, currentMonth);
+  };
+
   const getPaymentStatusInfo = (status) => {
     const statusMap = {
       'paid': { label: 'Pagado', color: 'green', icon: '✓' },
@@ -646,6 +693,10 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); }
     else { setCurrentMonth(m => m + 1); }
   };
+
+  useEffect(() => {
+    setIsEditMode(false);
+  }, [currentYear, currentMonth]);
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth).filter(e => e.active !== false);
 
@@ -1045,11 +1096,20 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
       </div>
 
       {/* Month Navigator */}
-      <div className="month-navigator">
-        <button className="month-nav-btn" onClick={goToPrevMonth} disabled={isAtMinMonth}>‹</button>
-        <span className="month-label">{formatMonthYear(currentYear, currentMonth)}</span>
-        <button className="month-nav-btn" onClick={goToNextMonth}>›</button>
-      </div>
+      <MonthNavigator
+        year={currentYear}
+        month={currentMonth}
+        minYear={minYear}
+        minMonth={minMonth}
+        onPrev={goToPrevMonth}
+        onNext={goToNextMonth}
+        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
+        isPastMonth={!isAtCurrentMonth}
+        isEditMode={isEditMode}
+        onEdit={readOnly ? undefined : () => setIsEditMode(true)}
+        onSave={handleSavePastMonth}
+        onCancel={handleCancelPastMonth}
+      />
 
       {/* Gauge */}
       <div className="profitability-section">
@@ -1119,9 +1179,11 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
         <div className="info-card rooms-card">
           <div className="card-header">
             <h3>Habitaciones</h3>
-            <button className="add-tenant-button" onClick={() => setShowAddRoom(true)}>
-              + Añadir habitación
-            </button>
+            {canEdit && (
+              <button className="add-tenant-button" onClick={() => setShowAddRoom(true)}>
+                + Añadir habitación
+              </button>
+            )}
           </div>
           
           {rooms.length > 0 && (
@@ -1219,7 +1281,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                       </span>
                     </div>
 
-                    {tenantStatus === 'pending_confirmation' && (
+                    {canEdit && tenantStatus === 'pending_confirmation' && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: tenant.amount })}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -1246,13 +1308,15 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                           )}
                           {tenantPayment?.confirmedAt && ' · '}{tenantPayment?.confirmedAt && new Date(tenantPayment.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </p>
-                        <button className="payment-cancel-link" onClick={() => handleCancelPayment(tenant.id)}>
-                          Cancelar
-                        </button>
+                        {canEdit && (
+                          <button className="payment-cancel-link" onClick={() => handleCancelPayment(tenant.id)}>
+                            Cancelar
+                          </button>
+                        )}
                       </div>
                     )}
 
-                    {!readOnly && (tenantStatus === 'pending' || tenantStatus === 'overdue' || tenantStatus === 'not_yet') && (
+                    {canEdit && (tenantStatus === 'pending' || tenantStatus === 'overdue' || tenantStatus === 'not_yet') && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small full-width" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: tenant.amount })}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -1401,13 +1465,15 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                       {expense.frequency === 'manual' && (
                         <PendingVariableInput expenseId={expense.id} onSave={handleUpdateVariableAmount} buttonLabel="+ Importe" />
                       )}
-                      <ExpenseMenu
-                        expenseId={expense.id}
-                        openMenuId={openMenuExpenseId}
-                        setOpenMenuId={setOpenMenuExpenseId}
-                        onEdit={() => { setEditingExpense(expense); setOpenMenuExpenseId(null); }}
-                        onDelete={() => handleDeleteExpense(expense)}
-                      />
+                      {canEdit && (
+                        <ExpenseMenu
+                          expenseId={expense.id}
+                          openMenuId={openMenuExpenseId}
+                          setOpenMenuId={setOpenMenuExpenseId}
+                          onEdit={() => { setEditingExpense(expense); setOpenMenuExpenseId(null); }}
+                          onDelete={() => handleDeleteExpense(expense)}
+                        />
+                      )}
                     </div>
                   </div>
                 );
@@ -1416,10 +1482,10 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
             {visibleExpenses.length > 0 && (
               <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
             )}
-            {!readOnly && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
+            {canEdit && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
           </div>
         )}
-        {!showExpenses && !readOnly && (
+        {!showExpenses && canEdit && (
           <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>
         )}
       </div>
@@ -1429,7 +1495,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
         <div className="info-card tenant-card">
           <div className="card-header">
             <h3>Inquilinos</h3>
-            {(tenants.length === 0 || property.isSharedProperty) && (
+            {canEdit && (tenants.length === 0 || property.isSharedProperty) && (
               <button className="add-tenant-button" onClick={() => setShowAddTenant(true)}>
                 + Añadir inquilino
               </button>
