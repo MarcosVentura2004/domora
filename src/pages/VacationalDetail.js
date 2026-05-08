@@ -260,6 +260,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
   const canEdit = !readOnly && (isAtCurrentMonth || isEditMode);
   const isCurrentMonthFuture = isFutureMonth(currentYear, currentMonth);
   const ownershipMultiplier = (property.ownershipPercentage || 100) / 100;
@@ -277,14 +278,6 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
   useEffect(() => {
     setIsEditMode(false);
   }, [currentYear, currentMonth]);
-
-  const handleSavePastMonth = () => {
-    setIsEditMode(false);
-  };
-
-  const handleCancelPastMonth = () => {
-    setIsEditMode(false);
-  };
 
   // Reservas del mes actual
   const monthBookings = bookings.filter(b => {
@@ -527,6 +520,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
               if (window.confirm('¿Eliminar esta propiedad?')) { onUpdate({ ...property, deleted: true }); onBack(); }
               setShowOptionsMenu(false);
             }}>Eliminar propiedad</button>
+            <button className="detail-option-item" onClick={() => { setIsEditMonthPickerOpen(true); setShowOptionsMenu(false); }}>Editar mes pasado</button>
           </div>
         )}
       </div>
@@ -539,12 +533,16 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
         minMonth={minMonth}
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
-        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
-        isPastMonth={!isAtCurrentMonth}
-        isEditMode={isEditMode}
-        onEdit={readOnly ? undefined : () => setIsEditMode(true)}
-        onSave={handleSavePastMonth}
-        onCancel={handleCancelPastMonth}
+        onJump={(yr, mo) => {
+          setCurrentYear(yr);
+          setCurrentMonth(mo);
+          if (isEditMonthPickerOpen) {
+            setIsEditMode(true);
+            setIsEditMonthPickerOpen(false);
+          }
+        }}
+        forcePickerOpen={isEditMonthPickerOpen}
+        onPickerClose={() => setIsEditMonthPickerOpen(false)}
       />
 
       {/* Gauge */}

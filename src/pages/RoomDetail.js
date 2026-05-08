@@ -389,6 +389,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const isAtMinMonth = currentYear === minYear && currentMonth === minMonth;
   const isAtCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
   const canEdit = isAtCurrentMonth || isEditMode;
 
   const goToPrevMonth = () => {
@@ -519,14 +520,6 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       !(p.year === currentYear && p.month === currentMonth && p.roomId === room.id)
     );
     onUpdate({ ...property, payments: updatedPayments });
-  };
-
-  const handleSavePastMonth = () => {
-    setIsEditMode(false);
-  };
-
-  const handleCancelPastMonth = () => {
-    setIsEditMode(false);
   };
 
   // Abre el modal de confirmar pago con importe editable
@@ -675,6 +668,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             }}>
               Eliminar
             </button>
+            <button className="detail-option-item" onClick={() => { setIsEditMonthPickerOpen(true); setShowOptionsMenu(false); }}>Editar mes pasado</button>
           </div>
         )}
         {codeModal && (
@@ -704,12 +698,16 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
         minMonth={minMonth}
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
-        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
-        isPastMonth={!isAtCurrentMonth}
-        isEditMode={isEditMode}
-        onEdit={() => setIsEditMode(true)}
-        onSave={handleSavePastMonth}
-        onCancel={handleCancelPastMonth}
+        onJump={(yr, mo) => {
+          setCurrentYear(yr);
+          setCurrentMonth(mo);
+          if (isEditMonthPickerOpen) {
+            setIsEditMode(true);
+            setIsEditMonthPickerOpen(false);
+          }
+        }}
+        forcePickerOpen={isEditMonthPickerOpen}
+        onPickerClose={() => setIsEditMonthPickerOpen(false)}
       />
 
       {/* Gauge */}

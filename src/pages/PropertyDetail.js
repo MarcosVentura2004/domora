@@ -413,6 +413,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   }, [property.id, viewingRoomId]); // eslint-disable-line
 
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMonthPickerOpen, setIsEditMonthPickerOpen] = useState(false);
 
   const createdAt = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
   const [minYear, setMinYear] = useState(createdAt.getFullYear());
@@ -662,15 +663,6 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     }
   };
 
-  const handleSavePastMonth = () => {
-    setIsEditMode(false);
-    fetchPaymentsForMonth(currentYear, currentMonth);
-  };
-
-  const handleCancelPastMonth = () => {
-    setIsEditMode(false);
-    fetchPaymentsForMonth(currentYear, currentMonth);
-  };
 
   const getPaymentStatusInfo = (status) => {
     const statusMap = {
@@ -1074,6 +1066,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
               }
               setShowOptionsMenu(false);
             }} className="detail-option-item delete">Eliminar propiedad</button>
+            <button className="detail-option-item" onClick={() => { setIsEditMonthPickerOpen(true); setShowOptionsMenu(false); }}>Editar mes pasado</button>
           </div>
         )}
         {codeModal && (
@@ -1103,12 +1096,16 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
         minMonth={minMonth}
         onPrev={goToPrevMonth}
         onNext={goToNextMonth}
-        onJump={(yr, mo) => { setCurrentYear(yr); setCurrentMonth(mo); }}
-        isPastMonth={!isAtCurrentMonth}
-        isEditMode={isEditMode}
-        onEdit={readOnly ? undefined : () => setIsEditMode(true)}
-        onSave={handleSavePastMonth}
-        onCancel={handleCancelPastMonth}
+        onJump={(yr, mo) => {
+          setCurrentYear(yr);
+          setCurrentMonth(mo);
+          if (isEditMonthPickerOpen) {
+            setIsEditMode(true);
+            setIsEditMonthPickerOpen(false);
+          }
+        }}
+        forcePickerOpen={isEditMonthPickerOpen}
+        onPickerClose={() => setIsEditMonthPickerOpen(false)}
       />
 
       {/* Gauge */}
