@@ -304,6 +304,17 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [showEditRoom, setShowEditRoom] = useState(false);
   const [showEditTenant, setShowEditTenant] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const optionsMenuRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!showOptionsMenu) return;
+    const handleOutside = (e) => {
+      if (!optionsMenuRef.current?.contains(e.target)) {
+        setShowOptionsMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showOptionsMenu]);
   const [codeModal, setCodeModal] = useState(null); // code string when open
   const [showDocuments, setShowDocuments] = useState(false);
   const [showAddTenant, setShowAddTenant] = useState(false);
@@ -583,7 +594,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   return (
     <div className="property-detail-container">
       {/* Header */}
-      <div className="detail-header">
+      <div className="detail-header" ref={optionsMenuRef}>
         <button className="back-button" onClick={onBack}>←</button>
         <h1 className="detail-title">{room.name}</h1>
         <button className="detail-options" onClick={() => setShowOptionsMenu(!showOptionsMenu)}>⋮</button>
