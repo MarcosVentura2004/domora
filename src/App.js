@@ -62,9 +62,23 @@ function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[onAuthStateChange] event:', event, '| user:', session?.user?.email ?? null, '| currentPage:', currentPageRef.current);
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && currentPageRef.current !== 'auth') {
+        // Crear fila en landlords si el login es via Google OAuth y no existe aún
+        if (event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google') {
+          const { data: existingLandlord } = await supabase
+            .from('landlords')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .single();
+
+          if (!existingLandlord) {
+            await supabase
+              .from('landlords')
+              .insert({ user_id: session.user.id });
+          }
+        }
         console.log('[onAuthStateChange] → calling routeAuthenticatedUser');
         routeAuthenticatedUser(session.user);
       } else if (event === 'SIGNED_OUT') {
