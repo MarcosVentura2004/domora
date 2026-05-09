@@ -235,6 +235,15 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setActiveTab('general');
   };
 
+  const handleShareGestor = () => {
+    const shareText = 'Gestiono propiedades con Domio. Si quieres que gestione las tuyas, regístrate en trydomio.com y añádeme como gestor.';
+    if (navigator.share) {
+      navigator.share({ title: 'Gestor en Domio', text: shareText, url: 'https://trydomio.com' }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(shareText).catch(() => {});
+    }
+  };
+
   useEffect(() => {
     if (!tabHeaderRef.current) return;
     const observer = new ResizeObserver(() => {
@@ -565,13 +574,32 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           </div>
         </div>
 
-        <div style={{ padding: '28px 20px 8px' }}>
-          <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '-0.4px' }}>
-            Propietarios
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#aaa' }}>
-            Selecciona el propietario que quieres gestionar
-          </p>
+        <div style={{ padding: '28px 20px 8px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '-0.4px' }}>
+              Propietarios
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#aaa' }}>
+              Selecciona el propietario que quieres gestionar
+            </p>
+          </div>
+          <button
+            onClick={handleShareGestor}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#f5f5f5', border: 'none', borderRadius: 8,
+              padding: '6px 12px', cursor: 'pointer',
+              fontSize: 13, fontWeight: 500, color: '#444',
+              flexShrink: 0, marginTop: 4,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <polyline points="16 6 12 2 8 6" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="12" y1="2" x2="12" y2="15" stroke="#444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Compartir perfil
+          </button>
         </div>
 
         {landlordsList.length === 0 ? (

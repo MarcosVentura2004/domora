@@ -317,12 +317,30 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [showOptionsMenu]);
   const [codeModal, setCodeModal] = useState(null); // code string when open
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = React.useRef(null);
   const [showDocuments, setShowDocuments] = useState(false);
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const handleCopyCode = (code) => {
+    navigator.clipboard?.writeText(code).catch(() => {});
+    setCopied(true);
+    clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShareCode = (code) => {
+    const shareText = `Hola, tu código de acceso para Domio es: ${code}. Entra en trydomio.com para gestionar tu alquiler.`;
+    if (navigator.share) {
+      navigator.share({ title: 'Código de acceso Domio', text: shareText, url: 'https://trydomio.com' }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(shareText).catch(() => {});
+    }
+  };
 
   useEffect(() => {
     if (!room.tenant || !landlordEmail) return;
@@ -640,18 +658,34 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
           </div>
         )}
         {codeModal && (
-          <div className="modal-overlay" onClick={() => setCodeModal(null)}>
+          <div className="modal-overlay" onClick={() => { setCodeModal(null); setCopied(false); clearTimeout(copyTimerRef.current); }}>
             <div className="modal-content" onClick={e => e.stopPropagation()} style={{ textAlign: 'center' }}>
               <div className="modal-header">
                 <h2>Código del inquilino</h2>
-                <button className="modal-close" onClick={() => setCodeModal(null)}>×</button>
+                <button className="modal-close" onClick={() => { setCodeModal(null); setCopied(false); clearTimeout(copyTimerRef.current); }}>×</button>
               </div>
               <p style={{ color: '#888', fontSize: '14px', margin: '0 0 20px' }}>Comparte este código con <strong>{room.tenant?.name}</strong></p>
               <div style={{ background: '#f5f5f5', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
                 <p style={{ fontSize: '36px', fontWeight: '700', letterSpacing: '8px', margin: 0, color: '#111' }}>{codeModal}</p>
               </div>
-              <button className="submit-button" onClick={() => { navigator.clipboard?.writeText(codeModal); }}>
-                Copiar código
+              <button className="submit-button" onClick={() => handleCopyCode(codeModal)}>
+                {copied ? 'Copiado' : 'Copiar código'}
+              </button>
+              <button
+                onClick={() => handleShareCode(codeModal)}
+                style={{
+                  marginTop: 10, width: '100%', padding: '12px', borderRadius: '12px',
+                  background: 'white', border: '1px solid #111', cursor: 'pointer',
+                  fontSize: '15px', fontWeight: '600', color: '#111',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <polyline points="16 6 12 2 8 6" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="12" y1="2" x2="12" y2="15" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Compartir
               </button>
             </div>
           </div>
