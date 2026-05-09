@@ -3,9 +3,9 @@ import { supabase } from '../supabaseClient';
 import { saveFile, getFile } from '../utils/fileStorage';
 import './Settings.css';
 
-async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount }, supabaseClient) {
+async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount, inviteToken }, supabaseClient) {
   const { error } = await supabaseClient.functions.invoke('send-gestor-invite', {
-    body: { gestorEmail, gestorName, landlordName, propertyCount },
+    body: { gestorEmail, gestorName, landlordName, propertyCount, inviteToken },
   });
   if (error) console.warn('[send-gestor-invite] Error:', error);
 }
