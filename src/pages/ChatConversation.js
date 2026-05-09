@@ -181,6 +181,7 @@ export default function ChatConversation({
   const [text, setText] = useState('');
   const [pendingFile, setPendingFile] = useState(null);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
   const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -392,6 +393,7 @@ export default function ChatConversation({
   const handleSend = async () => {
     if (!text.trim() && !pendingFile) return;
     setSending(true);
+    setSendError(null);
     try {
       let attachment_url = null, attachment_name = null, attachment_type = null, attachment_size = null;
 
@@ -456,6 +458,7 @@ export default function ChatConversation({
       setPendingFile(null);
     } catch (err) {
       console.error('Error enviando mensaje:', err);
+      setSendError(err?.message || 'No se pudo enviar el mensaje. Inténtalo de nuevo.');
     } finally {
       setSending(false);
     }
@@ -664,6 +667,23 @@ export default function ChatConversation({
           )}
           <span style={{ flex: 1, fontSize: '13px', color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingFile.fileName}</span>
           <button onClick={() => setPendingFile(null)} style={{ background: 'none', border: 'none', fontSize: '18px', color: '#aaa', cursor: 'pointer', lineHeight: 1 }}>x</button>
+        </div>
+      )}
+
+      {/* Send error */}
+      {sendError && (
+        <div style={{
+          background: '#fff0f0', borderTop: '1px solid #ffd0d0',
+          padding: '8px 16px', fontSize: '13px', color: '#cc0000',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        }}>
+          <span>{sendError}</span>
+          <button
+            onClick={() => setSendError(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#cc0000', fontSize: '16px', lineHeight: 1, padding: '0 4px' }}
+          >
+            x
+          </button>
         </div>
       )}
 
