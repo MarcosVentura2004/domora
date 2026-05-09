@@ -170,6 +170,9 @@ export default function ChatConversation({
   isDirectChat = false,
   otherEmail = null,
   otherName = null,
+  // UUID del destinatario (recipient_id es tipo UUID en BD).
+  // El padre lo pasa directamente para evitar queries adicionales y problemas de RLS.
+  recipientUuid = null,
 }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -182,9 +185,8 @@ export default function ChatConversation({
   const [pendingFile, setPendingFile] = useState(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
-  // UUIDs resueltos para el chat directo (recipient_id es tipo UUID en BD)
+  // UUID del usuario actual (obtenido de auth; nunca de tablas propias para evitar RLS)
   const [myUuid, setMyUuid] = useState(null);
-  const [otherUuid, setOtherUuid] = useState(null);
   const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -200,39 +202,13 @@ export default function ChatConversation({
     return true;
   };
 
-  // ── Resolución de UUIDs para chat directo (recipient_id es UUID en BD) ─────
-  // Intenta obtener el UUID de un email buscando primero en landlords,
-  // luego en gestores. Si ninguno lo tiene, devuelve null.
-  const resolveUuid = async (email) => {
-    if (!email) return null;
-    const { data: landlordRow } = await supabase
-      .from('landlords')
-      .select('user_id')
-      .eq('email', email)
-      .maybeSingle();
-    if (landlordRow?.user_id) return landlordRow.user_id;
-
-    const { data: gestorRow } = await supabase
-      .from('gestores')
-      .select('user_id')
-      .eq('email', email)
-      .maybeSingle();
-    if (gestorRow?.user_id) return gestorRow.user_id;
-
-    return null;
-  };
-
+  // ── UUID propio desde auth (no depende de tablas con RLS) ──────────────────
   useEffect(() => {
     if (!isDirectChat) return;
-    (async () => {
-      // UUID propio: preferimos auth.getUser() para no depender de la tabla
-      const { data: { user } } = await supabase.auth.getUser();
-      const resolvedMine = user?.id || await resolveUuid(currentUserEmail);
-      const resolvedOther = await resolveUuid(otherEmail);
-      setMyUuid(resolvedMine || null);
-      setOtherUuid(resolvedOther || null);
-    })();
-  }, [isDirectChat, currentUserEmail, otherEmail]); // eslint-disable-line
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setMyUuid(user?.id || null);
+    });
+  }, [isDirectChat]);
 
   // ── Carga avatar para un email ──────────────────────────────────────────────
   const ensureAvatarLoaded = async (email) => {
@@ -288,11 +264,11 @@ export default function ChatConversation({
   }, [messages]); // eslint-disable-line
 
   // ── Carga mensajes ──────────────────────────────────────────────────────────
-  // Para chat directo esperamos a que los UUIDs estén resueltos antes de cargar.
+  // Para chat directo esperamos a tener myUuid (de auth) antes de cargar.
   useEffect(() => {
-    if (isDirectChat && myUuid === null && otherUuid === null) return;
+    if (isDirectChat && !myUuid) return;
     loadMessages();
-  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail, myUuid, otherUuid]); // eslint-disable-line
+  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail, myUuid, recipientUuid]); // eslint-disable-line
 
   // ── Marcar como leidos al cargar ────────────────────────────────────────────
   useEffect(() => {
@@ -314,7 +290,7 @@ export default function ChatConversation({
           if (!m.is_direct_message) return;
           // sender_id es texto (email); recipient_id es UUID en BD.
           const isThisConv =
-            (m.sender_id === currentUserEmail && m.recipient_id === otherUuid) ||
+            (m.sender_id === currentUserEmail && m.recipient_id === recipientUuid) ||
             (m.sender_id === otherEmail && m.recipient_id === myUuid);
           if (!isThisConv) return;
           setMessages(prev => [...prev, m]);
@@ -370,7 +346,7 @@ export default function ChatConversation({
 
       // Filtro client-side: comparamos sender_id (texto) y recipient_id (UUID).
       const filtered = (data || []).filter(m =>
-        (m.sender_id === currentUserEmail && m.recipient_id === otherUuid) ||
+        (m.sender_id === currentUserEmail && m.recipient_id === recipientUuid) ||
         (m.sender_id === otherEmail && m.recipient_id === myUuid)
       );
       setMessages(filtered);
@@ -407,7 +383,7 @@ export default function ChatConversation({
         .eq('is_direct_message', true)
         .eq('sender_id', otherEmail)
         .eq(col, false);
-      if (myUuid) q = q.eq('recipient_id', myUuid);
+      if (myUuid) q = q.eq('recipient_id', myUuid); // recipient_id es UUID
       await q;
       return;
     }
@@ -462,8 +438,8 @@ export default function ChatConversation({
       }
 
       if (isDirectChat) {
-        // recipient_id es UUID en BD; lanzamos error explícito si no se pudo resolver.
-        if (!otherUuid) throw new Error('No se pudo resolver el identificador del destinatario. Inténtalo de nuevo.');
+        // recipient_id es UUID en BD; el padre pasa recipientUuid directamente.
+        if (!recipientUuid) throw new Error('No se pudo identificar al destinatario. Vuelve atrás e intenta de nuevo.');
         const { error } = await supabase.from('messages').insert({
           property_id: null,
           room_id: null,
@@ -471,7 +447,7 @@ export default function ChatConversation({
           landlord_email: landlordEmail,
           sender: currentRole === 'gestor' ? 'tenant' : 'landlord',
           sender_id: currentUserEmail,
-          recipient_id: otherUuid,
+          recipient_id: recipientUuid,
           content: text.trim() || null,
           attachment_url,
           attachment_name,
