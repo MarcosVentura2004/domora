@@ -58,6 +58,15 @@ function GestorInvite({ onAccepted }) {
   }, [token]);
 
   const acceptInvite = async (user) => {
+    // 1. Asegurar que existe la fila del gestor en la tabla gestores.
+    //    Settings.js la crea al enviar la invitación, pero hacemos upsert
+    //    por si acaso no existe o la tabla cambió de estructura.
+    const gestorName = user.user_metadata?.name || user.email;
+    await supabase
+      .from('gestores')
+      .upsert({ email: user.email, name: gestorName }, { onConflict: 'email' });
+
+    // 2. Marcar la invitación como aceptada.
     await supabase
       .from('gestor_invites')
       .update({ status: 'accepted' })
