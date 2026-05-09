@@ -121,7 +121,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
       // Generar token de invitación y guardarlo en gestor_invites
       const inviteToken = crypto.randomUUID();
-      await supabase.from('gestor_invites').insert({
+      const { error: insertError } = await supabase.from('gestor_invites').insert({
         token: inviteToken,
         landlord_email: userEmail,
         gestor_email: inviteEmail.trim().toLowerCase(),
@@ -129,6 +129,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         property_count: invitePropertyIds.size,
         status: 'pending',
       });
+
+      if (insertError) {
+        console.error('[gestor_invites] Error guardando invitacion:', insertError);
+        setInviteError('No se pudo guardar la invitacion. Verifica los permisos de la tabla gestor_invites.');
+        return;
+      }
 
       await sendGestorInviteEmail({
         gestorEmail: inviteEmail.trim().toLowerCase(),
