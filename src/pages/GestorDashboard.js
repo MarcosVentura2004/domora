@@ -603,12 +603,26 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                   boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
                 }}
               >
-                <LandlordAvatar
-                  email={landlord.email}
-                  name={landlord.name}
-                  avatarUrl={landlord.avatarUrl}
-                  size={52}
-                />
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <LandlordAvatar
+                    email={landlord.email}
+                    name={landlord.name}
+                    avatarUrl={landlord.avatarUrl}
+                    size={52}
+                  />
+                  {(landlordDirectMeta[landlord.email]?.unread || 0) > 0 && (
+                    <span style={{
+                      position: 'absolute', top: 0, right: 0,
+                      background: '#e74c3c', color: 'white',
+                      borderRadius: '50%', width: 18, height: 18,
+                      fontSize: 11, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      border: '2px solid white',
+                    }}>
+                      {landlordDirectMeta[landlord.email].unread}
+                    </span>
+                  )}
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {landlord.name !== landlord.email ? landlord.name : landlord.email}
