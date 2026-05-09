@@ -190,8 +190,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   const [tenantMeta, setTenantMeta] = useState({});
   const [landlordDirectMeta, setLandlordDirectMeta] = useState({}); // { [landlordEmail]: { unread, lastTs, lastContent } }
   const [metaTick, setMetaTick] = useState(0);
-  // UUID del gestor actual (para filtrar recipient_id que es UUID en BD)
-  const [userUuid, setUserUuid] = useState(null);
 
   const [hasOwnProperties, setHasOwnProperties] = useState(null);
   const [mainTab, setMainTab] = useState('gestion');
@@ -246,13 +244,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setTabHeaderHeight(tabHeaderRef.current.offsetHeight);
     return () => observer.disconnect();
   }, [hasOwnProperties, mainTab]);
-
-  // ── UUID del gestor desde auth (para filtrar recipient_id UUID en BD) ───────
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserUuid(user?.id || null);
-    });
-  }, []);
 
   // ── Carga inicial ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -309,11 +300,11 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
       const { data: landlordRows } = await supabase
         .from('landlords')
-        .select('email, name, user_id')
+        .select('email, name')
         .in('email', uniqueEmails);
 
-      const landlordInfoMap = {};
-      (landlordRows || []).forEach(l => { landlordInfoMap[l.email] = { name: l.name, user_id: l.user_id }; });
+      const landlordNameMap = {};
+      (landlordRows || []).forEach(l => { landlordNameMap[l.email] = l.name; });
 
       const list = uniqueEmails.map(email => {
         const { data: urlData } = supabase.storage
@@ -324,8 +315,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           .some(r => r.can_message !== false);
         return {
           email,
-          name: landlordInfoMap[email]?.name || email,
-          user_id: landlordInfoMap[email]?.user_id || null,
+          name: landlordNameMap[email] || email,
           avatarUrl: urlData?.publicUrl || null,
           propertyCount: accessRows.filter(r => r.landlord_email === email).length,
           canMessage,
@@ -376,23 +366,20 @@ export default function GestorDashboard({ userEmail, onLogout }) {
   }, [properties, accessMap, metaTick]); // eslint-disable-line
 
   // ── Carga unread counts de mensajes directos con propietarios ────────────
-  // recipient_id es UUID en BD; usamos userUuid (gestor) y l.user_id (propietario)
   useEffect(() => {
-    if (!userEmail || !userUuid || landlordsList.length === 0) return;
+    if (!userEmail || landlordsList.length === 0) return;
     supabase
       .from('messages')
       .select('sender_id, recipient_id, content, created_at, read_by_tenant, is_direct_message')
       .eq('is_direct_message', true)
-      .or(`sender_id.eq.${userEmail},recipient_id.eq.${userUuid}`)
+      .or(`sender_id.eq.${userEmail},recipient_id.eq.${userEmail}`)
       .then(({ data }) => {
         if (!data) return;
         const meta = {};
         landlordsList.forEach(l => {
           const convMsgs = data.filter(m =>
-            // gestor → propietario: sender=gestor email, recipient=propietario UUID
-            (m.sender_id === userEmail && l.user_id && m.recipient_id === l.user_id) ||
-            // propietario → gestor: sender=propietario email, recipient=gestor UUID
-            (m.sender_id === l.email && m.recipient_id === userUuid)
+            (m.sender_id === userEmail && m.recipient_id === l.email) ||
+            (m.sender_id === l.email && m.recipient_id === userEmail)
           );
           const unread = convMsgs.filter(m => m.sender_id === l.email && !m.read_by_tenant).length;
           const last = convMsgs[convMsgs.length - 1];
@@ -400,7 +387,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         });
         setLandlordDirectMeta(meta);
       });
-  }, [landlordsList, userEmail, userUuid, metaTick]); // eslint-disable-line
+  }, [landlordsList, userEmail, metaTick]); // eslint-disable-line
 
   // ── Actualizar propiedad ─────────────────────────────────────────────────
   const handleUpdateProperty = async (updatedProperty) => {
@@ -1052,7 +1039,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
                       landlordEmail: landlord.email,
                       otherEmail: landlord.email,
                       otherName: landlord.name !== landlord.email ? landlord.name : landlord.email,
-                      recipientUuid: landlord.user_id,
                       key: `direct_${landlord.email}`,
                     })}
                     style={{
@@ -1202,7 +1188,6 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           propertyName={chatWith.propertyName}
           otherEmail={chatWith.otherEmail}
           otherName={chatWith.otherName}
-          recipientUuid={chatWith.recipientUuid || null}
           currentRole={chatWith.isDirectChat ? 'gestor' : 'landlord'}
           isGroup={chatWith.isGroup || false}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}

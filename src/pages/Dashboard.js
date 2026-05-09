@@ -174,25 +174,16 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
   // tenantMeta: { [key]: { unread: number, lastTs: string, lastContent: string } }
   const [tenantMeta, setTenantMeta] = useState({});
   const [metaTick, setMetaTick] = useState(0);
-  // gestores: list of { email, name, canMessage, user_id }
+  // gestores: list of { email, name, canMessage }
   const [gestores, setGestores] = useState([]);
   // gestorMeta: { [email]: { unread: number, lastTs: string, lastContent: string } }
   const [gestorMeta, setGestorMeta] = useState({});
-  // UUID del propietario actual (para filtrar recipient_id que es UUID en BD)
-  const [userUuid, setUserUuid] = useState(null);
 
   // Broadcast state
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [broadcastSelected, setBroadcastSelected] = useState(new Set());
   const [broadcastText, setBroadcastText] = useState('');
   const [broadcastSending, setBroadcastSending] = useState(false);
-
-  // Obtiene el UUID del propietario actual desde auth (para filtrar recipient_id UUID en BD)
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserUuid(user?.id || null);
-    });
-  }, []);
 
   // Carga unread counts + última actividad de cada conversación (batch)
   useEffect(() => {
@@ -243,24 +234,19 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
         if (list.length === 0) { setGestores([]); return; }
         supabase
           .from('gestores')
-          .select('email, nombre, user_id')
+          .select('email, nombre')
           .in('email', list.map(g => g.email))
           .then(({ data: gestorData }) => {
-            const gestorInfoMap = {};
-            (gestorData || []).forEach(g => { gestorInfoMap[g.email] = { nombre: g.nombre, user_id: g.user_id }; });
-            setGestores(list.map(g => ({
-              ...g,
-              name: gestorInfoMap[g.email]?.nombre || g.email,
-              user_id: gestorInfoMap[g.email]?.user_id || null,
-            })));
+            const nameMap = {};
+            (gestorData || []).forEach(g => { nameMap[g.email] = g.nombre; });
+            setGestores(list.map(g => ({ ...g, name: nameMap[g.email] || g.email })));
           });
       });
   }, [userEmail]); // eslint-disable-line
 
   // Carga unread counts de mensajes directos con gestores
-  // recipient_id es UUID en BD; usamos userUuid (propietario) y g.user_id (gestor)
   useEffect(() => {
-    if (!userEmail || !userUuid || gestores.length === 0) return;
+    if (!userEmail || gestores.length === 0) return;
     supabase
       .from('messages')
       .select('sender_id, recipient_id, content, created_at, read_by_landlord, is_direct_message')
@@ -271,10 +257,8 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
         const meta = {};
         gestores.forEach(g => {
           const convMsgs = data.filter(m =>
-            // propietario → gestor: sender=email, recipient=gestor UUID
-            (m.sender_id === userEmail && g.user_id && m.recipient_id === g.user_id) ||
-            // gestor → propietario: sender=gestor email, recipient=propietario UUID
-            (m.sender_id === g.email && m.recipient_id === userUuid)
+            (m.sender_id === userEmail && m.recipient_id === g.email) ||
+            (m.sender_id === g.email && m.recipient_id === userEmail)
           );
           const unread = convMsgs.filter(m => m.sender_id === g.email && !m.read_by_landlord).length;
           const last = convMsgs[convMsgs.length - 1];
@@ -282,7 +266,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
         });
         setGestorMeta(meta);
       });
-  }, [gestores, userEmail, userUuid, metaTick]); // eslint-disable-line
+  }, [gestores, userEmail, metaTick]); // eslint-disable-line
 
   // Carga avatar del propietario (IndexedDB primero, Supabase Storage como fallback)
   useEffect(() => {
@@ -1156,7 +1140,6 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
                               landlordEmail: userEmail,
                               otherEmail: g.email,
                               otherName: g.name,
-                              recipientUuid: g.user_id,
                               key: `direct_${g.email}`,
                             })}
                             style={{
@@ -1227,7 +1210,6 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
           isDirectChat={chatWith.isDirectChat || false}
           otherEmail={chatWith.isDirectChat ? chatWith.otherEmail : null}
           otherName={chatWith.isDirectChat ? chatWith.otherName : null}
-          recipientUuid={chatWith.isDirectChat ? (chatWith.recipientUuid || null) : null}
           onBack={() => { setChatWith(null); setMetaTick(t => t + 1); }}
           currentUserEmail={userEmail}
           hideAvatar={chatHideAvatar}

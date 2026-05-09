@@ -170,9 +170,6 @@ export default function ChatConversation({
   isDirectChat = false,
   otherEmail = null,
   otherName = null,
-  // UUID del destinatario (recipient_id es tipo UUID en BD).
-  // El padre lo pasa directamente para evitar queries adicionales y problemas de RLS.
-  recipientUuid = null,
 }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -185,8 +182,6 @@ export default function ChatConversation({
   const [pendingFile, setPendingFile] = useState(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
-  // UUID del usuario actual (obtenido de auth; nunca de tablas propias para evitar RLS)
-  const [myUuid, setMyUuid] = useState(null);
   const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -201,14 +196,6 @@ export default function ChatConversation({
     if (msg.sender_id != null) return String(msg.sender_id) === String(myId);
     return true;
   };
-
-  // ── UUID propio desde auth (no depende de tablas con RLS) ──────────────────
-  useEffect(() => {
-    if (!isDirectChat) return;
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setMyUuid(user?.id || null);
-    });
-  }, [isDirectChat]);
 
   // ── Carga avatar para un email ──────────────────────────────────────────────
   const ensureAvatarLoaded = async (email) => {
@@ -264,11 +251,9 @@ export default function ChatConversation({
   }, [messages]); // eslint-disable-line
 
   // ── Carga mensajes ──────────────────────────────────────────────────────────
-  // Para chat directo esperamos a tener myUuid (de auth) antes de cargar.
   useEffect(() => {
-    if (isDirectChat && !myUuid) return;
     loadMessages();
-  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail, myUuid, recipientUuid]); // eslint-disable-line
+  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail]); // eslint-disable-line
 
   // ── Marcar como leidos al cargar ────────────────────────────────────────────
   useEffect(() => {
@@ -288,10 +273,10 @@ export default function ChatConversation({
         }, (payload) => {
           const m = payload.new;
           if (!m.is_direct_message) return;
-          // sender_id es texto (email); recipient_id es UUID en BD.
+          // sender_id y recipient_id son texto (email) tras ALTER COLUMN a text
           const isThisConv =
-            (m.sender_id === currentUserEmail && m.recipient_id === recipientUuid) ||
-            (m.sender_id === otherEmail && m.recipient_id === myUuid);
+            (m.sender_id === currentUserEmail && m.recipient_id === otherEmail) ||
+            (m.sender_id === otherEmail && m.recipient_id === currentUserEmail);
           if (!isThisConv) return;
           setMessages(prev => [...prev, m]);
           markAsRead();
@@ -332,22 +317,17 @@ export default function ChatConversation({
     setLoading(true);
 
     if (isDirectChat) {
-      // sender_id es texto (email); recipient_id es UUID en BD.
-      // Construimos el filtro OR solo con las partes disponibles.
-      let orFilter = `sender_id.eq.${currentUserEmail}`;
-      if (myUuid) orFilter += `,recipient_id.eq.${myUuid}`;
-
+      // sender_id y recipient_id son texto (email) tras ALTER COLUMN a text
       const { data } = await supabase
         .from('messages')
         .select('*')
         .eq('is_direct_message', true)
-        .or(orFilter)
+        .or(`sender_id.eq.${currentUserEmail},recipient_id.eq.${currentUserEmail}`)
         .order('created_at', { ascending: true });
 
-      // Filtro client-side: comparamos sender_id (texto) y recipient_id (UUID).
       const filtered = (data || []).filter(m =>
-        (m.sender_id === currentUserEmail && m.recipient_id === recipientUuid) ||
-        (m.sender_id === otherEmail && m.recipient_id === myUuid)
+        (m.sender_id === currentUserEmail && m.recipient_id === otherEmail) ||
+        (m.sender_id === otherEmail && m.recipient_id === currentUserEmail)
       );
       setMessages(filtered);
       setLoading(false);
@@ -374,17 +354,15 @@ export default function ChatConversation({
 
   async function markAsRead() {
     if (isDirectChat) {
-      // En chat directo, el gestor usa read_by_tenant, el propietario read_by_landlord.
-      // recipient_id es UUID en BD; usamos myUuid si está disponible.
+      // sender_id y recipient_id son texto (email) tras ALTER COLUMN a text
       const col = currentRole === 'gestor' ? 'read_by_tenant' : 'read_by_landlord';
-      let q = supabase
+      await supabase
         .from('messages')
         .update({ [col]: true })
         .eq('is_direct_message', true)
         .eq('sender_id', otherEmail)
+        .eq('recipient_id', currentUserEmail)
         .eq(col, false);
-      if (myUuid) q = q.eq('recipient_id', myUuid); // recipient_id es UUID
-      await q;
       return;
     }
 
@@ -438,8 +416,7 @@ export default function ChatConversation({
       }
 
       if (isDirectChat) {
-        // recipient_id es UUID en BD; el padre pasa recipientUuid directamente.
-        if (!recipientUuid) throw new Error('No se pudo identificar al destinatario. Vuelve atrás e intenta de nuevo.');
+        // sender_id y recipient_id son texto (email) tras ALTER COLUMN a text
         const { error } = await supabase.from('messages').insert({
           property_id: null,
           room_id: null,
@@ -447,7 +424,7 @@ export default function ChatConversation({
           landlord_email: landlordEmail,
           sender: currentRole === 'gestor' ? 'tenant' : 'landlord',
           sender_id: currentUserEmail,
-          recipient_id: recipientUuid,
+          recipient_id: otherEmail,
           content: text.trim() || null,
           attachment_url,
           attachment_name,
