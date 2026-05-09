@@ -252,10 +252,10 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
       const { data: gestorRow } = await supabase
         .from('gestores')
-        .select('name')
+        .select('nombre')
         .eq('email', userEmail)
         .maybeSingle();
-      setGestorName(gestorRow?.name || userEmail);
+      setGestorName(gestorRow?.nombre || userEmail);
 
       const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
       if (localAvatar) {

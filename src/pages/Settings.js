@@ -76,9 +76,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     const emails = [...new Set(accessRows.map(r => r.gestor_email))];
     const { data: gestorRows } = await supabase
       .from('gestores')
-      .select('email, name')
+      .select('email, nombre')
       .in('email', emails);
-    const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.name]));
+    const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.nombre]));
 
     const grouped = emails.map(email => {
       const firstRow = accessRows.find(r => r.gestor_email === email);
@@ -103,7 +103,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     setInviteError('');
     try {
       await supabase.from('gestores').upsert(
-        { email: inviteEmail.trim().toLowerCase(), name: inviteName.trim() },
+        { email: inviteEmail.trim().toLowerCase(), nombre: inviteName.trim() },
         { onConflict: 'email' }
       );
 
@@ -212,10 +212,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       if (role === 'gestor') {
         const { data: gestor } = await supabase
           .from('gestores')
-          .select('name')
+          .select('nombre')
           .eq('email', userEmail)
-          .single();
-        if (gestor?.name) setProfileName(gestor.name);
+          .maybeSingle();
+        if (gestor?.nombre) setProfileName(gestor.nombre);
       } else if (role === 'landlord') {
         const { data: landlord } = await supabase
           .from('landlords')
@@ -293,7 +293,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
     if (role === 'gestor') {
       await supabase.from('gestores').upsert(
-        { email: userEmail, name: profileName.trim() },
+        { email: userEmail, nombre: profileName.trim() },
         { onConflict: 'email' }
       );
     } else {

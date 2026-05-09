@@ -64,7 +64,7 @@ function GestorInvite({ onAccepted }) {
     const gestorName = user.user_metadata?.name || user.email;
     await supabase
       .from('gestores')
-      .upsert({ email: user.email, name: gestorName }, { onConflict: 'email' });
+      .upsert({ email: user.email, nombre: gestorName }, { onConflict: 'email' });
 
     // 2. Marcar la invitación como aceptada.
     await supabase

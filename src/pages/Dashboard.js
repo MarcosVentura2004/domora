@@ -234,11 +234,11 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
         if (list.length === 0) { setGestores([]); return; }
         supabase
           .from('gestores')
-          .select('email, name')
+          .select('email, nombre')
           .in('email', list.map(g => g.email))
           .then(({ data: gestorData }) => {
             const nameMap = {};
-            (gestorData || []).forEach(g => { nameMap[g.email] = g.name; });
+            (gestorData || []).forEach(g => { nameMap[g.email] = g.nombre; });
             setGestores(list.map(g => ({ ...g, name: nameMap[g.email] || g.email })));
           });
       });

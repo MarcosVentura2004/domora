@@ -224,10 +224,10 @@ export default function ChatConversation({
     } else {
       const { data: gestorRow } = await supabase
         .from('gestores')
-        .select('name')
+        .select('nombre')
         .eq('email', email)
         .maybeSingle();
-      if (gestorRow?.name) name = gestorRow.name;
+      if (gestorRow?.nombre) name = gestorRow.nombre;
     }
 
     setAvatarCache(prev => ({ ...prev, [email]: { url, name, loaded: true } }));
