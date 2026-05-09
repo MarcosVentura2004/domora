@@ -7,10 +7,15 @@ import GestorDashboard from './pages/GestorDashboard';
 import CodeEntry from './pages/CodeEntry';
 import InquilinoHome from './pages/InquilinoHome';
 import Planes from './pages/Planes';
+import ResetPassword from './pages/ResetPassword';
 import './App.css';
 
 function App() {
-  const initialPage = window.location.pathname === '/planes' ? 'planes' : 'welcome';
+  const initialPage = window.location.pathname === '/planes'
+    ? 'planes'
+    : window.location.pathname === '/reset-password'
+    ? 'reset-password'
+    : 'welcome';
   const [currentPage, rawSetPage] = useState(initialPage);
   const currentPageRef = useRef(initialPage);
   const setPage = (page) => { currentPageRef.current = page; rawSetPage(page); };
@@ -23,6 +28,7 @@ function App() {
   useEffect(() => {
     // Paginas publicas que nunca deben ser redirigidas por logica de sesion
     if (currentPageRef.current === 'planes') return;
+    if (currentPageRef.current === 'reset-password') return;
 
     // Inquilinos no tienen cuenta Supabase — restaurar desde localStorage
     if (localStorage.getItem('userType') === 'inquilino') {
@@ -210,6 +216,10 @@ function App() {
 
       {currentPage === 'planes' && (
         <Planes />
+      )}
+
+      {currentPage === 'reset-password' && (
+        <ResetPassword onSuccess={() => setPage('welcome')} />
       )}
 
     </div>

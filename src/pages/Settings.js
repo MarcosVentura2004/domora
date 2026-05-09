@@ -295,7 +295,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   const handlePasswordReset = async () => {
     setPasswordSending(true);
-    await supabase.auth.resetPasswordForEmail(userEmail);
+    await supabase.auth.resetPasswordForEmail(userEmail, {
+      redirectTo: 'https://trydomio.com/reset-password',
+    });
     setPasswordSending(false);
     setPasswordSent(true);
   };
