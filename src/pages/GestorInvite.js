@@ -5,7 +5,7 @@ import './Auth.css';
 function GestorInvite({ onAccepted }) {
   const token = new URLSearchParams(window.location.search).get('token');
 
-  const [loadState, setLoadState] = useState('loading'); // loading | invalid | accepted | ready
+  const [loadState, setLoadState] = useState('loading'); // loading | invalid | accepted | wrong-user | ready
   const [invite, setInvite] = useState(null);
   const [authMode, setAuthMode] = useState('login'); // login | register
   const [alreadyLoggedIn, setAlreadyLoggedIn] = useState(false);
@@ -40,7 +40,16 @@ function GestorInvite({ onAccepted }) {
       if (fetchError || !data) { setLoadState('invalid'); return; }
 
       setInvite(data);
-      if (!session?.user) setEmail(data.gestor_email);
+
+      if (session?.user) {
+        // Si el email de sesión no coincide con el de la invitación, bloquear.
+        if (session.user.email.toLowerCase() !== data.gestor_email.toLowerCase()) {
+          setLoadState('wrong-user');
+          return;
+        }
+      } else {
+        setEmail(data.gestor_email);
+      }
 
       setLoadState(data.status === 'accepted' ? 'accepted' : 'ready');
     }
@@ -121,6 +130,31 @@ function GestorInvite({ onAccepted }) {
               Este enlace de invitacion no existe o ha expirado.<br/>
               Pide al propietario que te envie una nueva invitacion.
             </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadState === 'wrong-user') {
+    const handleSignOut = async () => {
+      await supabase.auth.signOut();
+      window.location.reload();
+    };
+    return (
+      <div className="auth-container">
+        <div className="auth-content">
+          <h1 className="auth-logo">Domio</h1>
+          <div className="auth-form">
+            <h2>Cuenta incorrecta</h2>
+            <p className="auth-subtitle">
+              Esta invitacion es para{' '}
+              <strong>{invite?.gestor_email}</strong>.<br/>
+              Cierra sesion e inicia con esa cuenta para aceptarla.
+            </p>
+            <button className="continue-button" onClick={handleSignOut}>
+              Cerrar sesion
+            </button>
           </div>
         </div>
       </div>
