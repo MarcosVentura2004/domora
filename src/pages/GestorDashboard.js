@@ -254,7 +254,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
         .from('gestores')
         .select('name')
         .eq('email', userEmail)
-        .single();
+        .maybeSingle();
       setGestorName(gestorRow?.name || userEmail);
 
       const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
