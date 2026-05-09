@@ -27,12 +27,13 @@ function App() {
   const [tenantCodes, setTenantCodes] = useState([]);
   const [authInitialStep, setAuthInitialStep] = useState('login');
 
+  // Paginas que gestionan su propia autenticacion — el listener global no debe
+  // redirigirlas bajo ninguna circunstancia.
+  const PUBLIC_PAGES = ['planes', 'reset-password', 'gestor-invite'];
+
   // Restore session on mount
   useEffect(() => {
-    // Paginas publicas que nunca deben ser redirigidas por logica de sesion
-    if (currentPageRef.current === 'planes') return;
-    if (currentPageRef.current === 'reset-password') return;
-    if (currentPageRef.current === 'gestor-invite') return;
+    if (PUBLIC_PAGES.includes(currentPageRef.current)) return;
 
     // Inquilinos no tienen cuenta Supabase — restaurar desde localStorage
     if (localStorage.getItem('userType') === 'inquilino') {
@@ -44,6 +45,9 @@ function App() {
     }
 
     const routeAuthenticatedUser = async (user) => {
+      // Doble guarda: si entre callbacks el usuario navegó a una página pública, no redirigir.
+      if (PUBLIC_PAGES.includes(currentPageRef.current)) return;
+
       setUserEmail(user.email);
 
       const { data: accessData } = await supabase
@@ -66,6 +70,7 @@ function App() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('[getSession] user:', session?.user?.email ?? null, '| currentPage:', currentPageRef.current);
+      if (PUBLIC_PAGES.includes(currentPageRef.current)) return;
       if (session?.user && currentPageRef.current !== 'auth') {
         console.log('[getSession] → calling routeAuthenticatedUser');
         routeAuthenticatedUser(session.user);
@@ -74,6 +79,10 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[onAuthStateChange] event:', event, '| user:', session?.user?.email ?? null, '| currentPage:', currentPageRef.current);
+
+      // Si estamos en una página pública, ignorar todos los eventos de auth.
+      if (PUBLIC_PAGES.includes(currentPageRef.current)) return;
+
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && currentPageRef.current !== 'auth') {
         // Crear fila en landlords si el login es via Google OAuth y no existe aún
         if (event === 'SIGNED_IN' && session.user.app_metadata?.provider === 'google') {
@@ -100,7 +109,7 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectUserType = (type) => {
     setUserType(type);
