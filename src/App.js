@@ -54,8 +54,18 @@ function App() {
       setPage('dashboard');
     };
 
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[getSession] user:', session?.user?.email ?? null, '| currentPage:', currentPageRef.current);
+      if (session?.user && currentPageRef.current !== 'auth') {
+        console.log('[getSession] → calling routeAuthenticatedUser');
+        routeAuthenticatedUser(session.user);
+      }
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[onAuthStateChange] event:', event, '| user:', session?.user?.email ?? null, '| currentPage:', currentPageRef.current);
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && currentPageRef.current !== 'auth') {
+        console.log('[onAuthStateChange] → calling routeAuthenticatedUser');
         routeAuthenticatedUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setPage('welcome');
