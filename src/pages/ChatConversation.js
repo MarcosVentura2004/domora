@@ -182,6 +182,9 @@ export default function ChatConversation({
   const [pendingFile, setPendingFile] = useState(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
+  // UUIDs resueltos para el chat directo (recipient_id es tipo UUID en BD)
+  const [myUuid, setMyUuid] = useState(null);
+  const [otherUuid, setOtherUuid] = useState(null);
   const messagesContainerRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -196,6 +199,40 @@ export default function ChatConversation({
     if (msg.sender_id != null) return String(msg.sender_id) === String(myId);
     return true;
   };
+
+  // ── Resolución de UUIDs para chat directo (recipient_id es UUID en BD) ─────
+  // Intenta obtener el UUID de un email buscando primero en landlords,
+  // luego en gestores. Si ninguno lo tiene, devuelve null.
+  const resolveUuid = async (email) => {
+    if (!email) return null;
+    const { data: landlordRow } = await supabase
+      .from('landlords')
+      .select('user_id')
+      .eq('email', email)
+      .maybeSingle();
+    if (landlordRow?.user_id) return landlordRow.user_id;
+
+    const { data: gestorRow } = await supabase
+      .from('gestores')
+      .select('user_id')
+      .eq('email', email)
+      .maybeSingle();
+    if (gestorRow?.user_id) return gestorRow.user_id;
+
+    return null;
+  };
+
+  useEffect(() => {
+    if (!isDirectChat) return;
+    (async () => {
+      // UUID propio: preferimos auth.getUser() para no depender de la tabla
+      const { data: { user } } = await supabase.auth.getUser();
+      const resolvedMine = user?.id || await resolveUuid(currentUserEmail);
+      const resolvedOther = await resolveUuid(otherEmail);
+      setMyUuid(resolvedMine || null);
+      setOtherUuid(resolvedOther || null);
+    })();
+  }, [isDirectChat, currentUserEmail, otherEmail]); // eslint-disable-line
 
   // ── Carga avatar para un email ──────────────────────────────────────────────
   const ensureAvatarLoaded = async (email) => {
@@ -251,9 +288,11 @@ export default function ChatConversation({
   }, [messages]); // eslint-disable-line
 
   // ── Carga mensajes ──────────────────────────────────────────────────────────
+  // Para chat directo esperamos a que los UUIDs estén resueltos antes de cargar.
   useEffect(() => {
+    if (isDirectChat && myUuid === null && otherUuid === null) return;
     loadMessages();
-  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail]); // eslint-disable-line
+  }, [isDirectChat, landlordEmail, propertyId, roomId, tenantId, currentUserEmail, otherEmail, myUuid, otherUuid]); // eslint-disable-line
 
   // ── Marcar como leidos al cargar ────────────────────────────────────────────
   useEffect(() => {
@@ -273,9 +312,10 @@ export default function ChatConversation({
         }, (payload) => {
           const m = payload.new;
           if (!m.is_direct_message) return;
+          // sender_id es texto (email); recipient_id es UUID en BD.
           const isThisConv =
-            (m.sender_id === currentUserEmail && m.recipient_id === otherEmail) ||
-            (m.sender_id === otherEmail && m.recipient_id === currentUserEmail);
+            (m.sender_id === currentUserEmail && m.recipient_id === otherUuid) ||
+            (m.sender_id === otherEmail && m.recipient_id === myUuid);
           if (!isThisConv) return;
           setMessages(prev => [...prev, m]);
           markAsRead();
@@ -316,16 +356,22 @@ export default function ChatConversation({
     setLoading(true);
 
     if (isDirectChat) {
+      // sender_id es texto (email); recipient_id es UUID en BD.
+      // Construimos el filtro OR solo con las partes disponibles.
+      let orFilter = `sender_id.eq.${currentUserEmail}`;
+      if (myUuid) orFilter += `,recipient_id.eq.${myUuid}`;
+
       const { data } = await supabase
         .from('messages')
         .select('*')
         .eq('is_direct_message', true)
-        .or(`sender_id.eq.${currentUserEmail},recipient_id.eq.${currentUserEmail}`)
+        .or(orFilter)
         .order('created_at', { ascending: true });
 
+      // Filtro client-side: comparamos sender_id (texto) y recipient_id (UUID).
       const filtered = (data || []).filter(m =>
-        (m.sender_id === currentUserEmail && m.recipient_id === otherEmail) ||
-        (m.sender_id === otherEmail && m.recipient_id === currentUserEmail)
+        (m.sender_id === currentUserEmail && m.recipient_id === otherUuid) ||
+        (m.sender_id === otherEmail && m.recipient_id === myUuid)
       );
       setMessages(filtered);
       setLoading(false);
@@ -352,15 +398,17 @@ export default function ChatConversation({
 
   async function markAsRead() {
     if (isDirectChat) {
-      // En chat directo, el gestor usa read_by_tenant, el propietario read_by_landlord
+      // En chat directo, el gestor usa read_by_tenant, el propietario read_by_landlord.
+      // recipient_id es UUID en BD; usamos myUuid si está disponible.
       const col = currentRole === 'gestor' ? 'read_by_tenant' : 'read_by_landlord';
-      await supabase
+      let q = supabase
         .from('messages')
         .update({ [col]: true })
         .eq('is_direct_message', true)
         .eq('sender_id', otherEmail)
-        .eq('recipient_id', currentUserEmail)
         .eq(col, false);
+      if (myUuid) q = q.eq('recipient_id', myUuid);
+      await q;
       return;
     }
 
@@ -414,6 +462,8 @@ export default function ChatConversation({
       }
 
       if (isDirectChat) {
+        // recipient_id es UUID en BD; lanzamos error explícito si no se pudo resolver.
+        if (!otherUuid) throw new Error('No se pudo resolver el identificador del destinatario. Inténtalo de nuevo.');
         const { error } = await supabase.from('messages').insert({
           property_id: null,
           room_id: null,
@@ -421,7 +471,7 @@ export default function ChatConversation({
           landlord_email: landlordEmail,
           sender: currentRole === 'gestor' ? 'tenant' : 'landlord',
           sender_id: currentUserEmail,
-          recipient_id: otherEmail,
+          recipient_id: otherUuid,
           content: text.trim() || null,
           attachment_url,
           attachment_name,
