@@ -8,6 +8,7 @@ import CodeEntry from './pages/CodeEntry';
 import InquilinoHome from './pages/InquilinoHome';
 import Planes from './pages/Planes';
 import ResetPassword from './pages/ResetPassword';
+import GestorInvite from './pages/GestorInvite';
 import './App.css';
 
 function App() {
@@ -15,6 +16,8 @@ function App() {
     ? 'planes'
     : window.location.pathname === '/reset-password'
     ? 'reset-password'
+    : window.location.pathname === '/gestor-invite'
+    ? 'gestor-invite'
     : 'welcome';
   const [currentPage, rawSetPage] = useState(initialPage);
   const currentPageRef = useRef(initialPage);
@@ -29,6 +32,7 @@ function App() {
     // Paginas publicas que nunca deben ser redirigidas por logica de sesion
     if (currentPageRef.current === 'planes') return;
     if (currentPageRef.current === 'reset-password') return;
+    if (currentPageRef.current === 'gestor-invite') return;
 
     // Inquilinos no tienen cuenta Supabase — restaurar desde localStorage
     if (localStorage.getItem('userType') === 'inquilino') {
@@ -220,6 +224,17 @@ function App() {
 
       {currentPage === 'reset-password' && (
         <ResetPassword onSuccess={() => setPage('welcome')} />
+      )}
+
+      {currentPage === 'gestor-invite' && (
+        <GestorInvite
+          onAccepted={(user) => {
+            setUserEmail(user.email);
+            setUserType('gestor');
+            localStorage.setItem('userType', 'gestor');
+            setPage('gestor-dashboard');
+          }}
+        />
       )}
 
     </div>

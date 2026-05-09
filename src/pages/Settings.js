@@ -118,11 +118,24 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
       const landlordRow = await supabase.from('landlords').select('name').eq('email', userEmail).single();
       const landlordName = landlordRow?.data?.name || userEmail;
+
+      // Generar token de invitación y guardarlo en gestor_invites
+      const inviteToken = crypto.randomUUID();
+      await supabase.from('gestor_invites').insert({
+        token: inviteToken,
+        landlord_email: userEmail,
+        gestor_email: inviteEmail.trim().toLowerCase(),
+        landlord_name: landlordName,
+        property_count: invitePropertyIds.size,
+        status: 'pending',
+      });
+
       await sendGestorInviteEmail({
         gestorEmail: inviteEmail.trim().toLowerCase(),
         gestorName: inviteName.trim(),
         landlordName,
         propertyCount: invitePropertyIds.size,
+        inviteToken,
       }, supabase);
 
       setInviteSent(true);
