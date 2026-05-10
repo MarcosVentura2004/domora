@@ -122,6 +122,11 @@
   color: #C62828;
 }
 
+.payment-badge.partial {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
 .payment-badge.expired {
   background: #F5F5F5;
   color: #aaa;

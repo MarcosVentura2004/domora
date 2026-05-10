@@ -91,6 +91,8 @@ export default function InquilinoDetail({ rental, onBack }) {
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [docs, setDocs] = useState([]);
   const [supabasePayment, setSupabasePayment] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentAmountInput, setPaymentAmountInput] = useState('');
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [showIncidents, setShowIncidents] = useState(false);
@@ -103,7 +105,7 @@ export default function InquilinoDetail({ rental, onBack }) {
       const val = rental.roomId || rental.tenantId;
       supabase
         .from('payments')
-        .select('status, amount')
+        .select('status, amount, partial_amount')
         .eq(col, val)
         .eq('year', now.getFullYear())
         .eq('month', now.getMonth())
@@ -124,7 +126,7 @@ export default function InquilinoDetail({ rental, onBack }) {
     // Historial completo
     const query = supabase
       .from('payments')
-      .select('year, month, status, amount')
+      .select('year, month, status, amount, partial_amount')
       .order('year', { ascending: false })
       .order('month', { ascending: false });
     if (rental.roomId) {
@@ -137,8 +139,9 @@ export default function InquilinoDetail({ rental, onBack }) {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [rental.code, rental.roomId, rental.tenantId]);
 
-  const isPaid = supabasePayment?.status === 'confirmed';
-  const isSent = !isPaid && supabasePayment?.status === 'pending';
+  const isPaid    = supabasePayment?.status === 'confirmed';
+  const isPartial = supabasePayment?.status === 'partial';
+  const isSent    = !isPaid && !isPartial && supabasePayment?.status === 'pending';
   const canConfirm = !isPaid && !isSent;
 
   const historyPayments = paymentHistory;
@@ -146,23 +149,40 @@ export default function InquilinoDetail({ rental, onBack }) {
   const landlordDocs = docs.filter(d => d.uploaded_by === 'landlord' && d.shared_with_tenant);
   const myDocs = docs.filter(d => d.uploaded_by === 'tenant');
 
-  const handleConfirmPayment = async () => {
-    if (supabasePayment) {
+  const handleConfirmPayment = () => {
+    if (isSent) {
       alert('Ya has enviado el pago este mes.');
       return;
     }
+    const alreadyReceived = isPartial && supabasePayment?.partial_amount
+      ? supabasePayment.partial_amount
+      : 0;
+    const remaining = Math.max(0, rental.rent - alreadyReceived);
+    setPaymentAmountInput(String(remaining || rental.rent));
+    setShowPaymentModal(true);
+  };
+
+  const handleSubmitPaymentAmount = async () => {
+    const amount = parseFloat(paymentAmountInput.replace(',', '.'));
+    if (!amount || amount <= 0) return;
+
     const now = new Date();
     const { data, error } = await supabase.rpc('mark_payment_pending', {
       p_code: rental.code,
       p_year: now.getFullYear(),
       p_month: now.getMonth(),
-      p_amount: rental.rent,
+      p_amount: amount,
     });
     if (error || data?.error) {
-      alert('Ya has enviado el pago este mes.');
+      alert('Error al enviar el pago. Inténtalo de nuevo.');
       return;
     }
-    setSupabasePayment({ status: 'pending' });
+    setShowPaymentModal(false);
+    setSupabasePayment({
+      status: amount < rental.rent ? 'partial' : 'pending',
+      amount,
+      partial_amount: amount < rental.rent ? amount : null,
+    });
   };
 
   // Cargar documentos desde Supabase (tabla documents + shared_files globales)
@@ -380,9 +400,16 @@ export default function InquilinoDetail({ rental, onBack }) {
           <p className="inquilino-rent-amount">{rental.rent} €</p>
           <p className="inquilino-rent-label">al mes</p>
           <div className="inquilino-payment-status">
-            {isPaid && <span className="payment-badge paid">Pago confirmado por el propietario</span>}
-            {isSent && <span className="payment-badge sent">Pago enviado — esperando confirmación</span>}
-            {canConfirm && (
+            {isPaid    && <span className="payment-badge paid">Pago confirmado por el propietario</span>}
+            {isPartial && (
+              <span className="payment-badge partial">
+                {supabasePayment?.partial_amount != null
+                  ? `${Number(supabasePayment.partial_amount).toFixed(2)}€ recibidos — pago parcial`
+                  : 'Pago parcial registrado'}
+              </span>
+            )}
+            {isSent    && <span className="payment-badge sent">Pago enviado — esperando confirmación</span>}
+            {canConfirm && !isPartial && (
               <span className="payment-badge pending">
                 Pago pendiente (días {rental.paymentConfig.startDay}–{rental.paymentConfig.endDay})
               </span>
@@ -392,11 +419,14 @@ export default function InquilinoDetail({ rental, onBack }) {
 
         {/* Confirmar pago */}
         <button
-          className={`inquilino-action-btn primary${!canConfirm ? ' disabled' : ''}`}
+          className={`inquilino-action-btn primary${(!canConfirm) ? ' disabled' : ''}`}
           onClick={handleConfirmPayment}
           disabled={!canConfirm}
         >
-          {isPaid ? '✓ Pago confirmado' : isSent ? 'Pago enviado al propietario' : 'Confirmar pago'}
+          {isPaid    ? '✓ Pago confirmado'
+           : isPartial ? 'Enviar resto del pago'
+           : isSent   ? 'Pago enviado al propietario'
+           : 'Confirmar pago'}
         </button>
 
         {/* Historial */}
@@ -410,10 +440,20 @@ export default function InquilinoDetail({ rental, onBack }) {
               : historyPayments.map((p, i) => (
                 <div key={i} className="history-row">
                   <span className="history-month">{MONTH_NAMES[p.month]} {p.year}</span>
-                  <span className={`history-status ${p.status === 'confirmed' ? 'paid' : 'sent'}`}>
-                    {p.status === 'confirmed' ? 'Confirmado' : 'Enviado'}
+                  <span className={`history-status ${
+                    p.status === 'confirmed' ? 'paid'
+                    : p.status === 'partial' ? 'partial'
+                    : 'sent'
+                  }`}>
+                    {p.status === 'confirmed' ? 'Confirmado'
+                     : p.status === 'partial' ? 'Parcial'
+                     : 'Enviado'}
                   </span>
-                  <span className="history-amount">{p.amount ?? rental.rent} €</span>
+                  <span className="history-amount">
+                    {p.status === 'partial'
+                      ? `${p.partial_amount ?? p.amount ?? rental.rent} €`
+                      : `${p.amount ?? rental.rent} €`}
+                  </span>
                 </div>
               ))
             }
@@ -621,6 +661,39 @@ export default function InquilinoDetail({ rental, onBack }) {
       </div>
 
       {showAddDoc && <AddDocModal onClose={() => setShowAddDoc(false)} onAdd={handleAddDoc} />}
+
+      {showPaymentModal && (
+        <div className="modal-overlay" onClick={() => setShowPaymentModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirmar pago</h2>
+              <button className="modal-close" onClick={() => setShowPaymentModal(false)}>×</button>
+            </div>
+            <div className="form-group">
+              <label>Importe enviado (€)</label>
+              <input
+                type="number"
+                value={paymentAmountInput}
+                onChange={(e) => setPaymentAmountInput(e.target.value)}
+                step="0.01"
+                min="0"
+                autoFocus
+              />
+              {parseFloat(paymentAmountInput) < rental.rent && parseFloat(paymentAmountInput) > 0 && (
+                <p style={{ marginTop: '8px', fontSize: '13px', color: '#888' }}>
+                  Importe total: {rental.rent} € — se registrará como pago parcial
+                </p>
+              )}
+            </div>
+            <button
+              className="submit-button"
+              onClick={handleSubmitPaymentAmount}
+            >
+              Confirmar pago
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

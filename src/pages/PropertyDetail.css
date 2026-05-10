@@ -1139,6 +1139,11 @@ input[type="number"] {
   color: #666;
 }
 
+.payment-status-badge.yellow {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
 .payment-content {
   margin-top: 16px;
 }

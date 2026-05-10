@@ -409,7 +409,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const fetchPaymentsForMonth = React.useCallback((yr, mo) => {
     supabase
       .from('payments')
-      .select('tenant_id, room_id, status, amount, confirmed_at')
+      .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount')
       .eq('property_id', String(property.id))
       .eq('year', yr)
       .eq('month', mo)
@@ -457,6 +457,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     if (tenants.length === 0 || (property.status !== 'alquilado' && property.status !== 'otros')) return null;
 
     const supabasePayment = pendingSupabasePayments.find(p => p.tenant_id === tenantId);
+    if (supabasePayment?.status === 'partial') return 'partial';
     if (supabasePayment?.status === 'confirmed') return 'paid';
     if (supabasePayment?.status === 'pending') return 'pending_confirmation';
 
@@ -538,94 +539,89 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     );
   };
 
-  const handleConfirmWithAmount = async (tenantId, amount) => {
+  const handleConfirmWithAmount = async (tenantId, importeNuevo) => {
     const tenant = tenants.find(t => t.id === tenantId);
-    const confirmedAt = new Date().toISOString();
+    const rentTotal = tenant?.amount || 0;
+    const existingSupabase = pendingSupabasePayments.find(p => p.tenant_id === tenantId);
+    const importePrevio = existingSupabase?.partial_amount || 0;
+    const nuevoTotal = importePrevio + importeNuevo;
 
-    // Actualizar estado local de Supabase (fuente de verdad para el UI)
+    const confirmedAt = new Date().toISOString();
+    const isComplete = nuevoTotal >= rentTotal;
+    const newStatus = isComplete ? 'confirmed' : 'partial';
+    const newAmount = nuevoTotal; // always the running total received so far
+    const newPartialAmount = isComplete ? null : nuevoTotal;
+
+    // Update local Supabase state (source of truth for UI)
     setPendingSupabasePayments(prev => {
       const exists = prev.find(p => p.tenant_id === tenantId);
-      if (exists) {
-        return prev.map(p => p.tenant_id === tenantId
-          ? { ...p, status: 'confirmed', confirmed_at: confirmedAt, amount }
-          : p
-        );
-      }
-      return [...prev, { tenant_id: tenantId, room_id: null, status: 'confirmed', confirmed_at: confirmedAt, amount }];
+      const updated = {
+        tenant_id: tenantId,
+        room_id: null,
+        status: newStatus,
+        confirmed_at: confirmedAt,
+        amount: newAmount,
+        partial_amount: newPartialAmount,
+      };
+      if (exists) return prev.map(p => p.tenant_id === tenantId ? { ...p, ...updated } : p);
+      return [...prev, updated];
     });
 
-    // Actualizar localStorage
-    const existingPayment = payments.find(p =>
+    // Update localStorage
+    const existingLocalPayment = payments.find(p =>
       p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
     );
     let updatedPayments;
-    if (existingPayment) {
+    if (existingLocalPayment) {
       updatedPayments = payments.map(p =>
         p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
-          ? { ...p, status: 'confirmed', confirmedAt, amount, tenantName: tenant?.name }
+          ? { ...p, status: newStatus, confirmedAt, amount: newAmount, tenantName: tenant?.name }
           : p
       );
     } else {
       updatedPayments = [...payments, {
         year: currentYear, month: currentMonth, tenantId,
-        status: 'confirmed', confirmedAt, amount, tenantName: tenant?.name,
+        status: newStatus, confirmedAt, amount: newAmount, tenantName: tenant?.name,
       }];
     }
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
-    setConfirmingTenant(null);
 
-    // Persistir en Supabase (upsert: update si existe, insert si no)
-    const payload = {
-      property_id: String(property.id),
-      tenant_id: tenantId,
-      room_id: null,
-      year: currentYear,
-      month: currentMonth,
-      status: 'confirmed',
-      confirmed_at: confirmedAt,
-    };
-    console.log('[handleConfirmWithAmount] Guardando en Supabase:', payload);
+    // Persist to Supabase — use existingSupabase (local state) to decide update vs insert
+    const { error: writeError } = existingSupabase
+      ? await supabase
+          .from('payments')
+          .update({
+            status: newStatus,
+            confirmed_at: confirmedAt,
+            amount: newAmount,
+            partial_amount: newPartialAmount,
+          })
+          .eq('property_id', String(property.id))
+          .eq('tenant_id', tenantId)
+          .eq('year', currentYear)
+          .eq('month', currentMonth)
+      : await supabase
+          .from('payments')
+          .insert({
+            property_id: String(property.id),
+            tenant_id: tenantId,
+            room_id: null,
+            year: currentYear,
+            month: currentMonth,
+            amount: newAmount,
+            status: newStatus,
+            partial_amount: newPartialAmount,
+            confirmed_at: confirmedAt,
+            marked_at: confirmedAt,
+            landlord_email: property.landlord_email || landlordEmail,
+          });
 
-    const { data: updateData, count, error: updateError } = await supabase
-      .from('payments')
-      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
-      .eq('property_id', String(property.id))
-      .eq('tenant_id', tenantId)
-      .eq('year', currentYear)
-      .eq('month', currentMonth)
-      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at', { count: 'exact' });
-    console.log('[handleConfirmWithAmount] Resultado UPDATE:', { rowsUpdated: count, data: updateData, error: updateError });
-
-    if (!count) {
-      console.log('[handleConfirmWithAmount] No existía fila — haciendo INSERT');
-      const { data: insertData, error: insertError } = await supabase
-        .from('payments')
-        .insert({
-          property_id: String(property.id),
-          tenant_id: tenantId,
-          room_id: null,
-          year: currentYear,
-          month: currentMonth,
-          amount,
-          status: 'confirmed',
-          confirmed_at: confirmedAt,
-          marked_at: confirmedAt,
-          landlord_email: property.landlord_email || landlordEmail,
-        })
-        .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at');
-      console.log('[handleConfirmWithAmount] Resultado INSERT:', { data: insertData, error: insertError });
+    if (writeError) {
+      alert('Error al guardar el pago. Por favor, recarga la página.');
     }
 
-    // Verificación: leer el registro recién guardado
-    const { data: verifyData, error: verifyError } = await supabase
-      .from('payments')
-      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at')
-      .eq('property_id', String(property.id))
-      .eq('tenant_id', tenantId)
-      .eq('year', currentYear)
-      .eq('month', currentMonth);
-    console.log('[handleConfirmWithAmount] Verificación DB post-escritura:', { verifyData, verifyError });
+    setConfirmingTenant(null);
   };
 
   const handleRejectPayment = async (tenantId) => {
@@ -654,6 +650,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const getPaymentStatusInfo = (status) => {
     const statusMap = {
       'paid': { label: 'Pagado', color: 'green', icon: '✓' },
+      'partial': { label: 'Pago parcial', color: 'yellow', icon: '◑' },
       'pending_confirmation': { label: 'Por confirmar', color: 'orange', icon: '⏱' },
       'pending': { label: 'Pendiente', color: 'gray', icon: '○' },
       'overdue': { label: 'Retrasado', color: 'red', icon: '!' },
@@ -1258,7 +1255,8 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                     }
                   : localPayment;
                 const statusInfo = getPaymentStatusInfo(tenantStatus);
-                
+                const partialAmount = supabasePaymentForTenant?.partial_amount ?? 0;
+
                 return (
                   <div key={tenant.id} className="tenant-payment-card">
                     <div className="tenant-payment-header">
@@ -1273,7 +1271,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                         <p className="tenant-payment-amount" style={tenants.length === 1 ? { margin: 0, fontSize: '15px', fontWeight: 600, color: '#111' } : {}}>{tenant.amount}€</p>
                       </div>
                       <span className={`payment-status-badge ${statusInfo.color} small`}>
-                        {statusInfo.icon}
+                        {tenantStatus === 'partial' ? (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2a10 10 0 0 1 0 20V2z" fill="#F59E0B"/>
+                            <circle cx="12" cy="12" r="10" stroke="#F59E0B" strokeWidth="2" fill="none"/>
+                          </svg>
+                        ) : statusInfo.icon}
                       </span>
                     </div>
 
@@ -1307,6 +1310,29 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                         {canEdit && (
                           <button className="payment-cancel-link" onClick={() => handleCancelPayment(tenant.id)}>
                             Cancelar
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {tenantStatus === 'partial' && (
+                      <div className="tenant-payment-actions">
+                        <p className="payment-confirmed-text" style={{ color: '#92400E' }}>
+                          {partialAmount}€ de {tenant.amount}€ — pago parcial
+                        </p>
+                        {canEdit && (
+                          <button
+                            className="payment-btn confirm small"
+                            onClick={() => setConfirmingTenant({
+                              id: tenant.id,
+                              name: tenant.name,
+                              amount: tenant.amount - partialAmount,
+                            })}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            Confirmar resto
                           </button>
                         )}
                       </div>

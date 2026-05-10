@@ -290,6 +290,9 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
                     {data.paymentStatus === 'confirmed' && (
                       <span className="payment-badge paid">Pago confirmado</span>
                     )}
+                    {data.paymentStatus === 'partial' && (
+                      <span className="payment-badge partial">Pago parcial registrado</span>
+                    )}
                     {data.paymentStatus === 'pending' && (
                       <span className="payment-badge sent">Pago enviado — pendiente de confirmar</span>
                     )}
