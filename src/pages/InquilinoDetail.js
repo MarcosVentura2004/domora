@@ -411,8 +411,8 @@ export default function InquilinoDetail({ rental, onBack }) {
             {isPartial && (
               <span className="payment-badge partial">
                 {supabasePayment?.partial_amount != null
-                  ? `${Number(supabasePayment.partial_amount).toFixed(2)}€ recibidos — pago parcial`
-                  : 'Pago parcial registrado'}
+                  ? `${Number(supabasePayment.partial_amount).toFixed(2)}€ confirmados — quedan ${Math.max(0, rental.rent - supabasePayment.partial_amount).toFixed(2)}€`
+                  : 'Pago parcial confirmado por el propietario'}
               </span>
             )}
             {isSent    && <span className="payment-badge sent">Pago enviado — esperando confirmación</span>}
@@ -431,7 +431,7 @@ export default function InquilinoDetail({ rental, onBack }) {
           disabled={!canConfirm}
         >
           {isPaid     ? '✓ Pago confirmado'
-           : isPartial ? 'Enviar resto del pago'
+           : isPartial ? `Enviar resto (${Math.max(0, rental.rent - (supabasePayment?.partial_amount || 0)).toFixed(2)}€)`
            : isSent    ? 'Pago enviado al propietario'
            : 'Confirmar pago'}
         </button>

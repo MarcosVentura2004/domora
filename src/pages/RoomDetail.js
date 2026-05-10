@@ -397,16 +397,28 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   }, [currentYear, currentMonth]);
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchPayment = () => {
+      supabase
+        .from('payments')
+        .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount')
+        .eq('property_id', String(property.id))
+        .eq('room_id', String(room.id))
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .maybeSingle()
+        .then(({ data }) => { if (!cancelled) setSupabaseRoomPayment(data || null); });
+    };
     setSupabaseRoomPayment(null);
-    supabase
-      .from('payments')
-      .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount')
-      .eq('property_id', String(property.id))
-      .eq('room_id', String(room.id))
-      .eq('year', currentYear)
-      .eq('month', currentMonth)
-      .maybeSingle()
-      .then(({ data }) => setSupabaseRoomPayment(data || null));
+    fetchPayment();
+    const pollInterval = setInterval(fetchPayment, 30000);
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchPayment(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      cancelled = true;
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [currentYear, currentMonth, property.id, room.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
@@ -583,43 +595,21 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setShowConfirmModal(false);
     setConfirmModalAmount(null);
 
-    // Persist to Supabase.
-    // Use DELETE+INSERT instead of UPDATE to avoid RLS issues with rows created
-    // by the tenant's mark_payment_pending RPC (UPDATE on those rows is blocked).
-    let writeError = null;
-    if (existingRow) {
-      const { error: delError } = await supabase
-        .from('payments')
-        .delete()
-        .eq('property_id', String(property.id))
-        .eq('room_id', String(room.id))
-        .eq('year', currentYear)
-        .eq('month', currentMonth);
-      if (delError) {
-        writeError = delError;
-      }
-    }
-    if (!writeError) {
-      const { error: insError } = await supabase
-        .from('payments')
-        .insert({
-          property_id: String(property.id),
-          tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
-          room_id: String(room.id),
-          year: currentYear,
-          month: currentMonth,
-          amount: newAmount,
-          status: newStatus,
-          partial_amount: newPartialAmount,
-          confirmed_at: confirmedAt,
-          marked_at: confirmedAt,
-          landlord_email: property.landlord_email || landlordEmail,
-        });
-      writeError = insError || null;
-    }
+    // Persist to Supabase via SECURITY DEFINER RPC (bypasses RLS).
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('confirm_payment_v2', {
+      p_property_id:    String(property.id),
+      p_room_id:        String(room.id),
+      p_tenant_id:      room.tenant?.id ? String(room.tenant.id) : null,
+      p_year:           currentYear,
+      p_month:          currentMonth,
+      p_amount:         newAmount,
+      p_status:         newStatus,
+      p_partial_amount: newPartialAmount,
+      p_landlord_email: property.landlord_email || landlordEmail,
+    });
 
-    if (writeError) {
-      console.error('[RoomDetail] Error guardando pago:', writeError);
+    if (rpcError || rpcResult?.success === false) {
+      console.error('[RoomDetail] Error guardando pago:', rpcError || rpcResult?.error);
       setSupabaseRoomPayment(previousState); // rollback optimistic state
       alert('Error al guardar el pago. Por favor, recarga la página.');
       return;
@@ -976,7 +966,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                             ? `${Number(supabaseRoomPayment.amount).toFixed(2)} € enviados — pendiente de confirmar`
                             : 'Pago enviado — pendiente de confirmar'}
                         </p>
-                        <button className="payment-btn confirm small" onClick={() => setShowConfirmModal(true)}>
+                        <button className="payment-btn confirm small" onClick={() => { setConfirmModalAmount(supabaseRoomPayment?.amount ?? null); setShowConfirmModal(true); }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                             <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>

@@ -587,37 +587,20 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
 
-    // Persist to Supabase — use existingSupabase (local state) to decide update vs insert
-    const { error: writeError } = existingSupabase
-      ? await supabase
-          .from('payments')
-          .update({
-            status: newStatus,
-            confirmed_at: confirmedAt,
-            amount: newAmount,
-            partial_amount: newPartialAmount,
-          })
-          .eq('property_id', String(property.id))
-          .eq('tenant_id', tenantId)
-          .eq('year', currentYear)
-          .eq('month', currentMonth)
-      : await supabase
-          .from('payments')
-          .insert({
-            property_id: String(property.id),
-            tenant_id: tenantId,
-            room_id: null,
-            year: currentYear,
-            month: currentMonth,
-            amount: newAmount,
-            status: newStatus,
-            partial_amount: newPartialAmount,
-            confirmed_at: confirmedAt,
-            marked_at: confirmedAt,
-            landlord_email: property.landlord_email || landlordEmail,
-          });
+    // Persist to Supabase via SECURITY DEFINER RPC (bypasses RLS).
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('confirm_payment_v2', {
+      p_property_id:    String(property.id),
+      p_room_id:        null,
+      p_tenant_id:      tenantId,
+      p_year:           currentYear,
+      p_month:          currentMonth,
+      p_amount:         newAmount,
+      p_status:         newStatus,
+      p_partial_amount: newPartialAmount,
+      p_landlord_email: property.landlord_email || landlordEmail,
+    });
 
-    if (writeError) {
+    if (rpcError || rpcResult?.success === false) {
       alert('Error al guardar el pago. Por favor, recarga la página.');
     }
 
