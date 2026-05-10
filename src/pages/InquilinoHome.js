@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './InquilinoHome.css';
 import CodeEntry from './CodeEntry';
 import InquilinoDetail from './InquilinoDetail';
@@ -15,6 +15,9 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [chatForRental, setChatForRental] = useState(null);
   const [unreadCounts, setUnreadCounts] = useState({});
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [swipedCode, setSwipedCode] = useState(null);
+  const [swipeX, setSwipeX] = useState(0);
+  const touchStartX = useRef(null);
 
   // Primer código activo, usado para la foto de perfil
   const firstCode = tenantCodes[0] || null;
@@ -109,7 +112,13 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
         address,
         rent,
         tenantName,
-        paymentConfig: prop?.paymentConfig || { startDay: 1, endDay: 5 },
+        paymentConfig: (() => {
+          if (meta.roomId) {
+            const room = (prop?.rooms || []).find(r => String(r.id) === String(meta.roomId));
+            return room?.paymentConfig || prop?.paymentConfig || { startDay: 1, endDay: 5 };
+          }
+          return prop?.paymentConfig || { startDay: 1, endDay: 5 };
+        })(),
         landlordEmail: meta.landlordEmail,
         propertyId: meta.propertyId,
         roomId: meta.roomId || null,
@@ -148,6 +157,42 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       }
     });
   }, [tenantCodes]);
+
+  const handleTouchStart = (e, code) => {
+    touchStartX.current = e.touches[0].clientX;
+    if (swipedCode && swipedCode !== code) {
+      setSwipedCode(null);
+      setSwipeX(0);
+    }
+  };
+
+  const handleTouchMove = (e, code) => {
+    if (touchStartX.current === null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    if (dx >= 0) return;
+    setSwipedCode(code);
+    setSwipeX(Math.max(dx, -90));
+  };
+
+  const handleTouchEnd = (code) => {
+    touchStartX.current = null;
+    if (swipeX < -50) {
+      setSwipedCode(code);
+      setSwipeX(-80);
+    } else {
+      setSwipedCode(null);
+      setSwipeX(0);
+    }
+  };
+
+  const handleDeleteRental = (code) => {
+    onCodesUpdate(tenantCodes.filter(c => c !== code));
+    const stored = JSON.parse(localStorage.getItem('tenant_codes') || '{}');
+    delete stored[code];
+    localStorage.setItem('tenant_codes', JSON.stringify(stored));
+    setSwipedCode(null);
+    setSwipeX(0);
+  };
 
   const handleCodeValid = (code) => {
     if (!tenantCodes.includes(code)) {
@@ -250,22 +295,62 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
           </div>
         )}
 
-        {!loading && rentals.map((data) => {
+        {!loading && [...rentals].sort((a, b) => {
+          if (a.expired === b.expired) return 0;
+          return a.expired ? 1 : -1;
+        }).map((data) => {
           if (data.expired) {
             return (
-              <div key={data.code} className="rental-card rental-card-expired">
-                <div className="rental-card-main">
-                  <div className="rental-address" style={{ color: '#bbb' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="#ccc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <polyline points="9 22 9 12 15 12 15 22" stroke="#ccc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <div
+                key={data.code}
+                style={{ position: 'relative', overflow: 'hidden', borderRadius: '16px', marginBottom: '12px' }}
+                onTouchStart={e => handleTouchStart(e, data.code)}
+                onTouchMove={e => handleTouchMove(e, data.code)}
+                onTouchEnd={() => handleTouchEnd(data.code)}
+              >
+                {/* Red delete button revealed by swipe */}
+                <div style={{
+                  position: 'absolute', right: 0, top: 0, bottom: 0, width: 80,
+                  background: '#F44336', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '0 16px 16px 0',
+                }}>
+                  <button
+                    onClick={() => handleDeleteRental(data.code)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                      <polyline points="3 6 5 6 21 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M19 6l-1 14H6L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M10 11v6M14 11v6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    <span>{data.address}</span>
-                  </div>
-                  <p className="rental-price" style={{ color: '#ccc' }}>{data.rent} €/mes</p>
+                    <span style={{ color: 'white', fontSize: 11, fontWeight: 600 }}>Eliminar</span>
+                  </button>
                 </div>
-                <div className="rental-card-footer">
-                  <span className="payment-badge expired">Contrato finalizado</span>
+
+                {/* Card content — slides left on swipe */}
+                <div style={{
+                  transform: `translateX(${swipedCode === data.code ? swipeX : 0}px)`,
+                  transition: swipeX === -80 || swipeX === 0 ? 'transform 0.2s ease' : 'none',
+                  background: 'white',
+                  borderRadius: '16px',
+                  position: 'relative',
+                  zIndex: 1,
+                }}>
+                  <div className="rental-card rental-card-expired">
+                    <div className="rental-card-main">
+                      <div className="rental-address" style={{ color: '#bbb' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="#ccc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <polyline points="9 22 9 12 15 12 15 22" stroke="#ccc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span>{data.address}</span>
+                      </div>
+                      <p className="rental-price" style={{ color: '#ccc' }}>{data.rent} €/mes</p>
+                    </div>
+                    <div className="rental-card-footer">
+                      <span className="payment-badge expired">Contrato finalizado</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -273,63 +358,100 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
 
           const unread = (unreadCounts[data.code] || 0) + (unreadCounts[`${data.code}_group`] || 0);
           return (
-            <div key={data.code} className="rental-card" style={{ cursor: 'default' }}>
-              <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewingRental(data)}>
-                  <div className="rental-card-main">
-                    <div className="rental-address">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <polyline points="9 22 9 12 15 12 15 22" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <span>{data.address}</span>
+            <div
+              key={data.code}
+              style={{ position: 'relative', overflow: 'hidden', borderRadius: '16px', marginBottom: '12px' }}
+              onTouchStart={e => handleTouchStart(e, data.code)}
+              onTouchMove={e => handleTouchMove(e, data.code)}
+              onTouchEnd={() => handleTouchEnd(data.code)}
+            >
+              {/* Red delete button revealed by swipe */}
+              <div style={{
+                position: 'absolute', right: 0, top: 0, bottom: 0, width: 80,
+                background: '#F44336', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '0 16px 16px 0',
+              }}>
+                <button
+                  onClick={() => handleDeleteRental(data.code)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                    <polyline points="3 6 5 6 21 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M19 6l-1 14H6L5 6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M10 11v6M14 11v6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span style={{ color: 'white', fontSize: 11, fontWeight: 600 }}>Eliminar</span>
+                </button>
+              </div>
+
+              {/* Card content — slides left on swipe */}
+              <div style={{
+                transform: `translateX(${swipedCode === data.code ? swipeX : 0}px)`,
+                transition: swipeX === -80 || swipeX === 0 ? 'transform 0.2s ease' : 'none',
+                background: 'white',
+                borderRadius: '16px',
+                position: 'relative',
+                zIndex: 1,
+              }}>
+                <div className="rental-card" style={{ cursor: 'default' }}>
+                  <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                    <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setViewingRental(data)}>
+                      <div className="rental-card-main">
+                        <div className="rental-address">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <polyline points="9 22 9 12 15 12 15 22" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span>{data.address}</span>
+                        </div>
+                        <p className="rental-price">{data.rent} €/mes</p>
+                      </div>
+                      <div className="rental-card-footer">
+                        {data.paymentStatus === 'confirmed' && (
+                          <span className="payment-badge paid">Pago confirmado</span>
+                        )}
+                        {data.paymentStatus === 'partial' && (
+                          <span className="payment-badge partial">Pago parcial registrado</span>
+                        )}
+                        {data.paymentStatus === 'pending' && (
+                          <span className="payment-badge sent">Pago enviado — pendiente de confirmar</span>
+                        )}
+                        {!data.paymentStatus && (
+                          <span className="payment-badge pending">
+                            Pago pendiente ({data.paymentConfig?.startDay ?? 1}–{data.paymentConfig?.endDay ?? 5})
+                          </span>
+                        )}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
                     </div>
-                    <p className="rental-price">{data.rent} €/mes</p>
-                  </div>
-                  <div className="rental-card-footer">
-                    {data.paymentStatus === 'confirmed' && (
-                      <span className="payment-badge paid">Pago confirmado</span>
-                    )}
-                    {data.paymentStatus === 'partial' && (
-                      <span className="payment-badge partial">Pago parcial registrado</span>
-                    )}
-                    {data.paymentStatus === 'pending' && (
-                      <span className="payment-badge sent">Pago enviado — pendiente de confirmar</span>
-                    )}
-                    {!data.paymentStatus && (
-                      <span className="payment-badge pending">
-                        Pago pendiente ({data.paymentConfig.startDay}–{data.paymentConfig.endDay})
-                      </span>
-                    )}
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                      <polyline points="9 18 15 12 9 6" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
+                    <button
+                      onClick={() => setChatForRental(data)}
+                      style={{
+                        background: 'none', border: 'none', borderLeft: '1px solid #f0f0f0',
+                        padding: '0 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}
+                    >
+                      <div style={{ position: 'relative' }}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke={unread > 0 ? '#e74c3c' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        {unread > 0 && (
+                          <span style={{
+                            position: 'absolute', top: -5, right: -5,
+                            background: '#e74c3c', color: 'white',
+                            borderRadius: '50%', width: 16, height: 16,
+                            fontSize: 10, fontWeight: 700,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {unread}
+                          </span>
+                        )}
+                      </div>
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => setChatForRental(data)}
-                  style={{
-                    background: 'none', border: 'none', borderLeft: '1px solid #f0f0f0',
-                    padding: '0 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}
-                >
-                  <div style={{ position: 'relative' }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke={unread > 0 ? '#e74c3c' : '#aaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    {unread > 0 && (
-                      <span style={{
-                        position: 'absolute', top: -5, right: -5,
-                        background: '#e74c3c', color: 'white',
-                        borderRadius: '50%', width: 16, height: 16,
-                        fontSize: 10, fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {unread}
-                      </span>
-                    )}
-                  </div>
-                </button>
               </div>
             </div>
           );

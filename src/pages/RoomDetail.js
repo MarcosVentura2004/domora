@@ -517,7 +517,23 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     }
   };
 
-  const handleRejectPayment = () => {
+  const handleRejectPayment = async () => {
+    if (supabaseRoomPayment?.status === 'pending') {
+      const { error: deleteError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('property_id', String(property.id))
+        .eq('room_id', String(room.id))
+        .eq('year', currentYear)
+        .eq('month', currentMonth);
+
+      if (deleteError) {
+        alert('Error al rechazar el pago. Por favor, recarga la página.');
+        return;
+      }
+      setSupabaseRoomPayment(null);
+    }
+
     const updatedPayments = payments.filter(p =>
       !(p.year === currentYear && p.month === currentMonth && p.roomId === room.id)
     );
@@ -844,8 +860,10 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                   ? supabaseRoomPayment.status === 'confirmed'
                   : confirmedPayments.length > 0;
                 const isPartial = supabaseRoomPayment?.status === 'partial';
-                const isPending = !isPaid && !isPartial && currentPayment && currentPayment.status !== 'confirmed';
-                const badgeColor = isPaid ? 'green' : isPartial ? 'yellow' : isPending ? 'orange' : 'gray';
+                const isPendingConfirmation = supabaseRoomPayment?.status === 'pending';
+                const isPending = !isPaid && !isPartial && !isPendingConfirmation &&
+                  currentPayment && currentPayment.status !== 'confirmed';
+                const badgeColor = isPaid ? 'green' : isPartial ? 'yellow' : (isPending || isPendingConfirmation) ? 'orange' : 'gray';
                 const badgeIcon = isPaid ? (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                     <path d="M20 6L9 17l-5-5" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -855,7 +873,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     <path d="M12 2a10 10 0 0 1 0 20V2z" fill="#F59E0B"/>
                     <circle cx="12" cy="12" r="10" stroke="#F59E0B" strokeWidth="2" fill="none"/>
                   </svg>
-                ) : isPending ? (
+                ) : (isPending || isPendingConfirmation) ? (
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="9" stroke="#FF9800" strokeWidth="2.5"/>
                   </svg>
@@ -916,6 +934,30 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                       </div>
                     )}
 
+                    {/* Pago enviado por el inquilino — pendiente de confirmar */}
+                    {canEdit && isPendingConfirmation && (
+                      <div className="tenant-payment-actions">
+                        <p style={{ fontSize: '13px', color: '#92400E', margin: '0 0 8px 0' }}>
+                          {supabaseRoomPayment?.amount != null
+                            ? `${Number(supabaseRoomPayment.amount).toFixed(2)} € enviados — pendiente de confirmar`
+                            : 'Pago enviado — pendiente de confirmar'}
+                        </p>
+                        <button className="payment-btn confirm small" onClick={() => setShowConfirmModal(true)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          Confirmar
+                        </button>
+                        <button className="payment-btn reject small" onClick={handleRejectPayment}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          Rechazar
+                        </button>
+                      </div>
+                    )}
+
                     {/* Pendiente de confirmar */}
                     {canEdit && isPending && (
                       <div className="tenant-payment-actions">
@@ -936,7 +978,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     )}
 
                     {/* Sin pago */}
-                    {canEdit && !isPaid && !isPartial && !isPending && (
+                    {canEdit && !isPaid && !isPartial && !isPending && !isPendingConfirmation && (
                       <div className="tenant-payment-actions">
                         <button className="payment-btn confirm small full-width" onClick={handleMarkAsPending}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
