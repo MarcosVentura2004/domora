@@ -583,38 +583,44 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setShowConfirmModal(false);
     setConfirmModalAmount(null);
 
-    // Persist to Supabase (reliable update-or-insert using captured pre-setState value)
-    const { error: writeError } = existingRow
-      ? await supabase
-          .from('payments')
-          .update({
-            status: newStatus,
-            confirmed_at: confirmedAt,
-            amount: newAmount,
-            partial_amount: newPartialAmount,
-          })
-          .eq('property_id', String(property.id))
-          .eq('room_id', String(room.id))
-          .eq('year', currentYear)
-          .eq('month', currentMonth)
-      : await supabase
-          .from('payments')
-          .insert({
-            property_id: String(property.id),
-            tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
-            room_id: String(room.id),
-            year: currentYear,
-            month: currentMonth,
-            amount: newAmount,
-            status: newStatus,
-            partial_amount: newPartialAmount,
-            confirmed_at: confirmedAt,
-            marked_at: confirmedAt,
-            landlord_email: property.landlord_email || landlordEmail,
-          });
+    // Persist to Supabase.
+    // Use DELETE+INSERT instead of UPDATE to avoid RLS issues with rows created
+    // by the tenant's mark_payment_pending RPC (UPDATE on those rows is blocked).
+    let writeError = null;
+    if (existingRow) {
+      const { error: delError } = await supabase
+        .from('payments')
+        .delete()
+        .eq('property_id', String(property.id))
+        .eq('room_id', String(room.id))
+        .eq('year', currentYear)
+        .eq('month', currentMonth);
+      if (delError) {
+        writeError = delError;
+      }
+    }
+    if (!writeError) {
+      const { error: insError } = await supabase
+        .from('payments')
+        .insert({
+          property_id: String(property.id),
+          tenant_id: room.tenant?.id ? String(room.tenant.id) : null,
+          room_id: String(room.id),
+          year: currentYear,
+          month: currentMonth,
+          amount: newAmount,
+          status: newStatus,
+          partial_amount: newPartialAmount,
+          confirmed_at: confirmedAt,
+          marked_at: confirmedAt,
+          landlord_email: property.landlord_email || landlordEmail,
+        });
+      writeError = insError || null;
+    }
 
     if (writeError) {
-      setSupabaseRoomPayment(previousState); // Fix 2: rollback optimistic state
+      console.error('[RoomDetail] Error guardando pago:', writeError);
+      setSupabaseRoomPayment(previousState); // rollback optimistic state
       alert('Error al guardar el pago. Por favor, recarga la página.');
       return;
     }
