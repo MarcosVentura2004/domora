@@ -695,6 +695,10 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   if (property.status === 'por_habitaciones') {
     // Suma todos los pagos confirmados de todas las habitaciones (pueden ser múltiples por habitación)
     monthlyIncome = rooms.reduce((sum, room) => {
+      const supabaseRoomPmt = pendingSupabasePayments.find(p => p.room_id === room.id);
+      if (supabaseRoomPmt?.status === 'partial') {
+        return sum + (supabaseRoomPmt.partial_amount || 0);
+      }
       const roomConfirmed = payments.filter(p =>
         p.year === currentYear &&
         p.month === currentMonth &&
@@ -706,6 +710,10 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   } else {
     // Suma pagos de inquilinos activos
     const activeTotal = tenants.reduce((sum, tenant) => {
+      const supabasePmt = pendingSupabasePayments.find(p => p.tenant_id === tenant.id);
+      if (supabasePmt?.status === 'partial') {
+        return sum + (supabasePmt.partial_amount || 0);
+      }
       const tenantConfirmed = payments.filter(p =>
         p.year === currentYear &&
         p.month === currentMonth &&
@@ -1282,7 +1290,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
 
                     {canEdit && tenantStatus === 'pending_confirmation' && (
                       <div className="tenant-payment-actions">
-                        <button className="payment-btn confirm small" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: tenant.amount })}>
+                        {supabasePaymentForTenant?.amount != null && (
+                          <p style={{ fontSize: '13px', color: '#888', margin: '0 0 8px 0' }}>
+                            {supabasePaymentForTenant.amount}€ enviados por el inquilino
+                          </p>
+                        )}
+                        <button className="payment-btn confirm small" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: supabasePaymentForTenant?.amount ?? tenant.amount })}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                             <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
