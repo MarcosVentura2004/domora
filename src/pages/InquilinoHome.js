@@ -293,9 +293,6 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
                     {data.paymentStatus === 'partial' && (
                       <span className="payment-badge partial">Pago parcial registrado</span>
                     )}
-                    {data.paymentStatus === 'rejected' && (
-                      <span className="payment-badge rejected">Pago rechazado — vuelve a enviarlo</span>
-                    )}
                     {data.paymentStatus === 'pending' && (
                       <span className="payment-badge sent">Pago enviado — pendiente de confirmar</span>
                     )}

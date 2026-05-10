@@ -632,7 +632,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     onUpdate({ ...property, payments: updatedPayments });
     await supabase
       .from('payments')
-      .update({ status: 'rejected' })
+      .delete()
       .eq('property_id', String(property.id))
       .eq('tenant_id', tenantId)
       .eq('year', currentYear)

@@ -145,11 +145,10 @@ export default function InquilinoDetail({ rental, onBack }) {
     };
   }, [rental.code, rental.roomId, rental.tenantId]);
 
-  const isPaid      = supabasePayment?.status === 'confirmed';
-  const isPartial   = supabasePayment?.status === 'partial';
-  const isRejected  = supabasePayment?.status === 'rejected';
-  const isSent      = !isPaid && !isPartial && !isRejected && supabasePayment?.status === 'pending';
-  const canConfirm  = !isPaid && !isSent;
+  const isPaid     = supabasePayment?.status === 'confirmed';
+  const isPartial  = supabasePayment?.status === 'partial';
+  const isSent     = !isPaid && !isPartial && supabasePayment?.status === 'pending';
+  const canConfirm = !isPaid && !isSent;
 
   const historyPayments = paymentHistory;
 
@@ -174,22 +173,6 @@ export default function InquilinoDetail({ rental, onBack }) {
     if (!amount || amount <= 0) return;
 
     const now = new Date();
-
-    // Si hay un pago rechazado, eliminarlo primero para que el RPC pueda insertar
-    if (isRejected) {
-      const col = rental.roomId ? 'room_id' : 'tenant_id';
-      const val = rental.roomId || rental.tenantId;
-      const { error: deleteError } = await supabase
-        .from('payments')
-        .delete()
-        .eq(col, val)
-        .eq('year', now.getFullYear())
-        .eq('month', now.getMonth());
-      if (deleteError) {
-        alert('Error al enviar el pago. Inténtalo de nuevo.');
-        return;
-      }
-    }
 
     const { data, error } = await supabase.rpc('mark_payment_pending', {
       p_code: rental.code,
@@ -432,9 +415,8 @@ export default function InquilinoDetail({ rental, onBack }) {
                   : 'Pago parcial registrado'}
               </span>
             )}
-            {isRejected && <span className="payment-badge rejected">Pago rechazado por el propietario</span>}
             {isSent    && <span className="payment-badge sent">Pago enviado — esperando confirmación</span>}
-            {canConfirm && !isPartial && !isRejected && (
+            {canConfirm && !isPartial && (
               <span className="payment-badge pending">
                 Pago pendiente (días {rental.paymentConfig.startDay}–{rental.paymentConfig.endDay})
               </span>
@@ -448,10 +430,9 @@ export default function InquilinoDetail({ rental, onBack }) {
           onClick={handleConfirmPayment}
           disabled={!canConfirm}
         >
-          {isPaid      ? '✓ Pago confirmado'
-           : isPartial  ? 'Enviar resto del pago'
-           : isSent     ? 'Pago enviado al propietario'
-           : isRejected ? 'Volver a enviar el pago'
+          {isPaid     ? '✓ Pago confirmado'
+           : isPartial ? 'Enviar resto del pago'
+           : isSent    ? 'Pago enviado al propietario'
            : 'Confirmar pago'}
         </button>
 
