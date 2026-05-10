@@ -174,6 +174,23 @@ export default function InquilinoDetail({ rental, onBack }) {
     if (!amount || amount <= 0) return;
 
     const now = new Date();
+
+    // Si hay un pago rechazado, eliminarlo primero para que el RPC pueda insertar
+    if (isRejected) {
+      const col = rental.roomId ? 'room_id' : 'tenant_id';
+      const val = rental.roomId || rental.tenantId;
+      const { error: deleteError } = await supabase
+        .from('payments')
+        .delete()
+        .eq(col, val)
+        .eq('year', now.getFullYear())
+        .eq('month', now.getMonth());
+      if (deleteError) {
+        alert('Error al enviar el pago. Inténtalo de nuevo.');
+        return;
+      }
+    }
+
     const { data, error } = await supabase.rpc('mark_payment_pending', {
       p_code: rental.code,
       p_year: now.getFullYear(),
@@ -186,9 +203,9 @@ export default function InquilinoDetail({ rental, onBack }) {
     }
     setShowPaymentModal(false);
     setSupabasePayment({
-      status: amount < rental.rent ? 'partial' : 'pending',
+      status: 'pending',
       amount,
-      partial_amount: amount < rental.rent ? amount : null,
+      partial_amount: null,
     });
   };
 
