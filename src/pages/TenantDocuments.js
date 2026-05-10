@@ -132,7 +132,8 @@ export default function TenantDocuments({ rental, onBack }) {
 
   // Data state
   const [allOwnFolders, setAllOwnFolders] = useState([]);
-  const [allLandlordFolders, setAllLandlordFolders] = useState([]);
+  const [sharedFolders, setSharedFolders] = useState([]); // from shared_folders table
+  const [sharedStorageSubfolders, setSharedStorageSubfolders] = useState([]); // virtual folders from storage in shared context
   const [files, setFiles] = useState([]);
   const [sharedFiles, setSharedFiles] = useState([]); // from shared_files table
 
@@ -162,18 +163,17 @@ export default function TenantDocuments({ rental, onBack }) {
     setLoading(true);
     try {
       if (sharedFolderRoot === null) {
-        // Own context: load own folders, landlord folders (for shared display + navigation), files, shared_files
-        const [ownFoldersRes, landlordFoldersRes, storageRes, sharedFilesRes] = await Promise.all([
+        // Own context: load own folders, shared_folders table, files, shared_files
+        const [ownFoldersRes, sharedFoldersRes, storageRes, sharedFilesRes] = await Promise.all([
           supabase.from('folders').select('*')
             .eq('landlord_email', landlordEmail)
             .eq('property_id', propertyId)
             .eq('tenant_id', String(tenantId))
             .order('name'),
-          supabase.from('folders').select('*')
+          supabase.from('shared_folders').select('*')
             .eq('landlord_email', landlordEmail)
             .eq('property_id', propertyId)
-            .is('tenant_id', null)
-            .order('name'),
+            .eq('shared_with_tenant', true),
           supabase.storage.from('documentos').list(ownStoragePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
           currentPath === ''
             ? supabase.from('shared_files').select('*')
@@ -182,21 +182,14 @@ export default function TenantDocuments({ rental, onBack }) {
             : Promise.resolve({ data: [] }),
         ]);
         setAllOwnFolders(ownFoldersRes.data || []);
-        setAllLandlordFolders(landlordFoldersRes.data || []);
+        setSharedFolders(sharedFoldersRes.data || []);
         setFiles((storageRes.data || []).filter(item => item.id !== null));
         setSharedFiles(sharedFilesRes.data || []);
       } else {
-        // Shared context: only landlord folders and storage at the landlord path
-        const [landlordFoldersRes, storageRes] = await Promise.all([
-          supabase.from('folders').select('*')
-            .eq('landlord_email', landlordEmail)
-            .eq('property_id', propertyId)
-            .is('tenant_id', null)
-            .order('name'),
-          supabase.storage.from('documentos').list(sharedStoragePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
-        ]);
-        setAllLandlordFolders(landlordFoldersRes.data || []);
-        setFiles((storageRes.data || []).filter(item => item.id !== null));
+        // Shared context: storage listing only — subfolders come from items with id === null
+        const { data: storageData } = await supabase.storage.from('documentos').list(sharedStoragePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } });
+        setFiles((storageData || []).filter(item => item.id !== null));
+        setSharedStorageSubfolders((storageData || []).filter(item => item.id === null));
       }
     } catch (err) {
       console.error('[TenantDocuments] loadContents error:', err);
@@ -517,14 +510,14 @@ export default function TenantDocuments({ rental, onBack }) {
     ? getDirectChildren(allOwnFolders, currentPath)
     : [];
 
-  // Own context, root only: top-level shared landlord folders
+  // Own context, root only: shared landlord folders from shared_folders table
   const visibleTopSharedFolders = sharedFolderRoot === null && currentPath === ''
-    ? getDirectChildren(allLandlordFolders, '').filter(f => f.shared_with_tenant)
+    ? sharedFolders
     : [];
 
-  // Shared context: landlord subfolders at current path
+  // Shared context: subfolders from storage listing (items with id === null)
   const visibleSharedSubfolders = sharedFolderRoot !== null
-    ? getDirectChildren(allLandlordFolders, currentPath)
+    ? sharedStorageSubfolders
     : [];
 
   const isReadOnly = sharedFolderRoot !== null;
@@ -673,13 +666,13 @@ export default function TenantDocuments({ rental, onBack }) {
                   })}
 
                   {/* Carpetas compartidas por el propietario (solo en raíz del contexto propio) */}
-                  {allVisibleSharedFoldersAtRoot.map(folder => {
-                    const folderStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
+                  {allVisibleSharedFoldersAtRoot.map(sf => {
+                    const folderStoragePath = `${landlordEmail}/${propertyId}/${sf.folder_path}`;
                     return (
-                      <div key={`shared-${folder.id}`} className="folder-card"
-                        onClick={() => { setSharedFolderRoot(folder); setCurrentPath(folder.path); }}>
+                      <div key={`shared-${sf.id}`} className="folder-card"
+                        onClick={() => { setSharedFolderRoot({ id: sf.folder_id, name: sf.folder_name, path: sf.folder_path }); setCurrentPath(sf.folder_path); }}>
                         <div className="folder-card-icon"><SharedFolderIcon size={44} /></div>
-                        <span className="folder-card-name">{folder.name}</span>
+                        <span className="folder-card-name">{sf.folder_name}</span>
                         <div className="td-shared-badge">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
                             <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2.5"/>
@@ -690,11 +683,11 @@ export default function TenantDocuments({ rental, onBack }) {
                         <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => handleNativeShareFolder(folder, folderStoragePath, e)}
-                            disabled={zippingFolderId === folder.id}
+                            onClick={e => handleNativeShareFolder({ name: sf.folder_name, id: sf.id }, folderStoragePath, e)}
+                            disabled={zippingFolderId === sf.id}
                             title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
                           >
-                            {zippingFolderId === folder.id
+                            {zippingFolderId === sf.id
                               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
                               : <NativeShareIcon />
                             }
@@ -704,22 +697,24 @@ export default function TenantDocuments({ rental, onBack }) {
                     );
                   })}
 
-                  {/* Subcarpetas dentro del contexto compartido */}
-                  {isReadOnly && visibleSharedSubfolders.map(folder => {
-                    const folderStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
+                  {/* Subcarpetas dentro del contexto compartido — derivadas del listado de Storage */}
+                  {isReadOnly && visibleSharedSubfolders.map(item => {
+                    const itemPath = `${currentPath}/${item.name}`;
+                    const folderStoragePath = `${sharedStoragePath}/${item.name}`;
+                    const zippingKey = `${currentPath}/${item.name}`;
                     return (
-                      <div key={`rsub-${folder.id}`} className="folder-card"
-                        onClick={() => setCurrentPath(folder.path)}>
+                      <div key={`rsub-${item.name}`} className="folder-card"
+                        onClick={() => setCurrentPath(itemPath)}>
                         <div className="folder-card-icon"><SharedFolderIcon size={44} /></div>
-                        <span className="folder-card-name">{folder.name}</span>
+                        <span className="folder-card-name">{item.name}</span>
                         <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => handleNativeShareFolder(folder, folderStoragePath, e)}
-                            disabled={zippingFolderId === folder.id}
+                            onClick={e => handleNativeShareFolder({ name: item.name, id: zippingKey }, folderStoragePath, e)}
+                            disabled={zippingFolderId === zippingKey}
                             title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
                           >
-                            {zippingFolderId === folder.id
+                            {zippingFolderId === zippingKey
                               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
                               : <NativeShareIcon />
                             }

@@ -130,6 +130,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   const [allFolders, setAllFolders] = useState([]);
   const [files, setFiles] = useState([]);
   const [sharedPaths, setSharedPaths] = useState(new Set());
+  const [sharedFolderIds, setSharedFolderIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -149,18 +150,20 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   const loadContents = useCallback(async () => {
     setLoading(true);
     try {
-      const [foldersRes, storageRes, sharedRes] = await Promise.all([
+      const [foldersRes, storageRes, sharedRes, sharedFoldersRes] = await Promise.all([
         supabase.from('folders').select('*')
           .eq('landlord_email', landlordEmail)
           .eq('property_id', propertyId)
           .order('name'),
         supabase.storage.from('documentos').list(storagePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
         supabase.from('shared_files').select('storage_path').eq('landlord_email', landlordEmail).eq('shared_with_tenant', true),
+        supabase.from('shared_folders').select('folder_id').eq('landlord_email', landlordEmail).eq('property_id', propertyId).eq('shared_with_tenant', true),
       ]);
 
       setAllFolders(foldersRes.data || []);
       setFiles((storageRes.data || []).filter(item => item.id !== null));
       setSharedPaths(new Set((sharedRes.data || []).map(r => r.storage_path)));
+      setSharedFolderIds(new Set((sharedFoldersRes.data || []).map(r => r.folder_id)));
     } catch (err) {
       console.error('[PropertyDocuments] loadContents error:', err);
     }
@@ -452,13 +455,21 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
   const handleToggleFolderShare = async (folder, e) => {
     e.stopPropagation();
-    const { error } = await supabase.from('folders')
-      .update({ shared_with_tenant: !folder.shared_with_tenant })
-      .eq('id', folder.id);
+    const isShared = sharedFolderIds.has(folder.id);
+    const { error } = await supabase.from('shared_folders').upsert({
+      landlord_email: landlordEmail,
+      property_id: propertyId,
+      folder_id: folder.id,
+      folder_name: folder.name,
+      folder_path: folder.path,
+      shared_with_tenant: !isShared,
+    }, { onConflict: 'landlord_email,folder_id' });
     if (error) { alert(`Error: ${error.message}`); return; }
-    setAllFolders(prev =>
-      prev.map(f => f.id === folder.id ? { ...f, shared_with_tenant: !f.shared_with_tenant } : f)
-    );
+    setSharedFolderIds(prev => {
+      const next = new Set(prev);
+      if (isShared) next.delete(folder.id); else next.add(folder.id);
+      return next;
+    });
   };
 
   // ── Native share / download ───────────────────────────────────────────────────
@@ -678,11 +689,11 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                           }
                         </button>
                         <button
-                          className={`finder-action-btn finder-action-share${folder.shared_with_tenant ? ' active' : ''}`}
+                          className={`finder-action-btn finder-action-share${sharedFolderIds.has(folder.id) ? ' active' : ''}`}
                           onClick={e => handleToggleFolderShare(folder, e)}
-                          title={folder.shared_with_tenant ? 'Dejar de compartir carpeta' : 'Compartir carpeta con inquilino'}
+                          title={sharedFolderIds.has(folder.id) ? 'Dejar de compartir carpeta' : 'Compartir carpeta con inquilino'}
                         >
-                          <ShareIcon active={!!folder.shared_with_tenant} />
+                          <ShareIcon active={sharedFolderIds.has(folder.id)} />
                         </button>
                         <ItemMenu
                           menuId={`folder-${folder.id}`}
