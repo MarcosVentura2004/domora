@@ -127,6 +127,11 @@
   color: #92400E;
 }
 
+.payment-badge.rejected {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
 .payment-badge.expired {
   background: #F5F5F5;
   color: #aaa;

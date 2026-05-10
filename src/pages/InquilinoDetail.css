@@ -74,6 +74,11 @@
   color: #92400E;
 }
 
+.payment-badge.rejected {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
 .payment-badge.pending {
   background: #FFEBEE;
   color: #C62828;
