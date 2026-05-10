@@ -19,6 +19,8 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [swipeX, setSwipeX] = useState(0);
   const touchStartX = useRef(null);
   const rentalsRef = useRef([]);
+  const [payingRental, setPayingRental] = useState(null);
+  const [payingAmountInput, setPayingAmountInput] = useState('');
 
   // Primer código activo, usado para la foto de perfil
   const firstCode = tenantCodes[0] || null;
@@ -146,14 +148,14 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       const val = rental.roomId || rental.tenantId;
       const { data: payment } = await supabase
         .from('payments')
-        .select('status')
+        .select('status, amount, partial_amount, pending_amount')
         .eq(col, val)
         .eq('year', now.getFullYear())
         .eq('month', now.getMonth())
         .maybeSingle();
       if (payment) {
         setRentals(prev =>
-          prev.map(r => r.code === rental.code ? { ...r, paymentStatus: payment.status } : r)
+          prev.map(r => r.code === rental.code ? { ...r, paymentData: payment } : r)
         );
       }
     });
@@ -171,14 +173,14 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       const val = rental.roomId || rental.tenantId;
       const { data: payment } = await supabase
         .from('payments')
-        .select('status')
+        .select('status, amount, partial_amount, pending_amount')
         .eq(col, val)
         .eq('year', now.getFullYear())
         .eq('month', now.getMonth())
         .maybeSingle();
       if (payment) {
         setRentals(prev =>
-          prev.map(r => r.code === rental.code ? { ...r, paymentStatus: payment.status } : r)
+          prev.map(r => r.code === rental.code ? { ...r, paymentData: payment } : r)
         );
       }
     });
@@ -235,6 +237,31 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       onCodesUpdate([...tenantCodes, code]);
     }
     setShowAddCode(false);
+  };
+
+  const handleSubmitRest = async () => {
+    const rental = payingRental;
+    if (!rental) return;
+    const amount = parseFloat(payingAmountInput.replace(',', '.'));
+    if (!amount || amount <= 0) return;
+    const now = new Date();
+    const { data, error } = await supabase.rpc('mark_payment_pending', {
+      p_code: rental.code,
+      p_year: now.getFullYear(),
+      p_month: now.getMonth(),
+      p_amount: amount,
+    });
+    if (error || data?.error) {
+      alert('Error al enviar el pago. Inténtalo de nuevo.');
+      return;
+    }
+    setPayingRental(null);
+    setRentals(prev =>
+      prev.map(r => r.code === rental.code
+        ? { ...r, paymentData: { ...(r.paymentData || {}), status: 'pending', pending_amount: amount } }
+        : r
+      )
+    );
   };
 
   if (showAddCode) {
@@ -443,16 +470,41 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
                         <p className="rental-price">{data.rent} €/mes</p>
                       </div>
                       <div className="rental-card-footer">
-                        {data.paymentStatus === 'confirmed' && (
+                        {data.paymentData?.status === 'confirmed' && (
                           <span className="payment-badge paid">Pago confirmado</span>
                         )}
-                        {data.paymentStatus === 'partial' && (
-                          <span className="payment-badge partial">Pago parcial confirmado — enviar resto</span>
+                        {data.paymentData?.status === 'partial' && (
+                          <>
+                            <span className="payment-badge partial">
+                              {data.paymentData.partial_amount != null
+                                ? `${Number(data.paymentData.partial_amount).toFixed(2)}€ confirmados`
+                                : 'Pago parcial confirmado'}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const remaining = Math.max(0, (data.rent) - (data.paymentData.partial_amount || 0));
+                                setPayingAmountInput(String(remaining || data.rent));
+                                setPayingRental(data);
+                              }}
+                              style={{
+                                marginTop: '6px', background: 'none', border: '1px solid #2196F3',
+                                color: '#2196F3', borderRadius: '8px', padding: '4px 10px',
+                                fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <line x1="12" y1="5" x2="12" y2="19" stroke="#2196F3" strokeWidth="2" strokeLinecap="round"/>
+                                <line x1="5" y1="12" x2="19" y2="12" stroke="#2196F3" strokeWidth="2" strokeLinecap="round"/>
+                              </svg>
+                              Pagar el resto ({Math.max(0, (data.rent) - (data.paymentData?.partial_amount || 0)).toFixed(2)}€)
+                            </button>
+                          </>
                         )}
-                        {data.paymentStatus === 'pending' && (
+                        {data.paymentData?.status === 'pending' && (
                           <span className="payment-badge sent">Pago enviado — pendiente de confirmar</span>
                         )}
-                        {!data.paymentStatus && (
+                        {!data.paymentData?.status && (
                           <span className="payment-badge pending">
                             Pago pendiente ({data.paymentConfig?.startDay ?? 1}–{data.paymentConfig?.endDay ?? 5})
                           </span>
@@ -502,6 +554,42 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
         </svg>
         Añadir alquiler
       </button>
+
+      {payingRental && (
+        <div className="modal-overlay" onClick={() => {
+          setPayingRental(null);
+          setPayingAmountInput('');
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Pagar el resto</h2>
+              <button className="modal-close" onClick={() => {
+                setPayingRental(null);
+                setPayingAmountInput('');
+              }}>×</button>
+            </div>
+            <div className="form-group">
+              <label>Importe enviado (€)</label>
+              <input
+                type="number"
+                value={payingAmountInput}
+                onChange={(e) => setPayingAmountInput(e.target.value)}
+                step="0.01"
+                min="0"
+                autoFocus
+              />
+              {parseFloat(payingAmountInput) < payingRental.rent && parseFloat(payingAmountInput) > 0 && (
+                <p style={{ marginTop: '8px', fontSize: '13px', color: '#888' }}>
+                  Importe total: {payingRental.rent} € — se registrará como pago parcial
+                </p>
+              )}
+            </div>
+            <button className="submit-button" onClick={handleSubmitRest}>
+              Confirmar pago
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

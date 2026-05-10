@@ -105,7 +105,7 @@ export default function InquilinoDetail({ rental, onBack }) {
       const val = rental.roomId || rental.tenantId;
       supabase
         .from('payments')
-        .select('status, amount, partial_amount')
+        .select('status, amount, partial_amount, pending_amount')
         .eq(col, val)
         .eq('year', now.getFullYear())
         .eq('month', now.getMonth())
@@ -129,7 +129,7 @@ export default function InquilinoDetail({ rental, onBack }) {
     // Historial completo
     const query = supabase
       .from('payments')
-      .select('year, month, status, amount, partial_amount')
+      .select('year, month, status, amount, partial_amount, pending_amount')
       .order('year', { ascending: false })
       .order('month', { ascending: false });
     if (rental.roomId) {
@@ -185,11 +185,11 @@ export default function InquilinoDetail({ rental, onBack }) {
       return;
     }
     setShowPaymentModal(false);
-    setSupabasePayment({
+    setSupabasePayment(prev => ({
+      ...(prev || {}),
       status: 'pending',
-      amount,
-      partial_amount: null,
-    });
+      pending_amount: amount,
+    }));
   };
 
   // Cargar documentos desde Supabase (tabla documents + shared_files globales)

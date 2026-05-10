@@ -401,7 +401,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     const fetchPayment = () => {
       supabase
         .from('payments')
-        .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount')
+        .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount, pending_amount')
         .eq('property_id', String(property.id))
         .eq('room_id', String(room.id))
         .eq('year', currentYear)
@@ -446,9 +446,10 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
   const ownershipPercentage = property.ownershipPercentage || 100;
   const ownershipMultiplier = ownershipPercentage / 100;
-  // Suma de todos los pagos confirmados del mes
-  const totalConfirmedAmount = confirmedPayments.reduce((sum, p) => sum + (p.amount ?? room.price), 0);
-  const monthlyIncome = totalConfirmedAmount * ownershipMultiplier;
+  // Suma de ingresos del mes: parcial usa supabaseRoomPayment, confirmado usa property.payments
+  const monthlyIncome = supabaseRoomPayment?.status === 'partial'
+    ? (supabaseRoomPayment.partial_amount || 0) * ownershipMultiplier
+    : confirmedPayments.reduce((sum, p) => sum + (p.amount ?? room.price), 0) * ownershipMultiplier;
   const netIncome = isCurrentMonthFuture ? null : monthlyIncome - totalExpenses;
 
   const handleAddExpense = async (expenseData) => {
@@ -557,27 +558,26 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setShowConfirmModal(true);
   };
 
-  const handleConfirmWithAmount = async (amount) => {
-    const existingRow = supabaseRoomPayment; // Fix 1: capture before any setState
-    const previousState = supabaseRoomPayment; // Fix 2: for rollback on error
-    const importePrevio = existingRow?.partial_amount || 0;
-    const nuevoTotal = importePrevio + amount;
+  const handleConfirmWithAmount = async (importeNuevo) => {
+    const previousState = supabaseRoomPayment;
+    const previousPayments = payments;
+    const importePrevio = supabaseRoomPayment?.partial_amount || 0;
+    const nuevoTotal = importePrevio + importeNuevo;
     const isComplete = nuevoTotal >= room.price;
     const confirmedAt = new Date().toISOString();
     const newStatus = isComplete ? 'confirmed' : 'partial';
     const newPartialAmount = isComplete ? null : nuevoTotal;
-    const newAmount = nuevoTotal;
 
-    // Update local Supabase state
+    // Optimistic update
     setSupabaseRoomPayment(prev => ({
       ...(prev || {}),
       status: newStatus,
       partial_amount: newPartialAmount,
-      amount: newAmount,
+      pending_amount: null,
+      amount: room.price,
       confirmed_at: confirmedAt,
     }));
 
-    // If complete, add to property.payments (localStorage) for history/totals
     if (isComplete) {
       const newPayment = {
         year: currentYear,
@@ -586,7 +586,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
         status: 'confirmed',
         markedAt: confirmedAt,
         confirmedAt,
-        amount: newAmount,
+        amount: room.price,
         tenantName: room.tenant?.name,
       };
       onUpdate({ ...property, payments: [...payments, newPayment] });
@@ -595,24 +595,33 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setShowConfirmModal(false);
     setConfirmModalAmount(null);
 
-    // Persist to Supabase via SECURITY DEFINER RPC (bypasses RLS).
     const { data: rpcResult, error: rpcError } = await supabase.rpc('confirm_payment_v2', {
-      p_property_id:    String(property.id),
-      p_room_id:        String(room.id),
-      p_tenant_id:      room.tenant?.id ? String(room.tenant.id) : null,
-      p_year:           currentYear,
-      p_month:          currentMonth,
-      p_amount:         newAmount,
-      p_status:         newStatus,
-      p_partial_amount: newPartialAmount,
-      p_landlord_email: property.landlord_email || landlordEmail,
+      p_property_id:      String(property.id),
+      p_room_id:          String(room.id),
+      p_tenant_id:        room.tenant?.id ? String(room.tenant.id) : null,
+      p_year:             currentYear,
+      p_month:            currentMonth,
+      p_confirmed_amount: importeNuevo,
+      p_rent_total:       room.price,
+      p_landlord_email:   property.landlord_email || landlordEmail,
     });
 
     if (rpcError || rpcResult?.success === false) {
       console.error('[RoomDetail] Error guardando pago:', rpcError || rpcResult?.error);
-      setSupabaseRoomPayment(previousState); // rollback optimistic state
+      setSupabaseRoomPayment(previousState);
+      if (isComplete) onUpdate({ ...property, payments: previousPayments });
       alert('Error al guardar el pago. Por favor, recarga la página.');
       return;
+    }
+
+    if (rpcResult) {
+      setSupabaseRoomPayment(prev => ({
+        ...(prev || {}),
+        status: rpcResult.status,
+        partial_amount: rpcResult.partial_amount,
+        amount: rpcResult.amount,
+        pending_amount: null,
+      }));
     }
   };
 
@@ -962,11 +971,11 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                     {canEdit && isPendingConfirmation && (
                       <div className="tenant-payment-actions">
                         <p style={{ fontSize: '13px', color: '#92400E', margin: '0 0 8px 0' }}>
-                          {supabaseRoomPayment?.amount != null
-                            ? `${Number(supabaseRoomPayment.amount).toFixed(2)} € enviados — pendiente de confirmar`
+                          {supabaseRoomPayment?.pending_amount != null
+                            ? `${Number(supabaseRoomPayment.pending_amount).toFixed(2)} € enviados — pendiente de confirmar`
                             : 'Pago enviado — pendiente de confirmar'}
                         </p>
-                        <button className="payment-btn confirm small" onClick={() => { setConfirmModalAmount(supabaseRoomPayment?.amount ?? null); setShowConfirmModal(true); }}>
+                        <button className="payment-btn confirm small" onClick={() => { setConfirmModalAmount(supabaseRoomPayment?.pending_amount ?? null); setShowConfirmModal(true); }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                             <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>

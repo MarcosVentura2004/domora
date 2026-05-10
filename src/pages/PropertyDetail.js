@@ -409,7 +409,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const fetchPaymentsForMonth = React.useCallback((yr, mo) => {
     supabase
       .from('payments')
-      .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount')
+      .select('tenant_id, room_id, status, amount, confirmed_at, partial_amount, pending_amount')
       .eq('property_id', String(property.id))
       .eq('year', yr)
       .eq('month', mo)
@@ -491,68 +491,23 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     return 'pending';
   };
 
-  const handleConfirmPayment = async (tenantId, customAmount) => {
-    const tenant = tenants.find(t => t.id === tenantId);
-    const amount = customAmount !== undefined ? customAmount : tenant?.amount;
-    const confirmedAt = new Date().toISOString();
-    const updatedPayments = payments.map(p =>
-      p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
-        ? { ...p, status: 'confirmed', confirmedAt, amount, tenantName: tenant?.name }
-        : p
-    );
-    setPayments(updatedPayments);
-    onUpdate({ ...property, payments: updatedPayments });
-
-    const payload = {
-      property_id: String(property.id),
-      tenant_id: tenantId,
-      room_id: null,
-      year: currentYear,
-      month: currentMonth,
-      status: 'confirmed',
-      confirmed_at: confirmedAt,
-    };
-    console.log('[handleConfirmPayment] Guardando en Supabase:', payload);
-
-    const { data: updateData, count: updateCount, error: updateError } = await supabase
-      .from('payments')
-      .update({ status: 'confirmed', confirmed_at: confirmedAt, amount })
-      .eq('property_id', String(property.id))
-      .eq('tenant_id', tenantId)
-      .eq('year', currentYear)
-      .eq('month', currentMonth)
-      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at', { count: 'exact' });
-    console.log('[handleConfirmPayment] Resultado UPDATE:', { rowsUpdated: updateCount, data: updateData, error: updateError });
-
-    // Verificación: leer el registro recién guardado
-    const { data: verifyData, error: verifyError } = await supabase
-      .from('payments')
-      .select('id, property_id, tenant_id, room_id, year, month, status, confirmed_at')
-      .eq('property_id', String(property.id))
-      .eq('tenant_id', tenantId)
-      .eq('year', currentYear)
-      .eq('month', currentMonth);
-    console.log('[handleConfirmPayment] Verificación DB post-escritura:', { verifyData, verifyError });
-
-    setPendingSupabasePayments(prev =>
-      prev.map(p => p.tenant_id === tenantId ? { ...p, status: 'confirmed' } : p)
-    );
-  };
-
   const handleConfirmWithAmount = async (tenantId, importeNuevo) => {
     const tenant = tenants.find(t => t.id === tenantId);
     const rentTotal = tenant?.amount || 0;
     const existingSupabase = pendingSupabasePayments.find(p => p.tenant_id === tenantId);
+    const confirmedAt = new Date().toISOString();
+
+    // Capture previous states for rollback on error
+    const prevSupabasePayments = pendingSupabasePayments;
+    const prevPayments = payments;
+
+    // Optimistic: mirror the RPC calculation for immediate UI response
     const importePrevio = existingSupabase?.partial_amount || 0;
     const nuevoTotal = importePrevio + importeNuevo;
-
-    const confirmedAt = new Date().toISOString();
     const isComplete = nuevoTotal >= rentTotal;
     const newStatus = isComplete ? 'confirmed' : 'partial';
-    const newAmount = nuevoTotal; // always the running total received so far
     const newPartialAmount = isComplete ? null : nuevoTotal;
 
-    // Update local Supabase state (source of truth for UI)
     setPendingSupabasePayments(prev => {
       const exists = prev.find(p => p.tenant_id === tenantId);
       const updated = {
@@ -560,14 +515,15 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
         room_id: null,
         status: newStatus,
         confirmed_at: confirmedAt,
-        amount: newAmount,
+        amount: rentTotal,
         partial_amount: newPartialAmount,
+        pending_amount: null,
       };
       if (exists) return prev.map(p => p.tenant_id === tenantId ? { ...p, ...updated } : p);
       return [...prev, updated];
     });
 
-    // Update localStorage
+    // Update local payments array (used for history and export)
     const existingLocalPayment = payments.find(p =>
       p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
     );
@@ -575,33 +531,52 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     if (existingLocalPayment) {
       updatedPayments = payments.map(p =>
         p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId
-          ? { ...p, status: newStatus, confirmedAt, amount: newAmount, tenantName: tenant?.name }
+          ? { ...p, status: newStatus, confirmedAt, amount: rentTotal, tenantName: tenant?.name }
           : p
       );
     } else {
       updatedPayments = [...payments, {
         year: currentYear, month: currentMonth, tenantId,
-        status: newStatus, confirmedAt, amount: newAmount, tenantName: tenant?.name,
+        status: newStatus, confirmedAt, amount: rentTotal, tenantName: tenant?.name,
       }];
     }
     setPayments(updatedPayments);
     onUpdate({ ...property, payments: updatedPayments });
 
-    // Persist to Supabase via SECURITY DEFINER RPC (bypasses RLS).
     const { data: rpcResult, error: rpcError } = await supabase.rpc('confirm_payment_v2', {
-      p_property_id:    String(property.id),
-      p_room_id:        null,
-      p_tenant_id:      tenantId,
-      p_year:           currentYear,
-      p_month:          currentMonth,
-      p_amount:         newAmount,
-      p_status:         newStatus,
-      p_partial_amount: newPartialAmount,
-      p_landlord_email: property.landlord_email || landlordEmail,
+      p_property_id:      String(property.id),
+      p_room_id:          null,
+      p_tenant_id:        tenantId,
+      p_year:             currentYear,
+      p_month:            currentMonth,
+      p_confirmed_amount: importeNuevo,
+      p_rent_total:       rentTotal,
+      p_landlord_email:   property.landlord_email || landlordEmail,
     });
 
     if (rpcError || rpcResult?.success === false) {
+      // Rollback optimistic state
+      setPendingSupabasePayments(prevSupabasePayments);
+      setPayments(prevPayments);
+      onUpdate({ ...property, payments: prevPayments });
       alert('Error al guardar el pago. Por favor, recarga la página.');
+      return;
+    }
+
+    if (rpcResult) {
+      // Correct optimistic state with authoritative RPC result
+      setPendingSupabasePayments(prev =>
+        prev.map(p => p.tenant_id === tenantId
+          ? {
+              ...p,
+              status: rpcResult.status,
+              partial_amount: rpcResult.partial_amount,
+              amount: rpcResult.amount,
+              pending_amount: null,
+            }
+          : p
+        )
+      );
     }
 
     setConfirmingTenant(null);
@@ -1273,12 +1248,12 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
 
                     {canEdit && tenantStatus === 'pending_confirmation' && (
                       <div className="tenant-payment-actions">
-                        {supabasePaymentForTenant?.amount != null && (
+                        {supabasePaymentForTenant?.pending_amount != null && (
                           <p style={{ fontSize: '13px', color: '#888', margin: '0 0 8px 0' }}>
-                            {supabasePaymentForTenant.amount}€ enviados por el inquilino
+                            {supabasePaymentForTenant.pending_amount}€ enviados por el inquilino
                           </p>
                         )}
-                        <button className="payment-btn confirm small" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: supabasePaymentForTenant?.amount ?? tenant.amount })}>
+                        <button className="payment-btn confirm small" onClick={() => setConfirmingTenant({ id: tenant.id, name: tenant.name, amount: supabasePaymentForTenant?.pending_amount ?? tenant.amount })}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
                             <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
