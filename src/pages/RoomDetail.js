@@ -909,7 +909,19 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                           {' · '}{new Date(p.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         </p>
                         {canEdit && (
-                          <button className="payment-cancel-link" onClick={() => {
+                          <button className="payment-cancel-link" onClick={async () => {
+                            const { error } = await supabase
+                              .from('payments')
+                              .delete()
+                              .eq('property_id', String(property.id))
+                              .eq('room_id', String(room.id))
+                              .eq('year', p.year)
+                              .eq('month', p.month);
+                            if (error) {
+                              alert('Error al cancelar el pago. Por favor, recarga la página.');
+                              return;
+                            }
+                            setSupabaseRoomPayment(null);
                             const updated = payments.filter(x => !(x.year === p.year && x.month === p.month && x.roomId === p.roomId && x.confirmedAt === p.confirmedAt));
                             onUpdate({ ...property, payments: updated });
                           }}>Cancelar</button>
@@ -924,12 +936,28 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                           {Number(supabaseRoomPayment.partial_amount).toFixed(2)}€ de {room.price}€ — pago parcial
                         </p>
                         {canEdit && (
-                          <button className="payment-btn confirm small" onClick={handleConfirmPartialRest}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                            Confirmar resto
-                          </button>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button className="payment-btn confirm small" onClick={handleConfirmPartialRest}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              Confirmar resto
+                            </button>
+                            <button className="payment-cancel-link" onClick={async () => {
+                              const { error } = await supabase
+                                .from('payments')
+                                .delete()
+                                .eq('property_id', String(property.id))
+                                .eq('room_id', String(room.id))
+                                .eq('year', currentYear)
+                                .eq('month', currentMonth);
+                              if (error) {
+                                alert('Error al cancelar el pago. Por favor, recarga la página.');
+                                return;
+                              }
+                              setSupabaseRoomPayment(null);
+                            }}>Cancelar</button>
+                          </div>
                         )}
                       </div>
                     )}

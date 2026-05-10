@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import './InquilinoHome.css';
 import CodeEntry from './CodeEntry';
 import InquilinoDetail from './InquilinoDetail';
@@ -18,6 +18,7 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
   const [swipedCode, setSwipedCode] = useState(null);
   const [swipeX, setSwipeX] = useState(0);
   const touchStartX = useRef(null);
+  const rentalsRef = useRef([]);
 
   // Primer código activo, usado para la foto de perfil
   const firstCode = tenantCodes[0] || null;
@@ -157,6 +158,41 @@ export default function InquilinoHome({ userEmail, tenantCodes, onLogout, onCode
       }
     });
   }, [tenantCodes]);
+
+  // Keep ref in sync so polling closure always sees latest rentals
+  useEffect(() => { rentalsRef.current = rentals; }, [rentals]);
+
+  // Re-fetch payment statuses when the user returns to the tab or every 30s
+  const fetchPaymentStatuses = useCallback(async () => {
+    const now = new Date();
+    const active = rentalsRef.current.filter(r => !r.expired);
+    active.forEach(async (rental) => {
+      const col = rental.roomId ? 'room_id' : 'tenant_id';
+      const val = rental.roomId || rental.tenantId;
+      const { data: payment } = await supabase
+        .from('payments')
+        .select('status')
+        .eq(col, val)
+        .eq('year', now.getFullYear())
+        .eq('month', now.getMonth())
+        .maybeSingle();
+      if (payment) {
+        setRentals(prev =>
+          prev.map(r => r.code === rental.code ? { ...r, paymentStatus: payment.status } : r)
+        );
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchPaymentStatuses(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const pollInterval = setInterval(fetchPaymentStatuses, 30000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(pollInterval);
+    };
+  }, [fetchPaymentStatuses]);
 
   const handleTouchStart = (e, code) => {
     touchStartX.current = e.touches[0].clientX;
