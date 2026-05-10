@@ -1,0 +1,30 @@
+/* TenantDocuments — extends PropertyDocuments.css styles */
+
+/* Badge "Compartida" en tarjeta de carpeta */
+.td-shared-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1E88E5;
+  background: #E3F2FD;
+  border: 1px solid #BBDEFB;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin-top: 2px;
+  align-self: flex-start;
+}
+
+/* Icono de candado en breadcrumb para carpeta compartida */
+.td-breadcrumb-shared {
+  color: #1E88E5;
+}
+
+.td-shared-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  color: #1E88E5;
+  vertical-align: middle;
+}

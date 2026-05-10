@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './PropertyDocuments.css';
+import './TenantDocuments.css';
 import { supabase } from '../supabaseClient';
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
@@ -10,6 +11,18 @@ function FolderIcon({ size = 40 }) {
       <path
         d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
         fill="#FFE0B2" stroke="#FB8C00" strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SharedFolderIcon({ size = 40 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+        fill="#E3F2FD" stroke="#1E88E5" strokeWidth="1.5"
         strokeLinecap="round" strokeLinejoin="round"
       />
     </svg>
@@ -67,21 +80,6 @@ function FileIcon({ mimeType, size = 32 }) {
   );
 }
 
-function ShareIcon({ active }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="2"
-        fill={active ? 'currentColor' : 'none'}/>
-      <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="2"
-        fill={active ? 'currentColor' : 'none'}/>
-      <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="2"
-        fill={active ? 'currentColor' : 'none'}/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke="currentColor" strokeWidth="2"/>
-      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke="currentColor" strokeWidth="2"/>
-    </svg>
-  );
-}
-
 function DotsIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -124,57 +122,94 @@ function getDirectChildren(allFolders, currentPath) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-function PropertyDocuments({ landlordEmail, property, onBack }) {
-  const propertyId = property?.id;
+export default function TenantDocuments({ rental, onBack }) {
+  const { landlordEmail, propertyId, tenantId } = rental;
+
+  // Navigation state
   const [currentPath, setCurrentPath] = useState('');
-  const [allFolders, setAllFolders] = useState([]);
+  // null = own context; object = inside a shared landlord folder
+  const [sharedFolderRoot, setSharedFolderRoot] = useState(null);
+
+  // Data state
+  const [allOwnFolders, setAllOwnFolders] = useState([]);
+  const [allLandlordFolders, setAllLandlordFolders] = useState([]);
   const [files, setFiles] = useState([]);
-  const [sharedPaths, setSharedPaths] = useState(new Set());
+  const [sharedFiles, setSharedFiles] = useState([]); // from shared_files table
+
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const menuRef = useRef(null);
-
-  // Context menu & modal state
   const [openMenuId, setOpenMenuId] = useState(null);
-  const [renameTarget, setRenameTarget] = useState(null); // { type: 'folder'|'file', item }
-  const [moveTarget, setMoveTarget] = useState(null);     // { type: 'folder'|'file', item }
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [moveTarget, setMoveTarget] = useState(null);
   const [zippingFolderId, setZippingFolderId] = useState(null);
 
-  const storagePath = currentPath
-    ? `${landlordEmail}/${propertyId}/${currentPath}`
-    : `${landlordEmail}/${propertyId}`;
+  const menuRef = useRef(null);
+
+  const tenantStorageRoot = `${landlordEmail}/${propertyId}/inquilino/${tenantId}`;
+
+  // Active storage path for listing files
+  const ownStoragePath = currentPath ? `${tenantStorageRoot}/${currentPath}` : tenantStorageRoot;
+  const sharedStoragePath = sharedFolderRoot
+    ? (currentPath ? `${landlordEmail}/${propertyId}/${currentPath}` : `${landlordEmail}/${propertyId}/${sharedFolderRoot.path}`)
+    : null;
+  const activeStoragePath = sharedFolderRoot ? sharedStoragePath : ownStoragePath;
+
+  // ── Data loading ─────────────────────────────────────────────────────────────
 
   const loadContents = useCallback(async () => {
     setLoading(true);
     try {
-      const [foldersRes, storageRes, sharedRes] = await Promise.all([
-        supabase.from('folders').select('*')
-          .eq('landlord_email', landlordEmail)
-          .eq('property_id', propertyId)
-          .order('name'),
-        supabase.storage.from('documentos').list(storagePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
-        supabase.from('shared_files').select('storage_path').eq('landlord_email', landlordEmail).eq('shared_with_tenant', true),
-      ]);
-
-      setAllFolders(foldersRes.data || []);
-      setFiles((storageRes.data || []).filter(item => item.id !== null));
-      setSharedPaths(new Set((sharedRes.data || []).map(r => r.storage_path)));
+      if (sharedFolderRoot === null) {
+        // Own context: load own folders, landlord folders (for shared display + navigation), files, shared_files
+        const [ownFoldersRes, landlordFoldersRes, storageRes, sharedFilesRes] = await Promise.all([
+          supabase.from('folders').select('*')
+            .eq('landlord_email', landlordEmail)
+            .eq('property_id', propertyId)
+            .eq('tenant_id', String(tenantId))
+            .order('name'),
+          supabase.from('folders').select('*')
+            .eq('landlord_email', landlordEmail)
+            .eq('property_id', propertyId)
+            .is('tenant_id', null)
+            .order('name'),
+          supabase.storage.from('documentos').list(ownStoragePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
+          currentPath === ''
+            ? supabase.from('shared_files').select('*')
+                .eq('landlord_email', landlordEmail)
+                .eq('shared_with_tenant', true)
+            : Promise.resolve({ data: [] }),
+        ]);
+        setAllOwnFolders(ownFoldersRes.data || []);
+        setAllLandlordFolders(landlordFoldersRes.data || []);
+        setFiles((storageRes.data || []).filter(item => item.id !== null));
+        setSharedFiles(sharedFilesRes.data || []);
+      } else {
+        // Shared context: only landlord folders and storage at the landlord path
+        const [landlordFoldersRes, storageRes] = await Promise.all([
+          supabase.from('folders').select('*')
+            .eq('landlord_email', landlordEmail)
+            .eq('property_id', propertyId)
+            .is('tenant_id', null)
+            .order('name'),
+          supabase.storage.from('documentos').list(sharedStoragePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
+        ]);
+        setAllLandlordFolders(landlordFoldersRes.data || []);
+        setFiles((storageRes.data || []).filter(item => item.id !== null));
+      }
     } catch (err) {
-      console.error('[PropertyDocuments] loadContents error:', err);
+      console.error('[TenantDocuments] loadContents error:', err);
     }
     setLoading(false);
-  }, [landlordEmail, propertyId, storagePath]);
+  }, [landlordEmail, propertyId, tenantId, currentPath, sharedFolderRoot, ownStoragePath, sharedStoragePath]);
 
   useEffect(() => { loadContents(); }, [loadContents]);
 
-  // Close the "+" add menu on outside click
+  // Close "+" menu on outside click
   useEffect(() => {
     if (!showMenu) return;
-    const handler = e => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
-    };
+    const handler = e => { if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showMenu]);
@@ -187,23 +222,47 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [openMenuId]);
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
+  // ── Breadcrumbs ───────────────────────────────────────────────────────────────
 
-  const breadcrumbs = ['Inicio', ...currentPath.split('/').filter(Boolean)];
-
-  const navigateToBreadcrumb = idx => {
-    if (idx === 0) setCurrentPath('');
-    else {
-      const parts = currentPath.split('/').filter(Boolean);
-      setCurrentPath(parts.slice(0, idx).join('/'));
+  const breadcrumbs = (() => {
+    if (sharedFolderRoot === null) {
+      const parts = currentPath ? currentPath.split('/').filter(Boolean) : [];
+      return [
+        { label: 'Mis documentos', onClick: () => setCurrentPath('') },
+        ...parts.map((part, i) => ({
+          label: part,
+          onClick: () => setCurrentPath(parts.slice(0, i + 1).join('/')),
+        })),
+      ];
+    } else {
+      const subPath = currentPath.slice(sharedFolderRoot.path.length).replace(/^\//, '');
+      const subParts = subPath ? subPath.split('/').filter(Boolean) : [];
+      return [
+        { label: 'Mis documentos', onClick: () => { setSharedFolderRoot(null); setCurrentPath(''); } },
+        {
+          label: sharedFolderRoot.name,
+          isShared: true,
+          onClick: () => setCurrentPath(sharedFolderRoot.path),
+        },
+        ...subParts.map((part, i) => ({
+          label: part,
+          onClick: () => setCurrentPath(sharedFolderRoot.path + '/' + subParts.slice(0, i + 1).join('/')),
+        })),
+      ];
     }
-  };
+  })();
 
-  // ── Mutations ────────────────────────────────────────────────────────────────
+  // ── Own folder CRUD ───────────────────────────────────────────────────────────
 
   const handleCreateFolder = async name => {
     const newPath = currentPath ? `${currentPath}/${name}` : name;
-    const { error } = await supabase.from('folders').insert({ landlord_email: landlordEmail, property_id: propertyId, path: newPath, name });
+    const { error } = await supabase.from('folders').insert({
+      landlord_email: landlordEmail,
+      property_id: propertyId,
+      tenant_id: String(tenantId),
+      path: newPath,
+      name,
+    });
     if (error) { alert(`Error creando carpeta: ${error.message}`); return; }
     await loadContents();
     setShowNewFolderModal(false);
@@ -211,116 +270,62 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
   const handleUploadFile = async file => {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const uploadPath = `${storagePath}/${Date.now()}_${safeName}`;
+    const uploadPath = `${ownStoragePath}/${Date.now()}_${safeName}`;
     const { error } = await supabase.storage.from('documentos').upload(uploadPath, file, { upsert: false });
-    if (error) {
-      if (error.message?.includes('Bucket not found') || error.error === 'Bucket not found') {
-        alert('El bucket "documentos" no existe.\n\n1. Supabase → Storage → New Bucket\n2. Nombre: "documentos"\n3. Activa "Public bucket"\n4. Create bucket');
-      } else {
-        alert(`Error subiendo archivo: ${error.message}`);
-      }
-      return;
-    }
-    await supabase.from('shared_files').upsert({
-      landlord_email: landlordEmail,
-      storage_path: uploadPath,
-      file_name: file.name,
-      file_type: file.type,
-      file_size: file.size,
-      shared_with_tenant: false,
-    }, { onConflict: 'landlord_email,storage_path' });
+    if (error) { alert(`Error subiendo archivo: ${error.message}`); return; }
     await loadContents();
     setShowUploadModal(false);
   };
 
-  const handleToggleShare = async (file, e) => {
-    e.stopPropagation();
-    const filePath = `${storagePath}/${file.name}`;
-    const isShared = sharedPaths.has(filePath);
-    const { error } = await supabase.from('shared_files').upsert({
-      landlord_email: landlordEmail,
-      storage_path: filePath,
-      file_name: file.name,
-      file_type: file.metadata?.mimetype,
-      file_size: file.metadata?.size,
-      shared_with_tenant: !isShared,
-    }, { onConflict: 'landlord_email,storage_path' });
-    if (error) { alert(`Error: ${error.message}`); return; }
-    setSharedPaths(prev => {
-      const next = new Set(prev);
-      if (isShared) next.delete(filePath); else next.add(filePath);
-      return next;
-    });
-  };
-
   const handleDeleteFile = async file => {
     if (!window.confirm(`¿Eliminar "${file.name}"?`)) return;
-    const filePath = `${storagePath}/${file.name}`;
-    await Promise.all([
-      supabase.storage.from('documentos').remove([filePath]),
-      supabase.from('shared_files').delete().eq('landlord_email', landlordEmail).eq('storage_path', filePath),
-    ]);
+    await supabase.storage.from('documentos').remove([`${ownStoragePath}/${file.name}`]);
     setOpenMenuId(null);
     await loadContents();
   };
 
   const handleDeleteFolder = async folder => {
     if (!window.confirm(`¿Eliminar la carpeta "${folder.name}" y todo su contenido?`)) return;
-    const fullPath = `${landlordEmail}/${propertyId}/${folder.path}`;
+    const fullPath = `${tenantStorageRoot}/${folder.path}`;
     const { data: items } = await supabase.storage.from('documentos').list(fullPath, { limit: 1000 });
     if (items?.length > 0) {
-      const paths = items.map(i => `${fullPath}/${i.name}`);
-      await Promise.all([
-        supabase.storage.from('documentos').remove(paths),
-        supabase.from('shared_files').delete().eq('landlord_email', landlordEmail).in('storage_path', paths),
-      ]);
+      await supabase.storage.from('documentos').remove(items.map(i => `${fullPath}/${i.name}`));
     }
     await supabase.from('folders').delete()
-      .eq('landlord_email', landlordEmail)
-      .eq('property_id', propertyId)
+      .eq('tenant_id', String(tenantId))
       .or(`path.eq.${folder.path},path.like.${folder.path}/%`);
     setOpenMenuId(null);
     await loadContents();
   };
 
-  // ── Rename ───────────────────────────────────────────────────────────────────
-
   const handleRenameFolder = async (folder, newName) => {
     const pathParts = folder.path.split('/');
     pathParts[pathParts.length - 1] = newName;
     const newFolderPath = pathParts.join('/');
-
     if (newFolderPath === folder.path) { setRenameTarget(null); return; }
 
-    const oldStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
-    const newStoragePath = `${landlordEmail}/${propertyId}/${newFolderPath}`;
+    const oldStorage = `${tenantStorageRoot}/${folder.path}`;
+    const newStorage = `${tenantStorageRoot}/${newFolderPath}`;
 
-    // Move direct files in storage
-    const { data: items } = await supabase.storage.from('documentos').list(oldStoragePath, { limit: 1000 });
+    const { data: items } = await supabase.storage.from('documentos').list(oldStorage, { limit: 1000 });
     for (const item of (items || []).filter(i => i.id !== null)) {
-      const { data: blob } = await supabase.storage.from('documentos').download(`${oldStoragePath}/${item.name}`);
+      const { data: blob } = await supabase.storage.from('documentos').download(`${oldStorage}/${item.name}`);
       if (blob) {
-        await supabase.storage.from('documentos').upload(`${newStoragePath}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
-        await supabase.storage.from('documentos').remove([`${oldStoragePath}/${item.name}`]);
-        await supabase.from('shared_files')
-          .update({ storage_path: `${newStoragePath}/${item.name}` })
-          .eq('landlord_email', landlordEmail)
-          .eq('storage_path', `${oldStoragePath}/${item.name}`);
+        await supabase.storage.from('documentos').upload(`${newStorage}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
+        await supabase.storage.from('documentos').remove([`${oldStorage}/${item.name}`]);
       }
     }
 
-    // Update this folder record
     const { error } = await supabase.from('folders')
       .update({ name: newName, path: newFolderPath })
       .eq('id', folder.id);
     if (error) { alert(`Error renombrando: ${error.message}`); return; }
 
-    // Update subfolder paths
-    const subfolders = allFolders.filter(f => f.path.startsWith(folder.path + '/'));
+    const subfolders = allOwnFolders.filter(f => f.path.startsWith(folder.path + '/'));
     for (const sub of subfolders) {
       const newSubPath = newFolderPath + sub.path.slice(folder.path.length);
-      const oldSubStorage = `${landlordEmail}/${propertyId}/${sub.path}`;
-      const newSubStorage = `${landlordEmail}/${propertyId}/${newSubPath}`;
+      const oldSubStorage = `${tenantStorageRoot}/${sub.path}`;
+      const newSubStorage = `${tenantStorageRoot}/${newSubPath}`;
       const { data: subItems } = await supabase.storage.from('documentos').list(oldSubStorage, { limit: 1000 });
       for (const item of (subItems || []).filter(i => i.id !== null)) {
         const { data: blob } = await supabase.storage.from('documentos').download(`${oldSubStorage}/${item.name}`);
@@ -338,95 +343,58 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
   const handleRenameFile = async (file, newName) => {
     if (newName === file.name) { setRenameTarget(null); return; }
-    const oldPath = `${storagePath}/${file.name}`;
-    const newPath = `${storagePath}/${newName}`;
-
+    const oldPath = `${ownStoragePath}/${file.name}`;
+    const newPath = `${ownStoragePath}/${newName}`;
     const { data: blob, error: dlErr } = await supabase.storage.from('documentos').download(oldPath);
     if (dlErr) { alert(`Error renombrando: ${dlErr.message}`); return; }
-
     const { error: upErr } = await supabase.storage.from('documentos').upload(newPath, blob, {
-      upsert: false,
-      contentType: blob.type || file.metadata?.mimetype || 'application/octet-stream',
+      upsert: false, contentType: blob.type || file.metadata?.mimetype || 'application/octet-stream',
     });
     if (upErr) { alert(`Error renombrando: ${upErr.message}`); return; }
-
     await supabase.storage.from('documentos').remove([oldPath]);
-    await supabase.from('shared_files')
-      .update({ storage_path: newPath, file_name: newName })
-      .eq('landlord_email', landlordEmail)
-      .eq('storage_path', oldPath);
     setRenameTarget(null);
     await loadContents();
   };
 
-  // ── Move ─────────────────────────────────────────────────────────────────────
-
   const handleMoveFile = async (file, destFolderPath) => {
-    const oldPath = `${storagePath}/${file.name}`;
-    const destStorage = destFolderPath
-      ? `${landlordEmail}/${propertyId}/${destFolderPath}`
-      : `${landlordEmail}/${propertyId}`;
+    const oldPath = `${ownStoragePath}/${file.name}`;
+    const destStorage = destFolderPath ? `${tenantStorageRoot}/${destFolderPath}` : tenantStorageRoot;
     const newPath = `${destStorage}/${file.name}`;
-
     if (oldPath === newPath) { setMoveTarget(null); return; }
-
     const { data: blob, error: dlErr } = await supabase.storage.from('documentos').download(oldPath);
     if (dlErr) { alert(`Error moviendo: ${dlErr.message}`); return; }
-
     const { error: upErr } = await supabase.storage.from('documentos').upload(newPath, blob, {
-      upsert: false,
-      contentType: blob.type || file.metadata?.mimetype || 'application/octet-stream',
+      upsert: false, contentType: blob.type || file.metadata?.mimetype || 'application/octet-stream',
     });
     if (upErr) { alert(`Error moviendo: ${upErr.message}`); return; }
-
     await supabase.storage.from('documentos').remove([oldPath]);
-    await supabase.from('shared_files')
-      .update({ storage_path: newPath })
-      .eq('landlord_email', landlordEmail)
-      .eq('storage_path', oldPath);
     setMoveTarget(null);
     await loadContents();
   };
 
   const handleMoveFolder = async (folder, destFolderPath) => {
-    const newFolderPath = destFolderPath
-      ? `${destFolderPath}/${folder.name}`
-      : folder.name;
-
+    const newFolderPath = destFolderPath ? `${destFolderPath}/${folder.name}` : folder.name;
     if (newFolderPath === folder.path || newFolderPath.startsWith(folder.path + '/')) {
       alert('No puedes mover una carpeta dentro de sí misma.');
       return;
     }
-
-    const oldStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
-    const newStoragePath = `${landlordEmail}/${propertyId}/${newFolderPath}`;
-
-    // Move direct files
-    const { data: items } = await supabase.storage.from('documentos').list(oldStoragePath, { limit: 1000 });
+    const oldStorage = `${tenantStorageRoot}/${folder.path}`;
+    const newStorage = `${tenantStorageRoot}/${newFolderPath}`;
+    const { data: items } = await supabase.storage.from('documentos').list(oldStorage, { limit: 1000 });
     for (const item of (items || []).filter(i => i.id !== null)) {
-      const { data: blob } = await supabase.storage.from('documentos').download(`${oldStoragePath}/${item.name}`);
+      const { data: blob } = await supabase.storage.from('documentos').download(`${oldStorage}/${item.name}`);
       if (blob) {
-        await supabase.storage.from('documentos').upload(`${newStoragePath}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
-        await supabase.storage.from('documentos').remove([`${oldStoragePath}/${item.name}`]);
-        await supabase.from('shared_files')
-          .update({ storage_path: `${newStoragePath}/${item.name}` })
-          .eq('landlord_email', landlordEmail)
-          .eq('storage_path', `${oldStoragePath}/${item.name}`);
+        await supabase.storage.from('documentos').upload(`${newStorage}/${item.name}`, blob, { upsert: false, contentType: blob.type || 'application/octet-stream' });
+        await supabase.storage.from('documentos').remove([`${oldStorage}/${item.name}`]);
       }
     }
-
-    // Update folder record
-    const { error } = await supabase.from('folders')
-      .update({ path: newFolderPath })
-      .eq('id', folder.id);
+    const { error } = await supabase.from('folders').update({ path: newFolderPath }).eq('id', folder.id);
     if (error) { alert(`Error moviendo carpeta: ${error.message}`); return; }
-
-    // Update subfolders
-    const subfolders = allFolders.filter(f => f.path.startsWith(folder.path + '/'));
+    const subfolders = allOwnFolders.filter(f => f.path.startsWith(folder.path + '/'));
     for (const sub of subfolders) {
       const newSubPath = newFolderPath + sub.path.slice(folder.path.length);
-      const oldSubStorage = `${landlordEmail}/${propertyId}/${sub.path}`;
-      const newSubStorage = `${landlordEmail}/${propertyId}/${newSubPath}`;
+      const oldSubStorage = `${tenantStorageRoot}/${sub.path}`;
+      const newSubStorage = `${tenantStorageRoot}/${newSubPath}`;
       const { data: subItems } = await supabase.storage.from('documentos').list(oldSubStorage, { limit: 1000 });
       for (const item of (subItems || []).filter(i => i.id !== null)) {
         const { data: blob } = await supabase.storage.from('documentos').download(`${oldSubStorage}/${item.name}`);
@@ -437,55 +405,34 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       }
       await supabase.from('folders').update({ path: newSubPath }).eq('id', sub.id);
     }
-
     setMoveTarget(null);
     await loadContents();
   };
 
-  const handleFileClick = file => {
-    const filePath = `${storagePath}/${file.name}`;
-    const { data } = supabase.storage.from('documentos').getPublicUrl(filePath);
-    if (data?.publicUrl) window.open(data.publicUrl, '_blank');
-  };
-
-  // ── Folder share (toggle shared_with_tenant on the folder row) ────────────────
-
-  const handleToggleFolderShare = async (folder, e) => {
-    e.stopPropagation();
-    const { error } = await supabase.from('folders')
-      .update({ shared_with_tenant: !folder.shared_with_tenant })
-      .eq('id', folder.id);
-    if (error) { alert(`Error: ${error.message}`); return; }
-    setAllFolders(prev =>
-      prev.map(f => f.id === folder.id ? { ...f, shared_with_tenant: !f.shared_with_tenant } : f)
-    );
-  };
-
   // ── Native share / download ───────────────────────────────────────────────────
 
-  const handleNativeShareFile = async (file, filePath) => {
+  const handleNativeShareFile = async (fileName, filePath, mimeType) => {
     const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
     if (error || !blob) { alert('Error descargando el archivo.'); return; }
-    const fileToShare = new File([blob], file.name, { type: blob.type || 'application/octet-stream' });
+    const fileToShare = new File([blob], fileName, { type: mimeType || blob.type || 'application/octet-stream' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
-      try { await navigator.share({ files: [fileToShare], title: file.name }); }
+      try { await navigator.share({ files: [fileToShare], title: fileName }); }
       catch (err) { if (err?.name !== 'AbortError') console.error('[share]', err); }
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = file.name; a.click();
+      a.href = url; a.download = fileName; a.click();
       URL.revokeObjectURL(url);
     }
   };
 
-  const handleNativeShareFolder = async (folder, e) => {
+  const handleNativeShareFolder = async (folder, folderStoragePath, e) => {
     e.stopPropagation();
     if (zippingFolderId === folder.id) return;
     setZippingFolderId(folder.id);
     try {
       const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
-      const folderStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
 
       const addToZip = async (zipPath, storageDir) => {
         const { data: items } = await supabase.storage.from('documentos').list(storageDir, { limit: 1000 });
@@ -524,10 +471,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       <button
         className="finder-action-btn finder-action-dots"
         onMouseDown={e => e.stopPropagation()}
-        onClick={e => {
-          e.stopPropagation();
-          setOpenMenuId(prev => (prev === menuId ? null : menuId));
-        }}
+        onClick={e => { e.stopPropagation(); setOpenMenuId(prev => prev === menuId ? null : menuId); }}
         title="Más opciones"
       >
         <DotsIcon />
@@ -566,9 +510,30 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     </div>
   );
 
+  // ── Derived render values ─────────────────────────────────────────────────────
+
+  // Own context: own folders at current level
+  const visibleOwnFolders = sharedFolderRoot === null
+    ? getDirectChildren(allOwnFolders, currentPath)
+    : [];
+
+  // Own context, root only: top-level shared landlord folders
+  const visibleTopSharedFolders = sharedFolderRoot === null && currentPath === ''
+    ? getDirectChildren(allLandlordFolders, '').filter(f => f.shared_with_tenant)
+    : [];
+
+  // Shared context: landlord subfolders at current path
+  const visibleSharedSubfolders = sharedFolderRoot !== null
+    ? getDirectChildren(allLandlordFolders, currentPath)
+    : [];
+
+  const isReadOnly = sharedFolderRoot !== null;
+  const canAdd = !isReadOnly;
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  const visibleFolders = getDirectChildren(allFolders, currentPath);
+  const allVisibleFolders = isReadOnly ? visibleSharedSubfolders : visibleOwnFolders;
+  const allVisibleSharedFoldersAtRoot = visibleTopSharedFolders;
 
   return (
     <div className="finder-container">
@@ -580,37 +545,40 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
               strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        <h1 className="finder-title">Documentos</h1>
-        <div className="finder-add-wrapper" ref={menuRef}>
-          <button className="finder-add-btn" onClick={() => setShowMenu(v => !v)}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-              <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-              <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-            </svg>
-          </button>
-          {showMenu && (
-            <div className="finder-add-menu">
-              <button onClick={() => { setShowMenu(false); setShowNewFolderModal(true); }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-                    stroke="#FB8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="12" y1="11" x2="12" y2="17" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round"/>
-                  <line x1="9" y1="14" x2="15" y2="14" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                Nueva carpeta
-              </button>
-              <button onClick={() => { setShowMenu(false); setShowUploadModal(true); }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-                    stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <polyline points="17 8 12 3 7 8" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="12" y1="3" x2="12" y2="15" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Subir archivo
-              </button>
-            </div>
-          )}
-        </div>
+        <h1 className="finder-title">Mis documentos</h1>
+        {canAdd && (
+          <div className="finder-add-wrapper" ref={menuRef}>
+            <button className="finder-add-btn" onClick={() => setShowMenu(v => !v)}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+            {showMenu && (
+              <div className="finder-add-menu">
+                <button onClick={() => { setShowMenu(false); setShowNewFolderModal(true); }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                      stroke="#FB8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <line x1="12" y1="11" x2="12" y2="17" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round"/>
+                    <line x1="9" y1="14" x2="15" y2="14" stroke="#FB8C00" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  Nueva carpeta
+                </button>
+                <button onClick={() => { setShowMenu(false); setShowUploadModal(true); }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                      stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <polyline points="17 8 12 3 7 8" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <line x1="12" y1="3" x2="12" y2="15" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Subir archivo
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {!canAdd && <div style={{ width: 40 }} />}
       </div>
 
       {/* Breadcrumb */}
@@ -624,9 +592,19 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
               </svg>
             )}
             <button
-              className={`breadcrumb-item${idx === breadcrumbs.length - 1 ? ' active' : ''}`}
-              onClick={() => navigateToBreadcrumb(idx)}
-            >{crumb}</button>
+              className={`breadcrumb-item${idx === breadcrumbs.length - 1 ? ' active' : ''}${crumb.isShared ? ' td-breadcrumb-shared' : ''}`}
+              onClick={crumb.onClick}
+            >
+              {crumb.label}
+              {crumb.isShared && (
+                <span className="td-shared-badge-inline">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </span>
+              )}
+            </button>
           </React.Fragment>
         ))}
       </div>
@@ -640,7 +618,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
               <path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/>
             </svg>
           </div>
-        ) : visibleFolders.length === 0 && files.length === 0 ? (
+        ) : allVisibleFolders.length === 0 && allVisibleSharedFoldersAtRoot.length === 0 && files.length === 0 && sharedFiles.length === 0 ? (
           <div className="finder-empty">
             <div className="finder-empty-icon">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
@@ -649,65 +627,127 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
               </svg>
             </div>
             <p className="finder-empty-text">Esta carpeta está vacía</p>
-            <button className="finder-empty-cta" onClick={() => setShowMenu(true)}>
-              Añadir contenido
-            </button>
+            {canAdd && (
+              <button className="finder-empty-cta" onClick={() => setShowMenu(true)}>
+                Añadir contenido
+              </button>
+            )}
           </div>
         ) : (
           <div className="finder-list">
-            {/* Carpetas — grid */}
-            {visibleFolders.length > 0 && (
+            {/* Carpetas propias + compartidas en raíz */}
+            {(allVisibleFolders.length > 0 || allVisibleSharedFoldersAtRoot.length > 0) && (
               <>
                 <p className="finder-section-label">Carpetas</p>
                 <div className="folder-grid">
-                  {visibleFolders.map(folder => (
-                    <div key={folder.id} className="folder-card"
-                      onClick={() => setCurrentPath(folder.path)}>
-                      <div className="folder-card-icon"><FolderIcon size={44} /></div>
-                      <span className="folder-card-name">{folder.name}</span>
-                      <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
-                        <button
-                          className="finder-action-btn"
-                          onClick={e => handleNativeShareFolder(folder, e)}
-                          disabled={zippingFolderId === folder.id}
-                          title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
-                        >
-                          {zippingFolderId === folder.id
-                            ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
-                            : <NativeShareIcon />
-                          }
-                        </button>
-                        <button
-                          className={`finder-action-btn finder-action-share${folder.shared_with_tenant ? ' active' : ''}`}
-                          onClick={e => handleToggleFolderShare(folder, e)}
-                          title={folder.shared_with_tenant ? 'Dejar de compartir carpeta' : 'Compartir carpeta con inquilino'}
-                        >
-                          <ShareIcon active={!!folder.shared_with_tenant} />
-                        </button>
-                        <ItemMenu
-                          menuId={`folder-${folder.id}`}
-                          onRename={() => setRenameTarget({ type: 'folder', item: folder })}
-                          onMove={() => setMoveTarget({ type: 'folder', item: folder })}
-                          onDelete={() => handleDeleteFolder(folder)}
-                        />
+
+                  {/* Carpetas propias */}
+                  {allVisibleFolders.map(folder => {
+                    const folderStoragePath = `${tenantStorageRoot}/${folder.path}`;
+                    return (
+                      <div key={folder.id} className="folder-card"
+                        onClick={() => setCurrentPath(folder.path)}>
+                        <div className="folder-card-icon"><FolderIcon size={44} /></div>
+                        <span className="folder-card-name">{folder.name}</span>
+                        <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="finder-action-btn"
+                            onClick={e => handleNativeShareFolder(folder, folderStoragePath, e)}
+                            disabled={zippingFolderId === folder.id}
+                            title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                          >
+                            {zippingFolderId === folder.id
+                              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
+                              : <NativeShareIcon />
+                            }
+                          </button>
+                          <ItemMenu
+                            menuId={`own-folder-${folder.id}`}
+                            onRename={() => setRenameTarget({ type: 'folder', item: folder })}
+                            onMove={() => setMoveTarget({ type: 'folder', item: folder })}
+                            onDelete={() => handleDeleteFolder(folder)}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+
+                  {/* Carpetas compartidas por el propietario (solo en raíz del contexto propio) */}
+                  {allVisibleSharedFoldersAtRoot.map(folder => {
+                    const folderStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
+                    return (
+                      <div key={`shared-${folder.id}`} className="folder-card"
+                        onClick={() => { setSharedFolderRoot(folder); setCurrentPath(folder.path); }}>
+                        <div className="folder-card-icon"><SharedFolderIcon size={44} /></div>
+                        <span className="folder-card-name">{folder.name}</span>
+                        <div className="td-shared-badge">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" strokeWidth="2.5"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                          </svg>
+                          Compartida
+                        </div>
+                        <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="finder-action-btn"
+                            onClick={e => handleNativeShareFolder(folder, folderStoragePath, e)}
+                            disabled={zippingFolderId === folder.id}
+                            title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                          >
+                            {zippingFolderId === folder.id
+                              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
+                              : <NativeShareIcon />
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Subcarpetas dentro del contexto compartido */}
+                  {isReadOnly && visibleSharedSubfolders.map(folder => {
+                    const folderStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
+                    return (
+                      <div key={`rsub-${folder.id}`} className="folder-card"
+                        onClick={() => setCurrentPath(folder.path)}>
+                        <div className="folder-card-icon"><SharedFolderIcon size={44} /></div>
+                        <span className="folder-card-name">{folder.name}</span>
+                        <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="finder-action-btn"
+                            onClick={e => handleNativeShareFolder(folder, folderStoragePath, e)}
+                            disabled={zippingFolderId === folder.id}
+                            title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                          >
+                            {zippingFolderId === folder.id
+                              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
+                              : <NativeShareIcon />
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
                 </div>
               </>
             )}
 
-            {/* Archivos — tarjetas */}
-            {files.length > 0 && (
+            {/* Archivos */}
+            {(files.length > 0 || (sharedFiles.length > 0 && currentPath === '' && !isReadOnly)) && (
               <>
                 <p className="finder-section-label">Archivos</p>
                 <div className="file-cards">
+
+                  {/* Archivos propios / archivos en carpeta compartida */}
                   {files.map(file => {
-                    const filePath = `${storagePath}/${file.name}`;
-                    const isShared = sharedPaths.has(filePath);
+                    const filePath = `${activeStoragePath}/${file.name}`;
                     return (
                       <div key={file.id || file.name} className="file-card"
-                        onClick={() => handleFileClick(file)}>
+                        onClick={() => {
+                          const { data } = supabase.storage.from('documentos').getPublicUrl(filePath);
+                          if (data?.publicUrl) window.open(data.publicUrl, '_blank');
+                        }}>
                         <div className="file-card-icon">
                           <FileIcon mimeType={file.metadata?.mimetype} size={36} />
                         </div>
@@ -715,34 +755,62 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                           <span className="file-card-name">{file.name}</span>
                           <span className="file-card-meta">
                             {file.metadata?.size ? formatFileSize(file.metadata.size) : '—'}
-                            {isShared && <span className="finder-shared-badge">Compartido</span>}
+                            {isReadOnly && <span className="finder-shared-badge">Compartido</span>}
                           </span>
                         </div>
                         <div className="file-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => { e.stopPropagation(); handleNativeShareFile(file, filePath); }}
+                            onClick={e => { e.stopPropagation(); handleNativeShareFile(file.name, filePath, file.metadata?.mimetype); }}
                             title={navigator.share ? 'Compartir' : 'Descargar'}
                           >
                             <NativeShareIcon />
                           </button>
-                          <button
-                            className={`finder-action-btn finder-action-share${isShared ? ' active' : ''}`}
-                            onClick={e => handleToggleShare(file, e)}
-                            title={isShared ? 'Dejar de compartir' : 'Compartir con inquilino'}
-                          >
-                            <ShareIcon active={isShared} />
-                          </button>
-                          <ItemMenu
-                            menuId={`file-${file.id || file.name}`}
-                            onRename={() => setRenameTarget({ type: 'file', item: file })}
-                            onMove={() => setMoveTarget({ type: 'file', item: file })}
-                            onDelete={() => handleDeleteFile(file)}
-                          />
+                          {!isReadOnly && (
+                            <ItemMenu
+                              menuId={`file-${file.id || file.name}`}
+                              onRename={() => setRenameTarget({ type: 'file', item: file })}
+                              onMove={() => setMoveTarget({ type: 'file', item: file })}
+                              onDelete={() => handleDeleteFile(file)}
+                            />
+                          )}
                         </div>
                       </div>
                     );
                   })}
+
+                  {/* Archivos compartidos individualmente (solo en raíz, contexto propio) */}
+                  {!isReadOnly && currentPath === '' && sharedFiles.map(sf => {
+                    const fileName = sf.file_name || sf.storage_path.split('/').pop();
+                    return (
+                      <div key={`sf-${sf.id}`} className="file-card"
+                        onClick={() => {
+                          const { data } = supabase.storage.from('documentos').getPublicUrl(sf.storage_path);
+                          if (data?.publicUrl) window.open(data.publicUrl, '_blank');
+                        }}>
+                        <div className="file-card-icon">
+                          <FileIcon mimeType={sf.file_type} size={36} />
+                        </div>
+                        <div className="file-card-info">
+                          <span className="file-card-name">{fileName}</span>
+                          <span className="file-card-meta">
+                            {sf.file_size ? formatFileSize(sf.file_size) : '—'}
+                            <span className="finder-shared-badge">Compartido</span>
+                          </span>
+                        </div>
+                        <div className="file-card-actions" onClick={e => e.stopPropagation()}>
+                          <button
+                            className="finder-action-btn"
+                            onClick={e => { e.stopPropagation(); handleNativeShareFile(fileName, sf.storage_path, sf.file_type); }}
+                            title={navigator.share ? 'Compartir' : 'Descargar'}
+                          >
+                            <NativeShareIcon />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
                 </div>
               </>
             )}
@@ -750,6 +818,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
         )}
       </div>
 
+      {/* Modals */}
       {showNewFolderModal && (
         <NewFolderModal onClose={() => setShowNewFolderModal(false)} onCreate={handleCreateFolder} />
       )}
@@ -769,7 +838,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       )}
       {moveTarget && (
         <FolderPickerModal
-          allFolders={allFolders}
+          allFolders={allOwnFolders}
           excludePath={moveTarget.type === 'folder' ? moveTarget.item.path : null}
           onClose={() => setMoveTarget(null)}
           onPick={destPath =>
@@ -783,12 +852,11 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   );
 }
 
-// ─── New Folder Modal ─────────────────────────────────────────────────────────
+// ─── Modals (same as PropertyDocuments) ──────────────────────────────────────
 
 function NewFolderModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async e => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -796,7 +864,6 @@ function NewFolderModal({ onClose, onCreate }) {
     await onCreate(name.trim());
     setLoading(false);
   };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -807,7 +874,7 @@ function NewFolderModal({ onClose, onCreate }) {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Nombre</label>
-            <input type="text" placeholder="Ej: Contratos, Facturas…"
+            <input type="text" placeholder="Ej: Contratos, Nóminas…"
               value={name} onChange={e => setName(e.target.value)} autoFocus required />
           </div>
           <button type="submit" className="submit-button" disabled={loading || !name.trim()}>
@@ -819,13 +886,10 @@ function NewFolderModal({ onClose, onCreate }) {
   );
 }
 
-// ─── Upload File Modal ────────────────────────────────────────────────────────
-
 function UploadFileModal({ onClose, onUpload }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
-
   const handleSubmit = async e => {
     e.preventDefault();
     if (!file) return;
@@ -833,7 +897,6 @@ function UploadFileModal({ onClose, onUpload }) {
     await onUpload(file);
     setLoading(false);
   };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -846,10 +909,9 @@ function UploadFileModal({ onClose, onUpload }) {
             <div className="file-upload-area" onClick={() => fileInputRef.current.click()}>
               {file ? (
                 <div className="file-selected">
-                  <FileIcon mimeType={file.type} size={28} />
                   <div>
                     <p className="file-selected-name">{file.name}</p>
-                    <p className="file-selected-size">{formatFileSize(file.size)}</p>
+                    <p className="file-selected-size">{(file.size / 1024).toFixed(1)} KB</p>
                   </div>
                   <button type="button" className="file-remove"
                     onClick={e => { e.stopPropagation(); setFile(null); }}>×</button>
@@ -857,12 +919,9 @@ function UploadFileModal({ onClose, onUpload }) {
               ) : (
                 <div className="file-upload-placeholder">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-                      stroke="#BDBDBD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <polyline points="17 8 12 3 7 8"
-                      stroke="#BDBDBD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <line x1="12" y1="3" x2="12" y2="15"
-                      stroke="#BDBDBD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="#BDBDBD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <polyline points="17 8 12 3 7 8" stroke="#BDBDBD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <line x1="12" y1="3" x2="12" y2="15" stroke="#BDBDBD" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                   <p>Toca para seleccionar un archivo</p>
                   <span>PDF, imagen, Word, Excel…</span>
@@ -881,12 +940,9 @@ function UploadFileModal({ onClose, onUpload }) {
   );
 }
 
-// ─── Rename Modal ─────────────────────────────────────────────────────────────
-
 function RenameModal({ currentName, onClose, onRename }) {
   const [name, setName] = useState(currentName);
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async e => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -894,7 +950,6 @@ function RenameModal({ currentName, onClose, onRename }) {
     await onRename(name.trim());
     setLoading(false);
   };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -905,19 +960,10 @@ function RenameModal({ currentName, onClose, onRename }) {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Nuevo nombre</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              autoFocus
-              required
-            />
+            <input type="text" value={name} onChange={e => setName(e.target.value)} autoFocus required />
           </div>
-          <button
-            type="submit"
-            className="submit-button"
-            disabled={loading || !name.trim() || name.trim() === currentName}
-          >
+          <button type="submit" className="submit-button"
+            disabled={loading || !name.trim() || name.trim() === currentName}>
             {loading ? 'Renombrando…' : 'Renombrar'}
           </button>
         </form>
@@ -926,15 +972,11 @@ function RenameModal({ currentName, onClose, onRename }) {
   );
 }
 
-// ─── Folder Picker Modal ──────────────────────────────────────────────────────
-
 function FolderPickerModal({ allFolders, excludePath, onClose, onPick }) {
-  const [selected, setSelected] = useState(null); // null = root
-
+  const [selected, setSelected] = useState(null);
   const available = excludePath
     ? allFolders.filter(f => f.path !== excludePath && !f.path.startsWith(excludePath + '/'))
     : allFolders;
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -972,5 +1014,3 @@ function FolderPickerModal({ allFolders, excludePath, onClose, onPick }) {
     </div>
   );
 }
-
-export default PropertyDocuments;
