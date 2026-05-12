@@ -90,14 +90,14 @@ function DotsIcon() {
   );
 }
 
-function NativeShareIcon() {
+function DownloadIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <polyline points="16 6 12 2 8 6"
+      <polyline points="7 10 12 15 17 10"
         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <line x1="12" y1="2" x2="12" y2="15"
+      <line x1="12" y1="15" x2="12" y2="3"
         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
@@ -404,22 +404,16 @@ export default function TenantDocuments({ rental, onBack }) {
 
   // ── Native share / download ───────────────────────────────────────────────────
 
-  const handleNativeShareFile = async (fileName, filePath, mimeType) => {
+  const handleDownloadFile = async (fileName, filePath) => {
     const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
     if (error || !blob) { alert('Error descargando el archivo.'); return; }
-    const fileToShare = new File([blob], fileName, { type: mimeType || blob.type || 'application/octet-stream' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
-      try { await navigator.share({ files: [fileToShare], title: fileName }); }
-      catch (err) { if (err?.name !== 'AbortError') console.error('[share]', err); }
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fileName; a.click();
-      URL.revokeObjectURL(url);
-    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleNativeShareFolder = async (folder, folderStoragePath, e) => {
+  const handleDownloadFolder = async (folder, folderStoragePath, e) => {
     e.stopPropagation();
     if (zippingFolderId === folder.id) return;
     setZippingFolderId(folder.id);
@@ -440,18 +434,12 @@ export default function TenantDocuments({ rental, onBack }) {
 
       await addToZip(folder.name, folderStoragePath);
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const zipFile = new File([zipBlob], `${folder.name}.zip`, { type: 'application/zip' });
-
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [zipFile] })) {
-        await navigator.share({ files: [zipFile], title: `${folder.name}.zip` });
-      } else {
-        const url = URL.createObjectURL(zipBlob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `${folder.name}.zip`; a.click();
-        URL.revokeObjectURL(url);
-      }
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${folder.name}.zip`; a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
-      if (err?.name !== 'AbortError') { console.error('[zip share]', err); alert('Error al comprimir la carpeta.'); }
+      console.error('[zip download]', err); alert('Error al comprimir la carpeta.');
     } finally {
       setZippingFolderId(null);
     }
@@ -645,13 +633,13 @@ export default function TenantDocuments({ rental, onBack }) {
                         <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => handleNativeShareFolder(folder, folderStoragePath, e)}
+                            onClick={e => handleDownloadFolder(folder, folderStoragePath, e)}
                             disabled={zippingFolderId === folder.id}
-                            title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                            title="Descargar carpeta como ZIP"
                           >
                             {zippingFolderId === folder.id
                               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
-                              : <NativeShareIcon />
+                              : <DownloadIcon />
                             }
                           </button>
                           <ItemMenu
@@ -683,13 +671,13 @@ export default function TenantDocuments({ rental, onBack }) {
                         <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => handleNativeShareFolder({ name: sf.folder_name, id: sf.id }, folderStoragePath, e)}
+                            onClick={e => handleDownloadFolder({ name: sf.folder_name, id: sf.id }, folderStoragePath, e)}
                             disabled={zippingFolderId === sf.id}
-                            title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                            title="Descargar carpeta como ZIP"
                           >
                             {zippingFolderId === sf.id
                               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
-                              : <NativeShareIcon />
+                              : <DownloadIcon />
                             }
                           </button>
                         </div>
@@ -710,13 +698,13 @@ export default function TenantDocuments({ rental, onBack }) {
                         <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => handleNativeShareFolder({ name: item.name, id: zippingKey }, folderStoragePath, e)}
+                            onClick={e => handleDownloadFolder({ name: item.name, id: zippingKey }, folderStoragePath, e)}
                             disabled={zippingFolderId === zippingKey}
-                            title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                            title="Descargar carpeta como ZIP"
                           >
                             {zippingFolderId === zippingKey
                               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
-                              : <NativeShareIcon />
+                              : <DownloadIcon />
                             }
                           </button>
                         </div>
@@ -756,10 +744,10 @@ export default function TenantDocuments({ rental, onBack }) {
                         <div className="file-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => { e.stopPropagation(); handleNativeShareFile(file.name, filePath, file.metadata?.mimetype); }}
-                            title={navigator.share ? 'Compartir' : 'Descargar'}
+                            onClick={e => { e.stopPropagation(); handleDownloadFile(file.name, filePath); }}
+                            title="Descargar"
                           >
-                            <NativeShareIcon />
+                            <DownloadIcon />
                           </button>
                           {!isReadOnly && (
                             <ItemMenu
@@ -796,10 +784,10 @@ export default function TenantDocuments({ rental, onBack }) {
                         <div className="file-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => { e.stopPropagation(); handleNativeShareFile(fileName, sf.storage_path, sf.file_type); }}
-                            title={navigator.share ? 'Compartir' : 'Descargar'}
+                            onClick={e => { e.stopPropagation(); handleDownloadFile(fileName, sf.storage_path); }}
+                            title="Descargar"
                           >
-                            <NativeShareIcon />
+                            <DownloadIcon />
                           </button>
                         </div>
                       </div>

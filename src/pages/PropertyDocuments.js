@@ -67,20 +67,6 @@ function FileIcon({ mimeType, size = 32 }) {
   );
 }
 
-function ShareIcon({ active }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <circle cx="18" cy="5" r="3" stroke="currentColor" strokeWidth="2"
-        fill={active ? 'currentColor' : 'none'}/>
-      <circle cx="6" cy="12" r="3" stroke="currentColor" strokeWidth="2"
-        fill={active ? 'currentColor' : 'none'}/>
-      <circle cx="18" cy="19" r="3" stroke="currentColor" strokeWidth="2"
-        fill={active ? 'currentColor' : 'none'}/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke="currentColor" strokeWidth="2"/>
-      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke="currentColor" strokeWidth="2"/>
-    </svg>
-  );
-}
 
 function DotsIcon() {
   return (
@@ -92,14 +78,14 @@ function DotsIcon() {
   );
 }
 
-function NativeShareIcon() {
+function DownloadIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <polyline points="16 6 12 2 8 6"
+      <polyline points="7 10 12 15 17 10"
         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <line x1="12" y1="2" x2="12" y2="15"
+      <line x1="12" y1="15" x2="12" y2="3"
         stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
@@ -129,8 +115,6 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   const [currentPath, setCurrentPath] = useState('');
   const [allFolders, setAllFolders] = useState([]);
   const [files, setFiles] = useState([]);
-  const [sharedPaths, setSharedPaths] = useState(new Set());
-  const [sharedFolderIds, setSharedFolderIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -150,20 +134,16 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   const loadContents = useCallback(async () => {
     setLoading(true);
     try {
-      const [foldersRes, storageRes, sharedRes, sharedFoldersRes] = await Promise.all([
+      const [foldersRes, storageRes] = await Promise.all([
         supabase.from('folders').select('*')
           .eq('landlord_email', landlordEmail)
           .eq('property_id', propertyId)
           .order('name'),
         supabase.storage.from('documentos').list(storagePath, { limit: 200, sortBy: { column: 'name', order: 'asc' } }),
-        supabase.from('shared_files').select('storage_path').eq('landlord_email', landlordEmail).eq('shared_with_tenant', true),
-        supabase.from('shared_folders').select('folder_id').eq('landlord_email', landlordEmail).eq('property_id', propertyId).eq('shared_with_tenant', true),
       ]);
 
       setAllFolders(foldersRes.data || []);
       setFiles((storageRes.data || []).filter(item => item.id !== null));
-      setSharedPaths(new Set((sharedRes.data || []).map(r => r.storage_path)));
-      setSharedFolderIds(new Set((sharedFoldersRes.data || []).map(r => r.folder_id)));
     } catch (err) {
       console.error('[PropertyDocuments] loadContents error:', err);
     }
@@ -236,25 +216,6 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     setShowUploadModal(false);
   };
 
-  const handleToggleShare = async (file, e) => {
-    e.stopPropagation();
-    const filePath = `${storagePath}/${file.name}`;
-    const isShared = sharedPaths.has(filePath);
-    const { error } = await supabase.from('shared_files').upsert({
-      landlord_email: landlordEmail,
-      storage_path: filePath,
-      file_name: file.name,
-      file_type: file.metadata?.mimetype,
-      file_size: file.metadata?.size,
-      shared_with_tenant: !isShared,
-    }, { onConflict: 'landlord_email,storage_path' });
-    if (error) { alert(`Error: ${error.message}`); return; }
-    setSharedPaths(prev => {
-      const next = new Set(prev);
-      if (isShared) next.delete(filePath); else next.add(filePath);
-      return next;
-    });
-  };
 
   const handleDeleteFile = async file => {
     if (!window.confirm(`¿Eliminar "${file.name}"?`)) return;
@@ -451,45 +412,18 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
     if (data?.publicUrl) window.open(data.publicUrl, '_blank');
   };
 
-  // ── Folder share (toggle shared_with_tenant on the folder row) ────────────────
+  // ── Download ──────────────────────────────────────────────────────────────────
 
-  const handleToggleFolderShare = async (folder, e) => {
-    e.stopPropagation();
-    const isShared = sharedFolderIds.has(folder.id);
-    const { error } = await supabase.from('shared_folders').upsert({
-      landlord_email: landlordEmail,
-      property_id: propertyId,
-      folder_id: folder.id,
-      folder_name: folder.name,
-      folder_path: folder.path,
-      shared_with_tenant: !isShared,
-    }, { onConflict: 'landlord_email,folder_id' });
-    if (error) { alert(`Error: ${error.message}`); return; }
-    setSharedFolderIds(prev => {
-      const next = new Set(prev);
-      if (isShared) next.delete(folder.id); else next.add(folder.id);
-      return next;
-    });
-  };
-
-  // ── Native share / download ───────────────────────────────────────────────────
-
-  const handleNativeShareFile = async (file, filePath) => {
+  const handleDownloadFile = async (file, filePath) => {
     const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
     if (error || !blob) { alert('Error descargando el archivo.'); return; }
-    const fileToShare = new File([blob], file.name, { type: blob.type || 'application/octet-stream' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
-      try { await navigator.share({ files: [fileToShare], title: file.name }); }
-      catch (err) { if (err?.name !== 'AbortError') console.error('[share]', err); }
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = file.name; a.click();
-      URL.revokeObjectURL(url);
-    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name; a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleNativeShareFolder = async (folder, e) => {
+  const handleDownloadFolder = async (folder, e) => {
     e.stopPropagation();
     if (zippingFolderId === folder.id) return;
     setZippingFolderId(folder.id);
@@ -511,18 +445,12 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
       await addToZip(folder.name, folderStoragePath);
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const zipFile = new File([zipBlob], `${folder.name}.zip`, { type: 'application/zip' });
-
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [zipFile] })) {
-        await navigator.share({ files: [zipFile], title: `${folder.name}.zip` });
-      } else {
-        const url = URL.createObjectURL(zipBlob);
-        const a = document.createElement('a');
-        a.href = url; a.download = `${folder.name}.zip`; a.click();
-        URL.revokeObjectURL(url);
-      }
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${folder.name}.zip`; a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
-      if (err?.name !== 'AbortError') { console.error('[zip share]', err); alert('Error al comprimir la carpeta.'); }
+      console.error('[zip download]', err); alert('Error al comprimir la carpeta.');
     } finally {
       setZippingFolderId(null);
     }
@@ -679,21 +607,14 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                       <div className="folder-card-actions" onClick={e => e.stopPropagation()}>
                         <button
                           className="finder-action-btn"
-                          onClick={e => handleNativeShareFolder(folder, e)}
+                          onClick={e => handleDownloadFolder(folder, e)}
                           disabled={zippingFolderId === folder.id}
-                          title={navigator.share ? 'Compartir carpeta' : 'Descargar carpeta como ZIP'}
+                          title="Descargar carpeta como ZIP"
                         >
                           {zippingFolderId === folder.id
                             ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="finder-spinner"><circle cx="12" cy="12" r="10" stroke="#E5E5EA" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="#555" strokeWidth="3" strokeLinecap="round"/></svg>
-                            : <NativeShareIcon />
+                            : <DownloadIcon />
                           }
-                        </button>
-                        <button
-                          className={`finder-action-btn finder-action-share${sharedFolderIds.has(folder.id) ? ' active' : ''}`}
-                          onClick={e => handleToggleFolderShare(folder, e)}
-                          title={sharedFolderIds.has(folder.id) ? 'Dejar de compartir carpeta' : 'Compartir carpeta con inquilino'}
-                        >
-                          <ShareIcon active={sharedFolderIds.has(folder.id)} />
                         </button>
                         <ItemMenu
                           menuId={`folder-${folder.id}`}
@@ -715,7 +636,6 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                 <div className="file-cards">
                   {files.map(file => {
                     const filePath = `${storagePath}/${file.name}`;
-                    const isShared = sharedPaths.has(filePath);
                     return (
                       <div key={file.id || file.name} className="file-card"
                         onClick={() => handleFileClick(file)}>
@@ -726,23 +646,15 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
                           <span className="file-card-name">{file.name}</span>
                           <span className="file-card-meta">
                             {file.metadata?.size ? formatFileSize(file.metadata.size) : '—'}
-                            {isShared && <span className="finder-shared-badge">Compartido</span>}
                           </span>
                         </div>
                         <div className="file-card-actions" onClick={e => e.stopPropagation()}>
                           <button
                             className="finder-action-btn"
-                            onClick={e => { e.stopPropagation(); handleNativeShareFile(file, filePath); }}
-                            title={navigator.share ? 'Compartir' : 'Descargar'}
+                            onClick={e => { e.stopPropagation(); handleDownloadFile(file, filePath); }}
+                            title="Descargar"
                           >
-                            <NativeShareIcon />
-                          </button>
-                          <button
-                            className={`finder-action-btn finder-action-share${isShared ? ' active' : ''}`}
-                            onClick={e => handleToggleShare(file, e)}
-                            title={isShared ? 'Dejar de compartir' : 'Compartir con inquilino'}
-                          >
-                            <ShareIcon active={isShared} />
+                            <DownloadIcon />
                           </button>
                           <ItemMenu
                             menuId={`file-${file.id || file.name}`}
