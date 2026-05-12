@@ -904,6 +904,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     Object.fromEntries(reportableProperties.map(p => [p.id, p.status === 'vacacional' ? 'turistico' : 'residencial']))
   );
   const [declaredAmounts, setDeclaredAmounts] = useState({});
+  const [expandedBreakdown, setExpandedBreakdown] = useState(new Set());
 
   const years = [];
   const minYear = reportableProperties.reduce((min, p) => {
@@ -1001,9 +1002,10 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     const defaults = {};
     reportableProperties.forEach(p => {
       const d = getYearlyData(p);
-      defaults[String(p.id)] = d.totalCobrado;
+      defaults[String(p.id)] = { total: d.totalCobrado, byMonth: null };
     });
     setDeclaredAmounts(defaults);
+    setExpandedBreakdown(new Set());
   }, [selectedYear]); // eslint-disable-line
 
   // ── Exportar Excel ──
@@ -1061,7 +1063,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     let sumCobrado = 0, sumDeclared = 0, sumExpenses = 0;
     reportableProperties.forEach((property, idx) => {
       const data = getYearlyData(property);
-      const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+      const declared = declaredAmounts[String(property.id)]?.total ?? data.totalCobrado;
       const fiscalLabel = ({ turistico: 'Turístico', comercial: 'Comercial', propio: 'Uso propio' }[fiscalTypes[property.id]] || 'Residencial');
       const net = declared - data.totalExpenses;
       const bg = mkFill(idx % 2 === 0 ? 'FFFFFFFF' : 'FFF9F9F9');
@@ -1099,7 +1101,9 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
 
     reportableProperties.forEach(property => {
       const data = getYearlyData(property);
-      const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+      const exEntry = declaredAmounts[String(property.id)];
+      const declared = exEntry?.total ?? data.totalCobrado;
+      const exByMonth = exEntry?.byMonth ?? null;
       const secRow = ws2.addRow([property.name]); secRow.height = 24;
       ws2.mergeCells(r2, 1, r2, NC2);
       sc(secRow.getCell(1), mkFill('FF2C2C2C'), mkFont(true, 'FFFFFFFF', 11), { horizontal: 'left', vertical: 'middle' });
@@ -1124,8 +1128,11 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       data.monthsData.forEach(({ month, cobrado, pendiente }) => {
         if (cobrado > 0)   addR2([`${monthNames[month]} ${selectedYear}`, 'Ingreso',  'Alquiler', 'Ingreso cobrado',    cobrado,   'Cobrado'],  'FFF1F8E9', 'FF2E7D32');
         if (pendiente > 0) addR2([`${monthNames[month]} ${selectedYear}`, 'Ingreso',  'Alquiler', 'Ingreso pendiente',  pendiente, 'Pendiente'],'FFFFF9E6', 'FFF57F17');
+        if (exByMonth && exByMonth[month] != null && Math.abs(exByMonth[month] - cobrado) > 0.01) {
+          addR2([`${monthNames[month]} ${selectedYear}`, 'Declarar', 'Declaración', 'A declarar (mes ajustado)', exByMonth[month], 'Declarado'], 'FFE8F4FD', 'FF1565C0');
+        }
       });
-      if (Math.abs(declared - data.totalCobrado) > 0.01) {
+      if (!exByMonth && Math.abs(declared - data.totalCobrado) > 0.01) {
         addR2([`${selectedYear}`, 'Ajuste', 'Declaracion', 'Importe a declarar (ajustado por propietario)', declared, 'Declarado'], 'FFE8F4FD', 'FF1565C0');
       }
       data.expenseDetail.forEach(e => {
@@ -1150,7 +1157,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
     let irpfSumDec = 0, irpfSumExp = 0;
     reportableProperties.forEach((property, idx) => {
       const data = getYearlyData(property);
-      const declared = declaredAmounts[String(property.id)] ?? data.totalCobrado;
+      const declared = declaredAmounts[String(property.id)]?.total ?? data.totalCobrado;
       const fiscalLabel = ({ turistico: 'Turístico', comercial: 'Comercial', propio: 'Uso propio' }[fiscalTypes[property.id]] || 'Residencial');
       const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
       const netPrevio = declared - data.totalExpenses;
@@ -1317,7 +1324,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       const globalPendiente = allData.reduce((s, { d }) => s + d.totalPendiente, 0);
       const globalExpenses = allData.reduce((s, { d }) => s + d.totalExpenses, 0);
       const globalNet = globalCobrado - globalExpenses;
-      const globalDeclared = allData.reduce((s, { p: prop, d }) => s + (declaredAmounts[String(prop.id)] ?? d.totalCobrado), 0);
+      const globalDeclared = allData.reduce((s, { p: prop, d }) => s + (declaredAmounts[String(prop.id)]?.total ?? d.totalCobrado), 0);
       const globalDeclaredNet = globalDeclared - globalExpenses;
 
       // Caja resumen
@@ -1376,35 +1383,50 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
 
         // Tabla mensual con estado cobro
         checkSpace(12);
+        const propEntry = declaredAmounts[String(property.id)];
+        const propByMonth = propEntry?.byMonth ?? null;
         doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(130);
-        const c = [18, 48, 88, 122, 155, 182];
-        doc.text('MES', c[0], y); doc.text('COBRADO', c[1], y); doc.text('PENDIENTE', c[2], y);
-        doc.text('GASTOS', c[3], y); doc.text('NETO', c[4], y);
+        const c = [18, 44, 72, 102, 130, 157];
+        // MES, COBRADO, A DECLARAR, PENDIENTE, GASTOS, NETO
+        doc.text('MES', c[0], y); doc.text('COBRADO', c[1], y); doc.text('A DECLARAR', c[2], y);
+        doc.text('PENDIENTE', c[3], y); doc.text('GASTOS', c[4], y); doc.text('NETO', c[5], y);
         doc.setDrawColor(210); doc.line(14, y + 2, pageW - 14, y + 2); y += 7;
 
         data.monthsData.forEach(({ month, cobrado, pendiente, expenses }) => {
           if (cobrado === 0 && pendiente === 0 && expenses === 0) return;
           checkSpace(7);
+          const mDeclared = propByMonth ? (propByMonth[month] ?? null) : null;
           doc.setFont('helvetica', 'normal'); doc.setTextColor(50); doc.setFontSize(8);
           doc.text(monthShort[month], c[0], y);
           doc.setTextColor(46, 125, 50); doc.text(cobrado > 0 ? `+${cobrado.toFixed(2)} €` : '—', c[1], y);
-          doc.setTextColor(pendiente > 0 ? 200 : 180); doc.text(pendiente > 0 ? `${pendiente.toFixed(2)} €` : '—', c[2], y);
-          doc.setTextColor(198, 40, 40); doc.text(expenses > 0 ? `-${expenses.toFixed(2)} €` : '—', c[3], y);
+          if (mDeclared !== null) {
+            doc.setTextColor(21, 101, 192); doc.text(`${mDeclared.toFixed(2)} €`, c[2], y);
+          } else {
+            doc.setTextColor(200); doc.text('—', c[2], y);
+          }
+          doc.setTextColor(pendiente > 0 ? 200 : 180); doc.text(pendiente > 0 ? `${pendiente.toFixed(2)} €` : '—', c[3], y);
+          doc.setTextColor(198, 40, 40); doc.text(expenses > 0 ? `-${expenses.toFixed(2)} €` : '—', c[4], y);
           const net = cobrado - expenses;
           net >= 0 ? doc.setTextColor(46, 125, 50) : doc.setTextColor(198, 40, 40);
-          doc.text(`${net >= 0 ? '+' : ''}${net.toFixed(2)} €`, c[4], y);
+          doc.text(`${net >= 0 ? '+' : ''}${net.toFixed(2)} €`, c[5], y);
           doc.setDrawColor(242); doc.line(14, y + 2, pageW - 14, y + 2); y += 7;
         });
 
         // Total inmueble
         checkSpace(10);
+        const totalDeclaredForTable = propEntry?.total ?? data.totalCobrado;
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(17);
         doc.text('TOTAL', c[0], y);
         doc.setTextColor(46, 125, 50); doc.text(`+${data.totalCobrado.toFixed(2)} €`, c[1], y);
-        if (data.totalPendiente > 0) { doc.setTextColor(200, 100, 0); doc.text(`${data.totalPendiente.toFixed(2)} €`, c[2], y); }
-        doc.setTextColor(198, 40, 40); doc.text(`-${data.totalExpenses.toFixed(2)} €`, c[3], y);
+        if (propByMonth !== null) {
+          doc.setTextColor(21, 101, 192); doc.text(`${totalDeclaredForTable.toFixed(2)} €`, c[2], y);
+        } else {
+          doc.setTextColor(180); doc.text('—', c[2], y);
+        }
+        if (data.totalPendiente > 0) { doc.setTextColor(200, 100, 0); doc.text(`${data.totalPendiente.toFixed(2)} €`, c[3], y); }
+        doc.setTextColor(198, 40, 40); doc.text(`-${data.totalExpenses.toFixed(2)} €`, c[4], y);
         data.net >= 0 ? doc.setTextColor(46, 125, 50) : doc.setTextColor(198, 40, 40);
-        doc.text(`${data.net >= 0 ? '+' : ''}${data.net.toFixed(2)} €`, c[4], y);
+        doc.text(`${data.net >= 0 ? '+' : ''}${data.net.toFixed(2)} €`, c[5], y);
         y += 12;
 
         // Detalle de gastos
@@ -1449,15 +1471,11 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
         const fiscalType = fiscalTypes[property.id] === 'turistico' ? 'Alquiler turístico' : fiscalTypes[property.id] === 'comercial' ? 'Uso comercial' : fiscalTypes[property.id] === 'propio' ? 'Uso propio' : 'Residencial';
         const isUsoPropioFiscal = fiscalTypes[property.id] === 'propio';
         const reduction = fiscalTypes[property.id] === 'residencial' ? 0.6 : 0;
-        const declaredForProp = declaredAmounts[String(property.id)] ?? data.totalCobrado;
-        const hasDeclaredAdjustment = Math.abs(declaredForProp - data.totalCobrado) > 0.01;
+        const declaredForProp = declaredAmounts[String(property.id)]?.total ?? data.totalCobrado;
         const netPrevio = declaredForProp - data.totalExpenses;
 
         const rows2 = [
-          hasDeclaredAdjustment
-            ? { label: 'Ingresos cobrados (real)', value: `${data.totalCobrado.toFixed(2)} €`, color: [160, 160, 160] }
-            : { label: 'Ingresos íntegros (cobrados)', value: `${data.totalCobrado.toFixed(2)} €`, color: [46, 125, 50] },
-          ...(hasDeclaredAdjustment ? [{ label: 'Importe a declarar (ajustado)', value: `${declaredForProp.toFixed(2)} €`, color: [46, 125, 50] }] : []),
+          { label: 'Ingresos a declarar', value: `${declaredForProp.toFixed(2)} €`, color: [46, 125, 50] },
           { label: 'Gastos deducibles', value: `-${data.totalExpenses.toFixed(2)} €`, color: [198, 40, 40] },
           { label: 'Rendimiento neto previo', value: `${netPrevio >= 0 ? '+' : ''}${netPrevio.toFixed(2)} €`, color: netPrevio >= 0 ? [46, 125, 50] : [198, 40, 40], bold: !reduction },
         ];
@@ -1562,25 +1580,17 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
             doc.setTextColor(198, 40, 40);
             doc.text(`-${r.amount.toFixed(2)} €`, colImporte, y + 5, { align: 'right' });
 
-            // Badge DEDUCIBLE con color
+            // Texto DEDUCIBLE con color, sin fondo
             const s = r.deduct.status;
-            const badgeColor =
-              s === 'Si'      ? [220, 242, 224] :
-              s === 'No'      ? [250, 220, 218] :
-              s === 'Parcial' ? [255, 240, 210] :
-                                [235, 235, 235];
             const textColor =
               s === 'Si'      ? [30, 100, 40]   :
               s === 'No'      ? [160, 30, 30]    :
               s === 'Parcial' ? [150, 80, 0]     :
                                 [80, 80, 80];
 
-            const bw = doc.getTextWidth(s) + 6;
-            doc.setFillColor(...badgeColor);
-            doc.roundedRect(colDeduct - bw, y + 1, bw, 6, 1, 1, 'F');
-            doc.setFontSize(6.5); doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
             doc.setTextColor(...textColor);
-            doc.text(s, colDeduct - bw / 2, y + 5.5, { align: 'center' });
+            doc.text(s, colDeduct, y + 5, { align: 'right' });
 
             doc.setDrawColor(245); doc.line(14, y + rowH, pageW - 14, y + rowH);
             y += rowH;
@@ -1783,8 +1793,12 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
                 {reportableProperties.map(p => {
                   const data = getYearlyData(p);
                   const cobrado = data.totalCobrado;
-                  const declared = declaredAmounts[String(p.id)] ?? cobrado;
+                  const entry = declaredAmounts[String(p.id)];
+                  const declared = entry?.total ?? cobrado;
+                  const byMonth = entry?.byMonth ?? null;
                   const diff = declared - cobrado;
+                  const isExpanded = expandedBreakdown.has(String(p.id));
+                  const monthsWithCobro = data.monthsData.filter(md => md.cobrado > 0);
                   return (
                     <div key={p.id} style={{ background: '#F9F9F9', borderRadius: '10px', padding: '12px 14px' }}>
                       <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 600, color: '#222' }}>{p.name}</p>
@@ -1799,11 +1813,67 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
                             type="number"
                             step="0.01"
                             value={declared}
-                            onChange={e => setDeclaredAmounts(prev => ({ ...prev, [String(p.id)]: parseFloat(e.target.value) || 0 }))}
+                            onChange={e => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setDeclaredAmounts(prev => ({ ...prev, [String(p.id)]: { total: val, byMonth: null } }));
+                              setExpandedBreakdown(prev => { const s = new Set(prev); s.delete(String(p.id)); return s; });
+                            }}
                             style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd', fontSize: '14px', fontWeight: 600, color: '#111', background: 'white', boxSizing: 'border-box' }}
                           />
+                          {monthsWithCobro.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isExpanded) {
+                                  if (!byMonth) {
+                                    const months = {};
+                                    monthsWithCobro.forEach(({ month: m, cobrado: mc }) => { months[m] = mc; });
+                                    setDeclaredAmounts(prev => ({ ...prev, [String(p.id)]: { total: prev[String(p.id)]?.total ?? cobrado, byMonth: months } }));
+                                  }
+                                  setExpandedBreakdown(prev => new Set([...prev, String(p.id)]));
+                                } else {
+                                  setExpandedBreakdown(prev => { const s = new Set(prev); s.delete(String(p.id)); return s; });
+                                }
+                              }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '6px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#1565C0', fontSize: '11px', fontWeight: 500 }}
+                            >
+                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                                <path d="M2 3.5L5 6.5L8 3.5" stroke="#1565C0" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                              Editar por meses
+                            </button>
+                          )}
                         </div>
                       </div>
+                      {isExpanded && monthsWithCobro.length > 0 && (
+                        <div style={{ marginTop: '10px', borderTop: '1px solid #eee', paddingTop: '10px', maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {monthsWithCobro.map(({ month: m, cobrado: mc }) => {
+                            const monthDeclared = byMonth ? (byMonth[m] ?? mc) : mc;
+                            return (
+                              <div key={m} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '11px', color: '#555', width: '72px', flexShrink: 0 }}>{monthNames[m]}</span>
+                                <span style={{ fontSize: '11px', color: '#bbb', width: '90px', flexShrink: 0 }}>Cobrado: {mc.toFixed(2)} €</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={monthDeclared}
+                                  onChange={ev => {
+                                    const val = parseFloat(ev.target.value) || 0;
+                                    setDeclaredAmounts(prev => {
+                                      const prevEntry = prev[String(p.id)] || { total: cobrado, byMonth: null };
+                                      const prevBM = prevEntry.byMonth || {};
+                                      const newBM = { ...prevBM, [m]: val };
+                                      const newTotal = Object.values(newBM).reduce((s, v) => s + v, 0);
+                                      return { ...prev, [String(p.id)]: { total: newTotal, byMonth: newBM } };
+                                    });
+                                  }}
+                                  style={{ flex: 1, padding: '5px 8px', borderRadius: '6px', border: '1.5px solid #ddd', fontSize: '12px', fontWeight: 600, color: '#111', background: 'white', boxSizing: 'border-box' }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       {Math.abs(diff) > 0.01 && (
                         <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#aaa' }}>
                           Diferencia: {diff >= 0 ? '+' : ''}{diff.toFixed(2)} €
