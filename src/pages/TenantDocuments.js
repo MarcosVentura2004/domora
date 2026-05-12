@@ -426,7 +426,7 @@ export default function TenantDocuments({ rental, onBack }) {
         for (const item of (items || []).filter(i => i.id !== null)) {
           const { data: b } = await supabase.storage.from('documentos').download(`${storageDir}/${item.name}`);
           const displayName = item.name.replace(/^\d+_/, '');
-          if (b) zip.file(`${zipPath}/${displayName}`, b);
+          if (b) zip.file(`${zipPath}/${displayName}`, await b.arrayBuffer());
         }
         for (const item of (items || []).filter(i => i.id === null)) {
           await addToZip(`${zipPath}/${item.name}`, `${storageDir}/${item.name}`);
