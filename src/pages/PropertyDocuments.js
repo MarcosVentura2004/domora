@@ -432,15 +432,32 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
       const zip = new JSZip();
       const folderStoragePath = `${landlordEmail}/${propertyId}/${folder.path}`;
 
+      const mimeToExt = {
+        'application/pdf': '.pdf',
+        'image/png': '.png',
+        'image/jpeg': '.jpg',
+        'image/gif': '.gif',
+        'image/webp': '.webp',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/vnd.ms-excel': '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+        'text/plain': '.txt',
+        'text/csv': '.csv',
+      };
+
       const addToZip = async (zipPath, storageDir) => {
         const { data: items } = await supabase.storage.from('documentos').list(storageDir, { limit: 1000 });
         for (const item of (items || []).filter(i => i.id !== null)) {
           const { data: b } = await supabase.storage.from('documentos').download(`${storageDir}/${item.name}`);
+          if (!b) continue;
           const lastDot = item.name.lastIndexOf('.');
-          const ext = lastDot !== -1 ? item.name.slice(lastDot) : '';
+          let ext = lastDot !== -1 ? item.name.slice(lastDot) : '';
           const base = lastDot !== -1 ? item.name.slice(0, lastDot) : item.name;
+          // Same as individual download: if no extension in storage name, infer from blob MIME type
+          if (!ext && b.type) ext = mimeToExt[b.type] || '';
           const displayName = base.replace(/^\d+_/, '') + ext;
-          if (b) zip.file(`${zipPath}/${displayName}`, await b.arrayBuffer());
+          zip.file(`${zipPath}/${displayName}`, await b.arrayBuffer());
         }
         for (const item of (items || []).filter(i => i.id === null)) {
           await addToZip(`${zipPath}/${item.name}`, `${storageDir}/${item.name}`);
