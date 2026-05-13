@@ -137,14 +137,13 @@ function formatMonthYear(year, month) {
 
 function getExpensesForMonth(expenses, year, month) {
   return expenses.filter(e => {
-    // Gastos únicos: usar exclusivamente start_date (fecha elegida por el usuario), nunca created_at
+    // Gastos únicos: aparecer solo en su mes exacto
     const isUnico = e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico';
     if (isUnico) {
       if (!e.start_date) return false;
       const d = new Date(e.start_date.substring(0, 10) + 'T12:00:00');
       return d.getFullYear() === year && d.getMonth() === month;
     }
-    // Gastos recurrentes: start_date marca el inicio de la recurrencia
     const dateStr = e.start_date
       ? (e.start_date.substring(0, 10) + 'T12:00:00')
       : (e.created_at ? (e.created_at.substring(0, 10) + 'T12:00:00') : '');
@@ -154,11 +153,13 @@ function getExpensesForMonth(expenses, year, month) {
     if (year < sy || (year === sy && month < sm)) return false;
     if (e.frequency === 'manual') return true;
     const monthsDiff = (year - sy) * 12 + (month - sm);
-    const step = e.frequency === 'trimestral' ? 3 : e.frequency === 'anual' ? 12 : e.frequency === 'custom' ? (e.custom_frequency_months || 1) : 1;
-    if (monthsDiff % step !== 0) return false;
+    const step = getFrequencyStep(e);
     if (e.type === 'recurrente_temporal') {
-      const paymentIndex = monthsDiff / step;
-      if (paymentIndex >= (e.duration_payments || 0)) return false;
+      if (monthsDiff >= (e.duration_payments || 0) * step) return false;
+    }
+    if (e.skipped_months && Array.isArray(e.skipped_months)) {
+      const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+      if (e.skipped_months.includes(monthStr)) return false;
     }
     return true;
   });
@@ -170,6 +171,46 @@ function getMonthlyEquivalent(expense) {
   if (expense.frequency === 'anual') return amt / 12;
   if (expense.frequency === 'custom') return amt / (expense.custom_frequency_months || 1);
   return amt;
+}
+
+function getFrequencyStep(expense) {
+  if (expense.frequency === 'trimestral') return 3;
+  if (expense.frequency === 'anual') return 12;
+  if (expense.frequency === 'custom') return expense.custom_frequency_months || 1;
+  return 1;
+}
+
+function getCurrentPeriodStart(expense, year, month) {
+  if (!expense.start_date) return null;
+  const start = new Date(expense.start_date.substring(0, 10) + 'T12:00:00');
+  const sy = start.getFullYear(), sm = start.getMonth();
+  const step = getFrequencyStep(expense);
+  const monthsDiff = (year - sy) * 12 + (month - sm);
+  const periodIndex = Math.floor(monthsDiff / step);
+  const totalStartMonths = sy * 12 + sm + periodIndex * step;
+  const pYear = Math.floor(totalStartMonths / 12);
+  const pMonth = totalStartMonths % 12;
+  return `${pYear}-${String(pMonth + 1).padStart(2, '0')}-01`;
+}
+
+function isExpensePendingVariable(expense, year, month) {
+  if (expense.type !== 'recurrente_variable') return false;
+  if (expense.frequency === 'manual') return false;
+  const currentPeriodStart = getCurrentPeriodStart(expense, year, month);
+  if (!currentPeriodStart) return false;
+  const savedPeriodStart = expense.period_start
+    ? expense.period_start.substring(0, 10)
+    : null;
+  return savedPeriodStart !== currentPeriodStart;
+}
+
+function isPaymentMonth(expense, year, month) {
+  if (!expense.start_date) return true;
+  const start = new Date(expense.start_date.substring(0, 10) + 'T12:00:00');
+  const sy = start.getFullYear(), sm = start.getMonth();
+  const step = getFrequencyStep(expense);
+  const monthsDiff = (year - sy) * 12 + (month - sm);
+  return monthsDiff % step === 0;
 }
 
 function AddTenantToRoomModal({ onClose, onAdd, room }) {
@@ -424,6 +465,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
   const totalExpenses = visibleExpenses.reduce((sum, e) => {
     if (e.active === false) return sum;
+    if (isExpensePendingVariable(e, currentYear, currentMonth)) return sum;
     const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
     return sum + getMonthlyEquivalent(e) * pct / 100;
   }, 0);
@@ -481,8 +523,17 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   };
 
   const handleUpdateVariableAmount = async (id, newAmount) => {
-    await supabase.from('expenses').update({ amount: parseFloat(newAmount) }).eq('id', id);
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, amount: parseFloat(newAmount) } : e));
+    const expense = expenses.find(e => e.id === id);
+    const periodStart = getCurrentPeriodStart(expense, currentYear, currentMonth);
+    await supabase.from('expenses').update({
+      amount: parseFloat(newAmount),
+      period_start: periodStart,
+    }).eq('id', id);
+    setExpenses(prev => prev.map(e =>
+      e.id === id
+        ? { ...e, amount: parseFloat(newAmount), period_start: periodStart }
+        : e
+    ));
   };
 
   const handleSaveRoom = (updatedData) => {
@@ -1102,8 +1153,9 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             {visibleExpenses.length === 0 ? (
               <p className="no-expenses">No hay gastos añadidos</p>
             ) : visibleExpenses.map(exp => {
-              const isPendingVariable = exp.type === 'recurrente_variable' && exp.frequency !== 'manual' && !exp.amount;
-              const monthly = getMonthlyEquivalent(exp);
+              const isPendingVariable = isExpensePendingVariable(exp, currentYear, currentMonth);
+              const monthly = isPendingVariable ? 0 : getMonthlyEquivalent(exp);
+              const isPaying = isPaymentMonth(exp, currentYear, currentMonth);
               const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', manual: 'Manual', custom: `Cada ${exp.custom_frequency_months}m`, mensual: null }[exp.frequency] || null;
               const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[exp.type] || null;
               return (
@@ -1119,7 +1171,12 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                         </a>
                       )}
                       {typeLabel && <span className={`frequency-badge ${exp.type}`} style={{ fontSize: 10 }}>{typeLabel}</span>}
-                      {freqLabel && <span className={`frequency-badge ${exp.frequency}`}>{freqLabel}</span>}
+                      {freqLabel && (
+                        <span
+                          className={`frequency-badge ${exp.frequency}`}
+                          style={!isPaying ? { opacity: 0.4 } : undefined}
+                        >{freqLabel}</span>
+                      )}
                       {exp.type === 'recurrente_temporal' && exp.duration_payments && (
                         <span style={{ fontSize: 10, color: '#aaa' }}>({exp.payments_made || 0}/{exp.duration_payments} pagos)</span>
                       )}
