@@ -173,6 +173,42 @@ function getMonthlyEquivalent(expense) {
   return amt;
 }
 
+function getExpensesForMonthReal(expenses, year, month) {
+  return expenses.filter(e => {
+    const isUnico = e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico';
+    if (isUnico) {
+      if (!e.start_date) return false;
+      const d = new Date(e.start_date.substring(0, 10) + 'T12:00:00');
+      return d.getFullYear() === year && d.getMonth() === month;
+    }
+    const dateStr = e.start_date
+      ? (e.start_date.substring(0, 10) + 'T12:00:00')
+      : (e.created_at ? (e.created_at.substring(0, 10) + 'T12:00:00') : '');
+    const start = new Date(dateStr);
+    if (isNaN(start.getTime())) return false;
+    const sy = start.getFullYear(), sm = start.getMonth();
+    if (year < sy || (year === sy && month < sm)) return false;
+    if (e.frequency === 'manual') return true;
+    const monthsDiff = (year - sy) * 12 + (month - sm);
+    const step = getFrequencyStep(e);
+    if (monthsDiff % step !== 0) return false;
+    if (e.type === 'recurrente_temporal') {
+      const paymentIndex = monthsDiff / step;
+      if (paymentIndex >= (e.duration_payments || 0)) return false;
+    }
+    if (e.skipped_months && Array.isArray(e.skipped_months)) {
+      const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+      if (e.skipped_months.includes(monthStr)) return false;
+    }
+    return true;
+  });
+}
+
+function getAmountForView(expense, view) {
+  if (view === 'real') return Number(expense.amount) || 0;
+  return getMonthlyEquivalent(expense);
+}
+
 function getFrequencyStep(expense) {
   if (expense.frequency === 'trimestral') return 3;
   if (expense.frequency === 'anual') return 12;
@@ -339,6 +375,7 @@ function ExpenseMenu({ expenseId, openMenuId, setOpenMenuId, onEdit, onDelete })
 function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [expenses, setExpenses] = useState([]);
   const [showExpenses, setShowExpenses] = useState(false);
+  const [expenseView, setExpenseView] = useState('prorrateado');
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [openMenuExpenseId, setOpenMenuExpenseId] = useState(null);
@@ -462,12 +499,15 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     };
   }, [currentYear, currentMonth, property.id, room.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth);
+  const visibleExpenses = (expenseView === 'real'
+    ? getExpensesForMonthReal(expenses, currentYear, currentMonth)
+    : getExpensesForMonth(expenses, currentYear, currentMonth)
+  ).filter(e => e.active !== false);
   const totalExpenses = visibleExpenses.reduce((sum, e) => {
     if (e.active === false) return sum;
-    if (isExpensePendingVariable(e, currentYear, currentMonth)) return sum;
+    if (expenseView !== 'real' && isExpensePendingVariable(e, currentYear, currentMonth)) return sum;
     const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
-    return sum + getMonthlyEquivalent(e) * pct / 100;
+    return sum + getAmountForView(e, expenseView) * pct / 100;
   }, 0);
 
   const payments = property.payments || [];
@@ -1142,8 +1182,15 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
               style={{ fontSize: 11, padding: '3px 9px', borderRadius: 8, border: '1px solid #ddd', background: 'white', color: '#666', cursor: 'pointer' }}>
               Resumen
             </button>
+            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
+              {['prorrateado', 'real'].map(v => (
+                <button key={v} onClick={() => setExpenseView(v)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: 'none', background: expenseView === v ? 'white' : 'transparent', color: expenseView === v ? '#333' : '#999', cursor: 'pointer', fontWeight: expenseView === v ? 600 : 400 }}>
+                  {v === 'prorrateado' ? 'Prorrat.' : 'Real'}
+                </button>
+              ))}
+            </div>
             <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>{totalExpenses.toFixed(2)} €/mes</span>
+              <span>{totalExpenses.toFixed(2)} {expenseView === 'real' ? '€' : '€/mes'}</span>
               <span className="arrow">{showExpenses ? '▼' : '›'}</span>
             </span>
           </div>
@@ -1153,9 +1200,9 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             {visibleExpenses.length === 0 ? (
               <p className="no-expenses">No hay gastos añadidos</p>
             ) : visibleExpenses.map(exp => {
-              const isPendingVariable = isExpensePendingVariable(exp, currentYear, currentMonth);
-              const monthly = isPendingVariable ? 0 : getMonthlyEquivalent(exp);
-              const isPaying = isPaymentMonth(exp, currentYear, currentMonth);
+              const isPendingVariable = expenseView !== 'real' && isExpensePendingVariable(exp, currentYear, currentMonth);
+              const monthly = isPendingVariable ? 0 : getAmountForView(exp, expenseView);
+              const isPaying = expenseView === 'real' || isPaymentMonth(exp, currentYear, currentMonth);
               const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', manual: 'Manual', custom: `Cada ${exp.custom_frequency_months}m`, mensual: null }[exp.frequency] || null;
               const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[exp.type] || null;
               return (
@@ -1189,7 +1236,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                   </div>
                   <div className="expense-actions" style={{ gap: 6 }}>
                     <span style={{ color: isPendingVariable ? '#FFA726' : undefined }}>
-                      {isPendingVariable ? '— €' : `${monthly.toFixed(2)} €/mes`}
+                      {isPendingVariable ? '— €' : `${monthly.toFixed(2)} ${expenseView === 'real' ? '€' : '€/mes'}`}
                     </span>
                     {canEdit && (
                       <ExpenseMenu
@@ -1205,7 +1252,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
               );
             })}
             {visibleExpenses.length > 0 && (
-              <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
+              <div className="expense-item total"><strong>{expenseView === 'real' ? 'Total mes' : 'Equiv. mensual'}</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
             )}
             {canEdit && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
           </div>
@@ -1230,11 +1277,14 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
           let y = start.getFullYear();
           let m = start.getMonth();
           while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
-            const monthExpenses = getExpensesForMonth(expenses, y, m);
+            const monthExpenses = expenseView === 'real'
+              ? getExpensesForMonthReal(expenses, y, m)
+              : getExpensesForMonth(expenses, y, m);
             const totalExp = monthExpenses.reduce((sum, e) => {
               if (e.active === false) return sum;
+              if (expenseView !== 'real' && isExpensePendingVariable(e, y, m)) return sum;
               const pct = e.expense_percentage != null ? e.expense_percentage : (property.ownershipPercentage || 100);
-              return sum + getMonthlyEquivalent(e) * pct / 100;
+              return sum + getAmountForView(e, expenseView) * pct / 100;
             }, 0);
             const confirmedPayment = roomPayments.find(p => p.year === y && p.month === m && p.status === 'confirmed');
             const income = confirmedPayment ? (confirmedPayment.amount ?? room.price) * ownershipMultiplier : 0;

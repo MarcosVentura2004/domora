@@ -65,6 +65,43 @@ function getMonthlyEquivalent(expense) {
   return amt;
 }
 
+// Vista real: solo muestra el gasto en su mes de pago, con el importe completo
+function getExpensesForMonthReal(expenses, year, month) {
+  return expenses.filter(e => {
+    const isUnico = e.type === 'puntual' || e.type === 'unico' || e.frequency === 'unico';
+    if (isUnico) {
+      if (!e.start_date) return false;
+      const d = new Date(e.start_date.substring(0, 10) + 'T12:00:00');
+      return d.getFullYear() === year && d.getMonth() === month;
+    }
+    const dateStr = e.start_date
+      ? (e.start_date.substring(0, 10) + 'T12:00:00')
+      : (e.created_at ? (e.created_at.substring(0, 10) + 'T12:00:00') : '');
+    const start = new Date(dateStr);
+    if (isNaN(start.getTime())) return false;
+    const sy = start.getFullYear(), sm = start.getMonth();
+    if (year < sy || (year === sy && month < sm)) return false;
+    if (e.frequency === 'manual') return true;
+    const monthsDiff = (year - sy) * 12 + (month - sm);
+    const step = getFrequencyStep(e);
+    if (monthsDiff % step !== 0) return false;
+    if (e.type === 'recurrente_temporal') {
+      const paymentIndex = monthsDiff / step;
+      if (paymentIndex >= (e.duration_payments || 0)) return false;
+    }
+    if (e.skipped_months && Array.isArray(e.skipped_months)) {
+      const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+      if (e.skipped_months.includes(monthStr)) return false;
+    }
+    return true;
+  });
+}
+
+function getAmountForView(expense, view) {
+  if (view === 'real') return Number(expense.amount) || 0;
+  return getMonthlyEquivalent(expense);
+}
+
 // Devuelve el step en meses según la frecuencia del gasto
 function getFrequencyStep(expense) {
   if (expense.frequency === 'trimestral') return 3;
@@ -367,6 +404,7 @@ function ExpenseMenu({ expenseId, openMenuId, setOpenMenuId, onEdit, onDelete })
 function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = false }) {
   const [expenses, setExpenses] = useState([]);
   const [showExpenses, setShowExpenses] = useState(false);
+  const [expenseView, setExpenseView] = useState('prorrateado'); // 'prorrateado' | 'real'
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [openMenuExpenseId, setOpenMenuExpenseId] = useState(null);
@@ -677,19 +715,22 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     setIsEditMode(false);
   }, [currentYear, currentMonth]);
 
-  const visibleExpenses = getExpensesForMonth(expenses, currentYear, currentMonth).filter(e => e.active !== false);
+  const visibleExpenses = (expenseView === 'real'
+    ? getExpensesForMonthReal(expenses, currentYear, currentMonth)
+    : getExpensesForMonth(expenses, currentYear, currentMonth)
+  ).filter(e => e.active !== false);
 
   const ownershipPct = property.ownershipPercentage || 100;
   const totalExpenses = visibleExpenses.reduce((sum, exp) => {
     if (exp.active === false) return sum;
-    if (isExpensePendingVariable(exp, currentYear, currentMonth)) return sum;
-    return sum + getMonthlyEquivalent(exp);
+    if (expenseView !== 'real' && isExpensePendingVariable(exp, currentYear, currentMonth)) return sum;
+    return sum + getAmountForView(exp, expenseView);
   }, 0);
   const myExpenses = visibleExpenses.reduce((sum, exp) => {
     if (exp.active === false) return sum;
-    if (isExpensePendingVariable(exp, currentYear, currentMonth)) return sum;
+    if (expenseView !== 'real' && isExpensePendingVariable(exp, currentYear, currentMonth)) return sum;
     const pct = exp.expense_percentage != null ? exp.expense_percentage : ownershipPct;
-    return sum + getMonthlyEquivalent(exp) * pct / 100;
+    return sum + getAmountForView(exp, expenseView) * pct / 100;
   }, 0);
   
   const ownershipPercentage = property.ownershipPercentage || 100;
@@ -746,11 +787,14 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     const ownershipMultiplier = ownershipPercentage / 100;
     
     while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
-      const monthExpenses = getExpensesForMonth(expenses, y, m);
+      const monthExpenses = expenseView === 'real'
+        ? getExpensesForMonthReal(expenses, y, m)
+        : getExpensesForMonth(expenses, y, m);
       const myExpenses = monthExpenses.reduce((sum, e) => {
         if (e.active === false) return sum;
+        if (expenseView !== 'real' && isExpensePendingVariable(e, y, m)) return sum;
         const pct = e.expense_percentage != null ? e.expense_percentage : ownershipPercentage;
-        return sum + getMonthlyEquivalent(e) * pct / 100;
+        return sum + getAmountForView(e, expenseView) * pct / 100;
       }, 0);
       
       let allPaymentsTotal = 0;
@@ -1451,8 +1495,15 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
               style={{ fontSize: 11, padding: '3px 9px', borderRadius: 8, border: '1px solid #ddd', background: 'white', color: '#666', cursor: 'pointer' }}>
               Resumen
             </button>
+            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
+              {['prorrateado', 'real'].map(v => (
+                <button key={v} onClick={() => setExpenseView(v)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: 'none', background: expenseView === v ? 'white' : 'transparent', color: expenseView === v ? '#333' : '#999', cursor: 'pointer', fontWeight: expenseView === v ? 600 : 400 }}>
+                  {v === 'prorrateado' ? 'Prorrat.' : 'Real'}
+                </button>
+              ))}
+            </div>
             <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>{totalExpenses.toFixed(2)} €/mes</span>
+              <span>{totalExpenses.toFixed(2)} {expenseView === 'real' ? '€' : '€/mes'}</span>
               <span className="arrow">{showExpenses ? '▼' : '›'}</span>
             </span>
           </div>
@@ -1464,9 +1515,9 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
             ) : (
               visibleExpenses.map(expense => {
                 // variable con frecuencia programada y sin importe → pendiente
-                const isPendingVariable = isExpensePendingVariable(expense, currentYear, currentMonth);
-                const monthly = isPendingVariable ? 0 : getMonthlyEquivalent(expense);
-                const isPaying = isPaymentMonth(expense, currentYear, currentMonth);
+                const isPendingVariable = expenseView !== 'real' && isExpensePendingVariable(expense, currentYear, currentMonth);
+                const monthly = isPendingVariable ? 0 : getAmountForView(expense, expenseView);
+                const isPaying = expenseView === 'real' || isPaymentMonth(expense, currentYear, currentMonth);
                 const expPct = expense.expense_percentage != null ? expense.expense_percentage : ownershipPct;
                 const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', manual: 'Manual', custom: `Cada ${expense.custom_frequency_months}m`, mensual: null }[expense.frequency] || null;
                 const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[expense.type] || null;
@@ -1516,7 +1567,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                           ? '— €'
                           : expense.frequency === 'manual' && !expense.amount
                             ? '— €'
-                            : `${monthly.toFixed(2)} €/mes`}
+                            : `${monthly.toFixed(2)} ${expenseView === 'real' ? '€' : '€/mes'}`}
                       </span>
                       {expense.frequency === 'manual' && (
                         <PendingVariableInput expenseId={expense.id} onSave={handleUpdateVariableAmount} buttonLabel="+ Importe" />
@@ -1536,7 +1587,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
               })
             )}
             {visibleExpenses.length > 0 && (
-              <div className="expense-item total"><strong>Equiv. mensual</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
+              <div className="expense-item total"><strong>{expenseView === 'real' ? 'Total mes' : 'Equiv. mensual'}</strong><strong>{totalExpenses.toFixed(2)} €</strong></div>
             )}
             {canEdit && <button className="add-expense-button" onClick={() => setShowAddExpense(true)}>+ Añadir gasto</button>}
           </div>
