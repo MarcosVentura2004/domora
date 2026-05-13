@@ -78,10 +78,10 @@ function getPropertyIcon(status, size = 48) {
   );
   if (status === 'vacacional') return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M9 21V12h6v9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx="19" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M19 2.5V2M19 8V7.5M21.5 5H22M16 5h0.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M3 10h18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path d="M7 14h2M11 14h2M15 14h2M7 18h2M11 18h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   );
   if (status === 'vacio') return (
