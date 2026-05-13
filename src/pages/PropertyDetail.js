@@ -1488,24 +1488,26 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
 
       {/* Gastos */}
       <div className="info-card expenses-card">
-        <div className="card-header clickable" onClick={() => setShowExpenses(!showExpenses)}>
-          <h3>Gastos</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={e => { e.stopPropagation(); setShowExpenseSummary(true); }}
+        <div className="card-header clickable" onClick={() => setShowExpenses(!showExpenses)} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0 }}>Gastos</h3>
+            <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>{totalExpenses.toFixed(2)} {expenseView === 'real' ? '€' : '€/mes'}</span>
+              <span className="arrow">{showExpenses ? '▼' : '›'}</span>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowExpenseSummary(true)}
               style={{ fontSize: 11, padding: '3px 9px', borderRadius: 8, border: '1px solid #ddd', background: 'white', color: '#666', cursor: 'pointer' }}>
               Resumen
             </button>
-            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
+            <div style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
               {['prorrateado', 'real'].map(v => (
                 <button key={v} onClick={() => setExpenseView(v)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: 'none', background: expenseView === v ? 'white' : 'transparent', color: expenseView === v ? '#333' : '#999', cursor: 'pointer', fontWeight: expenseView === v ? 600 : 400 }}>
                   {v === 'prorrateado' ? 'Prorrat.' : 'Real'}
                 </button>
               ))}
             </div>
-            <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>{totalExpenses.toFixed(2)} {expenseView === 'real' ? '€' : '€/mes'}</span>
-              <span className="arrow">{showExpenses ? '▼' : '›'}</span>
-            </span>
           </div>
         </div>
         {showExpenses && (
