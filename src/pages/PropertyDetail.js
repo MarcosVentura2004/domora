@@ -883,23 +883,26 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
       tenant: null
     };
     const updatedRooms = [...rooms, newRoom];
+    const updatedPrice = updatedRooms.reduce((sum, r) => sum + (parseFloat(r.price) || 0), 0);
     setRooms(updatedRooms);
-    onUpdate({ ...property, rooms: updatedRooms });
+    onUpdate({ ...property, rooms: updatedRooms, price: updatedPrice });
     setShowAddRoom(false);
   };
 
   const handleEditRoom = (updatedRoom) => {
     const updatedRooms = rooms.map(r => r.id === updatedRoom.id ? updatedRoom : r);
+    const updatedPrice = updatedRooms.reduce((sum, r) => sum + (parseFloat(r.price) || 0), 0);
     setRooms(updatedRooms);
-    onUpdate({ ...property, rooms: updatedRooms });
+    onUpdate({ ...property, rooms: updatedRooms, price: updatedPrice });
     setEditingRoom(null);
   };
 
   const handleDeleteRoom = (roomId) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta habitación?')) {
       const updatedRooms = rooms.filter(r => r.id !== roomId);
+      const updatedPrice = updatedRooms.reduce((sum, r) => sum + (parseFloat(r.price) || 0), 0);
       setRooms(updatedRooms);
-      onUpdate({ ...property, rooms: updatedRooms });
+      onUpdate({ ...property, rooms: updatedRooms, price: updatedPrice });
       setEditingRoom(null);
     }
   };
