@@ -97,8 +97,23 @@ function Welcome({ onSelectUserType }) {
         </div>
 
         <div className="welcome-footer">
-          <p className="welcome-footer-note">Puedes cambiar esto mas adelante.</p>
-          <a href="/privacy" className="welcome-privacy-link">Politica de Privacidad</a>
+          <p className="welcome-footer-note">Puedes cambiar esto más adelante.</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
+            <a href="/politica-de-privacidad" target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
+              onMouseEnter={e => e.target.style.color = '#666'} onMouseLeave={e => e.target.style.color = '#999'}>
+              Política de privacidad
+            </a>
+            <span style={{ fontSize: '12px', color: '#ccc' }}>·</span>
+            <a href="/terminos-de-servicio" target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
+              onMouseEnter={e => e.target.style.color = '#666'} onMouseLeave={e => e.target.style.color = '#999'}>
+              Términos de servicio
+            </a>
+            <span style={{ fontSize: '12px', color: '#ccc' }}>·</span>
+            <a href="/aviso-legal" target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
+              onMouseEnter={e => e.target.style.color = '#666'} onMouseLeave={e => e.target.style.color = '#999'}>
+              Aviso legal
+            </a>
+          </div>
         </div>
 
       </div>

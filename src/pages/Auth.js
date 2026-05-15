@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import './Auth.css';
 
@@ -11,8 +11,11 @@ function Auth({ onLogin, onBack, initialStep }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState('');
+  const termsAcceptedAtRef = useRef(null);
 
-  const goTo = (s) => { setError(''); setOtp(''); setStep(s); };
+  const goTo = (s) => { setError(''); setOtp(''); setTermsError(''); setStep(s); };
 
   const backTarget = {
     'login': onBack,
@@ -37,6 +40,10 @@ function Auth({ onLogin, onBack, initialStep }) {
   // REGISTRO: email + contraseña + confirmar → envía OTP al email
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
+    if (!termsAccepted) {
+      setTermsError('Debes aceptar los términos para continuar.');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Las contraseñas no coinciden.');
       return;
@@ -45,6 +52,7 @@ function Auth({ onLogin, onBack, initialStep }) {
       setError('La contraseña debe tener al menos 8 caracteres.');
       return;
     }
+    termsAcceptedAtRef.current = new Date().toISOString();
     setLoading(true);
     setError('');
     const { error: signUpError } = await supabase.auth.signUp({ email, password });
@@ -70,6 +78,14 @@ function Auth({ onLogin, onBack, initialStep }) {
     if (verifyError) {
       setError('Código incorrecto o expirado. Inténtalo de nuevo.');
       return;
+    }
+    // Guardar aceptación de términos en la tabla landlords
+    if (termsAcceptedAtRef.current && data.user) {
+      await supabase.from('landlords').upsert({
+        user_id: data.user.id,
+        email: data.user.email,
+        terms_accepted_at: termsAcceptedAtRef.current,
+      }, { onConflict: 'user_id' });
     }
     onLogin(data.user);
   };
@@ -201,7 +217,33 @@ function Auth({ onLogin, onBack, initialStep }) {
                   minLength="8"
                   required
                 />
-                <button type="submit" className="continue-button" disabled={loading}>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={(e) => { setTermsAccepted(e.target.checked); setTermsError(''); }}
+                      style={{ marginTop: '3px', flexShrink: 0, width: '16px', height: '16px', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '13px', color: '#444', lineHeight: '1.5' }}>
+                      He leído y acepto los{' '}
+                      <a href="/terminos-de-servicio" target="_blank" rel="noreferrer" style={{ color: '#111', textDecoration: 'underline' }}>
+                        Términos y Condiciones
+                      </a>
+                      {' '}y la{' '}
+                      <a href="/politica-de-privacidad" target="_blank" rel="noreferrer" style={{ color: '#111', textDecoration: 'underline' }}>
+                        Política de privacidad
+                      </a>
+                    </span>
+                  </label>
+                  {termsError && (
+                    <p style={{ color: '#e53e3e', fontSize: '12px', marginTop: '6px', marginLeft: '26px' }}>
+                      {termsError}
+                    </p>
+                  )}
+                </div>
+                <button type="submit" className="continue-button" disabled={loading || !termsAccepted}
+                  style={!termsAccepted ? { opacity: 0.45, cursor: 'not-allowed' } : {}}>
                   {loading ? 'Registrando…' : 'Crear cuenta'}
                 </button>
               </form>

@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import GestorDashboard from './pages/GestorDashboard';
 import CodeEntry from './pages/CodeEntry';
 import InquilinoHome from './pages/InquilinoHome';
+import TenantWelcome from './pages/TenantWelcome';
 import Planes from './pages/Planes';
 import ResetPassword from './pages/ResetPassword';
 import GestorInvite from './pages/GestorInvite';
@@ -26,6 +27,13 @@ function App() {
   const [userEmail, setUserEmail] = useState(null);
   const [tenantCodes, setTenantCodes] = useState([]);
   const [authInitialStep, setAuthInitialStep] = useState('login');
+  const [tenantWelcomeData, setTenantWelcomeData] = useState(null);
+  const [tenantWelcomeCode, setTenantWelcomeCode] = useState(null);
+  // Modal retroactivo para usuarios existentes sin terms_accepted_at
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [modalTermsAccepted, setModalTermsAccepted] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const pendingUserRef = useRef(null);
 
   // Paginas que gestionan su propia autenticacion — el listener global no debe
   // redirigirlas bajo ninguna circunstancia.
@@ -60,12 +68,23 @@ function App() {
         setUserType('gestor');
         localStorage.setItem('userType', 'gestor');
         setPage('gestor-dashboard');
-        return;
+      } else {
+        setUserType('propietario');
+        localStorage.setItem('userType', 'propietario');
+        setPage('dashboard');
       }
 
-      setUserType('propietario');
-      localStorage.setItem('userType', 'propietario');
-      setPage('dashboard');
+      // Verificar si el usuario ya aceptó los términos
+      const { data: landlordData } = await supabase
+        .from('landlords')
+        .select('terms_accepted_at')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!landlordData?.terms_accepted_at) {
+        pendingUserRef.current = user;
+        setShowTermsModal(true);
+      }
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -142,16 +161,41 @@ function App() {
     setPage('dashboard');
   };
 
-  const handleCodeValid = (code) => {
+  const handleCodeValid = (code, codeData, termsAcceptedAt) => {
     const updated = tenantCodes.includes(code) ? tenantCodes : [...tenantCodes, code];
     setTenantCodes(updated);
     localStorage.setItem('inquilino_codes', JSON.stringify(updated));
-    setPage('inquilino-home');
+
+    if (!termsAcceptedAt) {
+      // Primera vez: mostrar pantalla de bienvenida con consent
+      setTenantWelcomeData(codeData);
+      setTenantWelcomeCode(code);
+      setPage('tenant-welcome');
+    } else {
+      setPage('inquilino-home');
+    }
   };
 
   const handleCodesUpdate = (codes) => {
     setTenantCodes(codes);
     localStorage.setItem('inquilino_codes', JSON.stringify(codes));
+  };
+
+  const handleModalAccept = async () => {
+    if (!modalTermsAccepted) return;
+    setModalLoading(true);
+    const user = pendingUserRef.current;
+    if (user) {
+      await supabase.from('landlords').upsert({
+        user_id: user.id,
+        email: user.email,
+        terms_accepted_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
+    setModalLoading(false);
+    setShowTermsModal(false);
+    setModalTermsAccepted(false);
+    pendingUserRef.current = null;
   };
 
   const handleLogout = async () => {
@@ -216,6 +260,14 @@ function App() {
         />
       )}
 
+      {currentPage === 'tenant-welcome' && (
+        <TenantWelcome
+          tenantData={tenantWelcomeData}
+          tenantCode={tenantWelcomeCode}
+          onAccepted={() => setPage('inquilino-home')}
+        />
+      )}
+
       {currentPage === 'inquilino-home' && (
         <InquilinoHome
           userEmail={userEmail}
@@ -244,6 +296,68 @@ function App() {
             setPage('gestor-dashboard');
           }}
         />
+      )}
+
+      {showTermsModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '20px',
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '20px',
+            padding: '32px 28px',
+            width: '100%',
+            maxWidth: '400px',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+          }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111', margin: '0 0 12px' }}>
+              Hemos actualizado nuestros términos
+            </h2>
+            <p style={{ fontSize: '14px', color: '#555', lineHeight: '1.6', margin: '0 0 24px' }}>
+              Para seguir usando Domio necesitamos que aceptes nuestros{' '}
+              <a href="/terminos-de-servicio" target="_blank" rel="noreferrer" style={{ color: '#111', textDecoration: 'underline' }}>Términos y Condiciones</a>
+              {' '}y nuestra{' '}
+              <a href="/politica-de-privacidad" target="_blank" rel="noreferrer" style={{ color: '#111', textDecoration: 'underline' }}>Política de privacidad</a>
+              {' '}actualizados.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', marginBottom: '24px' }}>
+              <input
+                type="checkbox"
+                checked={modalTermsAccepted}
+                onChange={(e) => setModalTermsAccepted(e.target.checked)}
+                style={{ marginTop: '3px', flexShrink: 0, width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '13px', color: '#444', lineHeight: '1.5' }}>
+                He leído y acepto los{' '}
+                <a href="/terminos-de-servicio" target="_blank" rel="noreferrer" style={{ color: '#111', textDecoration: 'underline' }}>Términos y Condiciones</a>
+                {' '}y la{' '}
+                <a href="/politica-de-privacidad" target="_blank" rel="noreferrer" style={{ color: '#111', textDecoration: 'underline' }}>Política de privacidad</a>
+              </span>
+            </label>
+            <button
+              onClick={handleModalAccept}
+              disabled={!modalTermsAccepted || modalLoading}
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: '#111',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: modalTermsAccepted && !modalLoading ? 'pointer' : 'not-allowed',
+                opacity: modalTermsAccepted && !modalLoading ? 1 : 0.45,
+                transition: 'opacity 0.15s ease',
+              }}
+            >
+              {modalLoading ? 'Guardando…' : 'Aceptar y continuar'}
+            </button>
+          </div>
+        </div>
       )}
 
     </div>

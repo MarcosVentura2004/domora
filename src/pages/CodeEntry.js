@@ -55,7 +55,7 @@ function CodeEntry({ onCodeValid, onBack }) {
     }
     localStorage.setItem(propKey, JSON.stringify(existingProps));
 
-    onCodeValid(normalized, tenantCodes[normalized]);
+    onCodeValid(normalized, tenantCodes[normalized], data.terms_accepted_at ?? null);
   };
 
   return (
