@@ -196,6 +196,11 @@ export default function GestorDashboard({ userEmail, onLogout }) {
 
   const [gestorAvatarUrl, setGestorAvatarUrl] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareLink, setShareLink] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState('');
 
   const tabHeaderRef = useRef(null);
   const [tabHeaderHeight, setTabHeaderHeight] = useState(106);
@@ -235,13 +240,43 @@ export default function GestorDashboard({ userEmail, onLogout }) {
     setActiveTab('general');
   };
 
-  const handleShareGestor = () => {
-    const shareText = 'Gestiono propiedades con Domio. Si quieres que gestione las tuyas, regístrate en trydomio.com y añádeme como gestor.';
-    if (navigator.share) {
-      navigator.share({ title: 'Gestor en Domio', text: shareText, url: 'https://trydomio.com' }).catch(() => {});
-    } else {
-      navigator.clipboard?.writeText(shareText).catch(() => {});
+  const handleShareGestor = async () => {
+    if (shareLoading) return;
+    setShareLoading(true);
+
+    const { data: gestorRow, error: fetchError } = await supabase
+      .from('gestores')
+      .select('invite_token')
+      .eq('email', userEmail)
+      .single();
+
+    if (fetchError) {
+      setShareLoading(false);
+      setShareError('No se pudo generar el enlace. Intentalo de nuevo.');
+      setShowShareModal(true);
+      return;
     }
+
+    let token = gestorRow?.invite_token;
+    if (!token) {
+      token = crypto.randomUUID();
+      const { error: updateError } = await supabase
+        .from('gestores')
+        .update({ invite_token: token })
+        .eq('email', userEmail);
+      if (updateError) {
+        setShareLoading(false);
+        setShareError('No se pudo generar el enlace. Intentalo de nuevo.');
+        setShowShareModal(true);
+        return;
+      }
+    }
+
+    setShareLink(`https://trydomio.com/gestor-invite-landlord?token=${token}`);
+    setLinkCopied(false);
+    setShareError('');
+    setShareLoading(false);
+    setShowShareModal(true);
   };
 
   useEffect(() => {
@@ -585,6 +620,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           </div>
           <button
             onClick={handleShareGestor}
+            disabled={shareLoading}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               background: '#f5f5f5', border: 'none', borderRadius: 8,
@@ -1301,6 +1337,80 @@ export default function GestorDashboard({ userEmail, onLogout }) {
               <span style={{ fontSize: '10px', fontWeight: activeTab === 'chat' ? 600 : 400 }}>Mensajes</span>
             </button>
           )}
+        </div>
+      )}
+
+      {showShareModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1200,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}
+          onClick={() => { setShowShareModal(false); setShareError(''); setShareLink(''); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Compartir perfil"
+            style={{
+              background: 'white', borderRadius: '20px 20px 0 0',
+              padding: '24px 20px 36px', width: '100%', maxWidth: 480,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#111' }}>
+              Compartir perfil
+            </p>
+            {shareError ? (
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#c0392b', textAlign: 'center' }}>{shareError}</p>
+            ) : (
+              <p style={{ margin: '0 0 16px', fontSize: 13, color: '#555', lineHeight: 1.5 }}>
+                Comparte este enlace con propietarios. Podrán darte acceso a sus propiedades directamente desde el enlace.
+              </p>
+            )}
+            {shareLink && (
+              <>
+                <div style={{
+                  background: '#f5f5f5', borderRadius: 10, padding: '12px 14px',
+                  fontSize: 13, color: '#333', wordBreak: 'break-all',
+                  marginBottom: 16, border: '1px solid #e5e5e5', lineHeight: 1.5,
+                }}>
+                  {shareLink}
+                </div>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(shareLink).catch(() => {});
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2000);
+                  }}
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: 12,
+                    background: linkCopied ? '#16a34a' : '#111',
+                    color: 'white', border: 'none', fontSize: 15, fontWeight: 600,
+                    cursor: 'pointer', marginBottom: 10, transition: 'background 0.2s',
+                  }}
+                >
+                  {linkCopied ? 'Enlace copiado' : 'Copiar enlace'}
+                </button>
+                {typeof navigator.share === 'function' && (
+                  <button
+                    onClick={() => {
+                      navigator.share({ title: 'Gestor en Domio', url: shareLink }).catch(() => {});
+                    }}
+                    style={{
+                      width: '100%', padding: '14px', borderRadius: 12,
+                      background: 'white', color: '#111',
+                      border: '1px solid #e5e5e5',
+                      fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    Compartir
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 

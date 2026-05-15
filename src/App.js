@@ -10,6 +10,7 @@ import TenantWelcome from './pages/TenantWelcome';
 import Planes from './pages/Planes';
 import ResetPassword from './pages/ResetPassword';
 import GestorInvite from './pages/GestorInvite';
+import GestorInviteLandlord from './pages/GestorInviteLandlord';
 import './App.css';
 
 function App() {
@@ -19,6 +20,8 @@ function App() {
     ? 'reset-password'
     : window.location.pathname === '/gestor-invite'
     ? 'gestor-invite'
+    : window.location.pathname === '/gestor-invite-landlord'
+    ? 'gestor-invite-landlord'
     : 'welcome';
   const [currentPage, rawSetPage] = useState(initialPage);
   const currentPageRef = useRef(initialPage);
@@ -38,7 +41,7 @@ function App() {
 
   // Paginas que gestionan su propia autenticacion — el listener global no debe
   // redirigirlas bajo ninguna circunstancia.
-  const PUBLIC_PAGES = ['planes', 'reset-password', 'gestor-invite'];
+  const PUBLIC_PAGES = ['planes', 'reset-password', 'gestor-invite', 'gestor-invite-landlord'];
 
   // Restore session on mount
   useEffect(() => {
@@ -325,6 +328,17 @@ function App() {
             setUserType('gestor');
             localStorage.setItem('userType', 'gestor');
             setPage('gestor-dashboard');
+          }}
+        />
+      )}
+
+      {currentPage === 'gestor-invite-landlord' && (
+        <GestorInviteLandlord
+          onAccepted={(user) => {
+            setUserEmail(user.email);
+            setUserType('propietario');
+            localStorage.setItem('userType', 'propietario');
+            setPage('dashboard');
           }}
         />
       )}

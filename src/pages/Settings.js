@@ -58,6 +58,14 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [inviteError, setInviteError] = useState('');
   const [inviteSent, setInviteSent] = useState(false);
   const [revokingEmail, setRevokingEmail] = useState(null);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [showConfigureModal, setShowConfigureModal] = useState(false);
+  const [configureTarget, setConfigureTarget] = useState(null); // { email, name }
+  const [configurePropIds, setConfigurePropIds] = useState(new Set());
+  const [configurePermission, setConfigurePermission] = useState('lectura');
+  const [configureCanMessage, setConfigureCanMessage] = useState(true);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configError, setConfigError] = useState('');
 
   // ── Carga gestores ────────────────────────────────────────
   const loadGestores = async () => {
@@ -71,26 +79,54 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       .from('property_access')
       .select('gestor_email, property_id, permisos, can_message')
       .eq('landlord_email', userEmail);
-    if (!accessRows || accessRows.length === 0) { setGestores([]); return; }
 
-    const emails = [...new Set(accessRows.map(r => r.gestor_email))];
-    const { data: gestorRows } = await supabase
+    if (!accessRows || accessRows.length === 0) {
+      setGestores([]);
+    } else {
+      const emails = [...new Set(accessRows.map(r => r.gestor_email))];
+      const { data: gestorRows } = await supabase
+        .from('gestores')
+        .select('email, nombre')
+        .in('email', emails);
+      const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.nombre]));
+      const grouped = emails.map(email => {
+        const firstRow = accessRows.find(r => r.gestor_email === email);
+        return {
+          email,
+          name: nameMap[email] || email,
+          permisos: firstRow?.permisos || 'lectura',
+          canMessage: firstRow?.can_message !== false,
+          propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
+        };
+      });
+      setGestores(grouped);
+    }
+
+    // Solicitudes pendientes de gestores que compartieron enlace
+    const { data: requestRows } = await supabase
+      .from('gestor_requests')
+      .select('gestor_email')
+      .eq('landlord_email', userEmail)
+      .eq('status', 'pending');
+
+    if (!requestRows || requestRows.length === 0) {
+      setPendingRequests([]);
+      return;
+    }
+
+    const requestEmails = requestRows.map(r => r.gestor_email);
+    const { data: requestGestorRows } = await supabase
       .from('gestores')
       .select('email, nombre')
-      .in('email', emails);
-    const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.nombre]));
-
-    const grouped = emails.map(email => {
-      const firstRow = accessRows.find(r => r.gestor_email === email);
-      return {
-        email,
-        name: nameMap[email] || email,
-        permisos: firstRow?.permisos || 'lectura',
-        canMessage: firstRow?.can_message !== false,
-        propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
-      };
-    });
-    setGestores(grouped);
+      .in('email', requestEmails);
+    const requestNameMap = Object.fromEntries(
+      (requestGestorRows || []).map(g => [g.email, g.nombre])
+    );
+    const uniqueRequestEmails = [...new Set(requestRows.map(r => r.gestor_email))];
+    setPendingRequests(uniqueRequestEmails.map(email => ({
+      email,
+      name: requestNameMap[email] || email,
+    })));
   };
 
   // ── Handlers gestores ─────────────────────────────────────
@@ -170,6 +206,45 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       .eq('gestor_email', gestorEmail)
       .eq('landlord_email', userEmail);
     setRevokingEmail(null);
+    loadGestores();
+  };
+
+  const handleConfirmPending = async () => {
+    if (!configureTarget || configurePropIds.size === 0) return;
+    setConfigLoading(true);
+    setConfigError('');
+    const rows = [...configurePropIds].map(pid => ({
+      gestor_email: configureTarget.email,
+      landlord_email: userEmail,
+      property_id: pid,
+      permisos: configurePermission,
+      can_message: configureCanMessage,
+    }));
+    const { error: upsertError } = await supabase
+      .from('property_access')
+      .upsert(rows, { onConflict: 'gestor_email,property_id' });
+    if (upsertError) {
+      setConfigLoading(false);
+      setConfigError('No se pudo guardar el acceso. Intentalo de nuevo.');
+      return;
+    }
+    const { error: updateError } = await supabase
+      .from('gestor_requests')
+      .update({ status: 'accepted' })
+      .eq('gestor_email', configureTarget.email)
+      .eq('landlord_email', userEmail);
+    if (updateError) {
+      setConfigLoading(false);
+      setConfigError('Acceso concedido, pero hubo un error al actualizar el estado. Recarga la pagina.');
+      return;
+    }
+    setConfigLoading(false);
+    setShowConfigureModal(false);
+    setConfigureTarget(null);
+    setConfigurePropIds(new Set());
+    setConfigurePermission('lectura');
+    setConfigureCanMessage(true);
+    setConfigError('');
     loadGestores();
   };
 
@@ -565,7 +640,50 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
           <p className="settings-section-label">Gestores</p>
           <div className="settings-card">
 
-            {gestores.length === 0 ? (
+            {pendingRequests.map(req => (
+              <div key={req.email} className="settings-card-row" style={{ alignItems: 'flex-start' }}>
+                <div className="settings-row-icon" style={{ background: '#fff7ed' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="7" r="4" stroke="#ea580c" strokeWidth="2"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content" style={{ flex: 1 }}>
+                  <p className="settings-row-title">{req.name}</p>
+                  <p className="settings-row-subtitle">{req.email}</p>
+                  <span style={{
+                    display: 'inline-block', marginTop: 3,
+                    background: '#fff7ed', color: '#ea580c',
+                    fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                    border: '1px solid #fed7aa',
+                  }}>
+                    Pendiente
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setConfigureTarget(req);
+                    setConfigurePropIds(new Set());
+                    setConfigurePermission('lectura');
+                    setConfigureCanMessage(true);
+                    setConfigError('');
+                    setShowConfigureModal(true);
+                  }}
+                  style={{
+                    background: '#111', border: 'none', borderRadius: 8,
+                    color: 'white', fontSize: 12, fontWeight: 600,
+                    padding: '5px 12px', cursor: 'pointer', flexShrink: 0, marginTop: 2,
+                  }}
+                >
+                  Configurar
+                </button>
+              </div>
+            ))}
+            {pendingRequests.length > 0 && gestores.length > 0 && (
+              <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />
+            )}
+
+            {gestores.length === 0 && pendingRequests.length === 0 ? (
               <div className="settings-card-row" style={{ opacity: 0.5, pointerEvents: 'none' }}>
                 <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -975,6 +1093,138 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                   </button>
                 )}
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          MODAL — Configurar solicitud pendiente
+      ════════════════════════════════════════ */}
+      {showConfigureModal && configureTarget && (
+        <div
+          className="settings-modal-overlay"
+          onClick={() => !configLoading && setShowConfigureModal(false)}
+        >
+          <div
+            className="settings-modal"
+            onClick={e => e.stopPropagation()}
+            style={{ maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <p className="settings-modal-title">Dar acceso a {configureTarget.name}</p>
+
+            {configError && (
+              <p style={{ color: '#c0392b', fontSize: '13px', margin: '0 0 12px', textAlign: 'center' }}>{configError}</p>
+            )}
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Propiedades con acceso</label>
+              {ownerProperties.length === 0 ? (
+                <p style={{ fontSize: '13px', color: '#aaa', margin: 0 }}>No tienes propiedades aun.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {ownerProperties.map(prop => {
+                    const checked = configurePropIds.has(prop.id);
+                    return (
+                      <button
+                        key={prop.id}
+                        type="button"
+                        onClick={() => {
+                          const next = new Set(configurePropIds);
+                          if (checked) next.delete(prop.id); else next.add(prop.id);
+                          setConfigurePropIds(next);
+                        }}
+                        disabled={configLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          background: checked ? '#f0f0f0' : 'white',
+                          border: `1px solid ${checked ? '#ccc' : '#e5e5e5'}`,
+                          borderRadius: 10, padding: '9px 12px', cursor: 'pointer', textAlign: 'left',
+                        }}
+                      >
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 4, flexShrink: 0,
+                          border: `2px solid ${checked ? '#111' : '#ccc'}`,
+                          background: checked ? '#111' : 'white',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {checked && (
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#111' }}>{prop.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Permisos</label>
+              <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e5e5' }}>
+                {[{ value: 'lectura', label: 'Solo lectura' }, { value: 'gestion', label: 'Gestión completa' }].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setConfigurePermission(opt.value)}
+                    disabled={configLoading}
+                    style={{
+                      flex: 1, padding: '10px 4px', border: 'none', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: 600,
+                      background: configurePermission === opt.value ? '#111' : 'white',
+                      color: configurePermission === opt.value ? 'white' : '#555',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#555', display: 'block', marginBottom: 8 }}>Puede ver mensajes</label>
+              <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #e5e5e5' }}>
+                {[{ value: true, label: 'Sí' }, { value: false, label: 'No' }].map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => setConfigureCanMessage(opt.value)}
+                    disabled={configLoading}
+                    style={{
+                      flex: 1, padding: '10px 4px', border: 'none', cursor: 'pointer',
+                      fontSize: '12px', fontWeight: 600,
+                      background: configureCanMessage === opt.value ? '#111' : 'white',
+                      color: configureCanMessage === opt.value ? 'white' : '#555',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              className="settings-modal-btn-primary"
+              onClick={handleConfirmPending}
+              disabled={configLoading || configurePropIds.size === 0 || ownerProperties.length === 0}
+            >
+              {configLoading ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <div className="settings-spinner" />
+                  Guardando…
+                </span>
+              ) : 'Dar acceso'}
+            </button>
+            {!configLoading && (
+              <button
+                className="settings-modal-btn-cancel"
+                onClick={() => setShowConfigureModal(false)}
+              >
+                Cancelar
+              </button>
             )}
           </div>
         </div>
