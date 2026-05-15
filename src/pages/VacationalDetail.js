@@ -1026,7 +1026,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
         />
       )}
       {showAddExpense && (
-        <AddExpenseModal onClose={() => setShowAddExpense(false)} onAdd={handleAddExpense} defaultExpensePct={property.ownershipPercentage || 100} />
+        <AddExpenseModal onClose={() => setShowAddExpense(false)} onAdd={handleAddExpense} defaultExpensePct={property.ownershipPercentage || 100} defaultDate={`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`} />
       )}
       {showEditProperty && (
         <EditVacationalModal
@@ -1186,7 +1186,7 @@ const EXPENSE_CATEGORIES = [
   { key: 'otros',        label: 'Otros',              subcategories: [] },
 ];
 
-function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
+function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate }) {
   const today = new Date().toISOString().split('T')[0];
   const [category, setCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
@@ -1197,7 +1197,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct }) {
   const [customFreqMonths, setCustomFreqMonths] = useState('');
   const [durationType, setDurationType] = useState('indefinido');
   const [durationPayments, setDurationPayments] = useState('');
-  const [startDate, setStartDate] = useState(today);
+  const [startDate, setStartDate] = useState(defaultDate || today);
   const [expensePct, setExpensePct] = useState(defaultExpensePct != null ? String(defaultExpensePct) : '');
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };

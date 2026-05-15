@@ -1366,6 +1366,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
           initialExpense={editingExpense}
           landlordEmail={landlordEmail}
           propertyId={property.id}
+          defaultDate={`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`}
         />
       )}
 
@@ -1427,7 +1428,7 @@ const EXPENSE_CATEGORIES = [
   { key: 'otros',        label: 'Otros',              subcategories: [] },
 ];
 
-function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, landlordEmail, propertyId }) {
+function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, landlordEmail, propertyId, defaultDate }) {
   const today = new Date().toISOString().split('T')[0];
   const isEditing = !!initialExpense;
   const [category, setCategory] = useState(isEditing ? (initialExpense.category || '') : '');
@@ -1439,7 +1440,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const [customFreqMonths, setCustomFreqMonths] = useState(isEditing ? (initialExpense.custom_frequency_months ? String(initialExpense.custom_frequency_months) : '') : '');
   const [durationType, setDurationType] = useState(isEditing ? (initialExpense.duration_payments ? 'pagos' : 'indefinido') : 'indefinido');
   const [durationPayments, setDurationPayments] = useState(isEditing ? (initialExpense.duration_payments ? String(initialExpense.duration_payments) : '') : '');
-  const [startDate, setStartDate] = useState(isEditing ? (initialExpense.start_date || today) : today);
+  const [startDate, setStartDate] = useState(isEditing ? (initialExpense.start_date || today) : (defaultDate || today));
   const [expensePct, setExpensePct] = useState(isEditing ? (initialExpense.expense_percentage != null ? String(initialExpense.expense_percentage) : '') : (defaultExpensePct != null ? String(defaultExpensePct) : ''));
   const fileInputRef = React.useRef(null);
   const [attachmentFile, setAttachmentFile] = useState(null);
