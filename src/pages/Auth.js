@@ -81,11 +81,18 @@ function Auth({ onLogin, onBack, initialStep }) {
     }
     // Guardar aceptación de términos en la tabla landlords
     if (termsAcceptedAtRef.current && data.user) {
-      await supabase.from('landlords').upsert({
-        user_id: data.user.id,
-        email: data.user.email,
-        terms_accepted_at: termsAcceptedAtRef.current,
-      }, { onConflict: 'user_id' });
+      const { data: updated } = await supabase
+        .from('landlords')
+        .update({ terms_accepted_at: termsAcceptedAtRef.current })
+        .eq('user_id', data.user.id)
+        .select('id');
+      if (!updated || updated.length === 0) {
+        await supabase.from('landlords').insert({
+          user_id: data.user.id,
+          email: data.user.email,
+          terms_accepted_at: termsAcceptedAtRef.current,
+        });
+      }
     }
     onLogin(data.user);
   };

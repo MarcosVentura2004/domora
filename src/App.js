@@ -79,7 +79,7 @@ function App() {
         .from('landlords')
         .select('terms_accepted_at')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!landlordData?.terms_accepted_at) {
         pendingUserRef.current = user;
@@ -186,11 +186,20 @@ function App() {
     setModalLoading(true);
     const user = pendingUserRef.current;
     if (user) {
-      await supabase.from('landlords').upsert({
-        user_id: user.id,
-        email: user.email,
-        terms_accepted_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
+      const ts = new Date().toISOString();
+      // Intentar UPDATE primero; si no hay fila, INSERT
+      const { data: updated } = await supabase
+        .from('landlords')
+        .update({ terms_accepted_at: ts })
+        .eq('user_id', user.id)
+        .select('id');
+      if (!updated || updated.length === 0) {
+        await supabase.from('landlords').insert({
+          user_id: user.id,
+          email: user.email,
+          terms_accepted_at: ts,
+        });
+      }
     }
     setModalLoading(false);
     setShowTermsModal(false);
