@@ -34,6 +34,7 @@ function App() {
   const [modalTermsAccepted, setModalTermsAccepted] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const pendingUserRef = useRef(null);
+  const pendingUserTypeRef = useRef(null); // 'propietario' | 'gestor'
 
   // Paginas que gestionan su propia autenticacion — el listener global no debe
   // redirigirlas bajo ninguna circunstancia.
@@ -64,7 +65,8 @@ function App() {
         .eq('gestor_email', user.email)
         .limit(1);
 
-      if (accessData && accessData.length > 0) {
+      const isGestor = accessData && accessData.length > 0;
+      if (isGestor) {
         setUserType('gestor');
         localStorage.setItem('userType', 'gestor');
         setPage('gestor-dashboard');
@@ -74,15 +76,27 @@ function App() {
         setPage('dashboard');
       }
 
-      // Verificar si el usuario ya aceptó los términos
-      const { data: landlordData } = await supabase
-        .from('landlords')
-        .select('terms_accepted_at')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      // Verificar si el usuario ya aceptó los términos (tabla distinta según tipo)
+      let termsAcceptedAt = null;
+      if (isGestor) {
+        const { data: gestorData } = await supabase
+          .from('gestores')
+          .select('terms_accepted_at')
+          .eq('email', user.email)
+          .maybeSingle();
+        termsAcceptedAt = gestorData?.terms_accepted_at;
+      } else {
+        const { data: landlordData } = await supabase
+          .from('landlords')
+          .select('terms_accepted_at')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        termsAcceptedAt = landlordData?.terms_accepted_at;
+      }
 
-      if (!landlordData?.terms_accepted_at) {
+      if (!termsAcceptedAt) {
         pendingUserRef.current = user;
+        pendingUserTypeRef.current = isGestor ? 'gestor' : 'propietario';
         setShowTermsModal(true);
       }
     };
@@ -185,26 +199,34 @@ function App() {
     if (!modalTermsAccepted) return;
     setModalLoading(true);
     const user = pendingUserRef.current;
+    const userType = pendingUserTypeRef.current;
     if (user) {
       const ts = new Date().toISOString();
-      // Intentar UPDATE primero; si no hay fila, INSERT
-      const { data: updated } = await supabase
-        .from('landlords')
-        .update({ terms_accepted_at: ts })
-        .eq('user_id', user.id)
-        .select('id');
-      if (!updated || updated.length === 0) {
-        await supabase.from('landlords').insert({
-          user_id: user.id,
-          email: user.email,
-          terms_accepted_at: ts,
-        });
+      if (userType === 'gestor') {
+        await supabase
+          .from('gestores')
+          .update({ terms_accepted_at: ts })
+          .eq('email', user.email);
+      } else {
+        const { data: updated } = await supabase
+          .from('landlords')
+          .update({ terms_accepted_at: ts })
+          .eq('user_id', user.id)
+          .select('id');
+        if (!updated || updated.length === 0) {
+          await supabase.from('landlords').insert({
+            user_id: user.id,
+            email: user.email,
+            terms_accepted_at: ts,
+          });
+        }
       }
     }
     setModalLoading(false);
     setShowTermsModal(false);
     setModalTermsAccepted(false);
     pendingUserRef.current = null;
+    pendingUserTypeRef.current = null;
   };
 
   const handleLogout = async () => {
