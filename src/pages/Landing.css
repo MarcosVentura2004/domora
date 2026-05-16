@@ -459,45 +459,31 @@
   position: relative;
 }
 
-/* ── Mobile carousel ── */
+/* ── Mobile carousel (peek / scroll-snap, no dots) ── */
 .l-phones--mobile {
   display: none;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  overflow: hidden;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;          /* Firefox */
+  padding-bottom: 48px;           /* room for drop-shadow within clip boundary */
   width: 100%;
-  padding-bottom: 8px;
 }
+.l-phones--mobile::-webkit-scrollbar { display: none; }
+
 .l-phones-track {
   display: flex;
-  width: 100%;
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
+  gap: 14px;
+  /* Left padding offsets the first slide so the peek gap is even on first load */
+  padding: 0 10% 0 7%;
+  width: max-content;
 }
 .l-phones-slide {
-  flex: 0 0 100%;
+  flex: 0 0 76vw;
+  max-width: 300px;
+  scroll-snap-align: start;
   display: flex;
   justify-content: center;
-}
-.l-phones-dots {
-  display: flex;
-  gap: 7px;
-  margin-top: 4px;
-}
-.l-phones-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--gray-300);
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.2s, transform 0.2s;
-}
-.l-phones-dot--active {
-  background: var(--blue);
-  transform: scale(1.25);
 }
 
 /* ── Phone mockup (images include the full iPhone frame) ── */
@@ -592,6 +578,52 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--black);
+}
+
+/* ─── Gastos Carousel ─────────────────────────────────────────────────────── */
+.gastos-carousel {
+  width: 100%;
+  max-width: 440px;
+  position: relative;
+  overflow: hidden;
+}
+.gastos-track {
+  display: flex;
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+.gastos-slide {
+  flex: 0 0 100%;
+  display: flex;
+  justify-content: center;
+}
+.gastos-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter:
+    drop-shadow(0 24px 48px rgba(15, 23, 42, 0.18))
+    drop-shadow(0 8px 16px rgba(15, 23, 42, 0.10));
+}
+.gastos-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+}
+.gastos-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gray-300);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+.gastos-dot--active {
+  background: var(--blue);
+  transform: scale(1.25);
 }
 
 /* ─── Features ────────────────────────────────────────────────────────────── */
@@ -1169,9 +1201,9 @@
   .l-phones--desktop { display: none; }
   .l-phones--mobile  { display: flex; }
 
-  /* Mobile phone size */
+  /* Mobile phone size — fills the peek-carousel slide */
   .phone-mockup {
-    width: 204px;
+    width: 100%;
   }
 
   /* Blobs: scale down to fit the mobile viewport without over-saturating */

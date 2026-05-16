@@ -142,9 +142,7 @@ const HERO_PHONES = [
 ];
 
 function HeroPhones() {
-  const [active, setActive] = useState(0);
   const [scrollY, setScrollY] = useState(0);
-  const startX = React.useRef(null);
 
   React.useEffect(() => {
     const onScroll = () => setScrollY(window.scrollY);
@@ -152,24 +150,12 @@ function HeroPhones() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
-  const onTouchEnd = (e) => {
-    if (startX.current === null) return;
-    const diff = startX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 40) {
-      setActive(prev => diff > 0
-        ? Math.min(prev + 1, HERO_PHONES.length - 1)
-        : Math.max(prev - 1, 0));
-    }
-    startX.current = null;
-  };
-
-  const sideParallax  = `translateY(${scrollY * 0.06}px)`;
+  const sideParallax   = `translateY(${scrollY * 0.06}px)`;
   const centerParallax = `translateY(${scrollY * 0.03}px)`;
 
   return (
     <>
-      {/* Desktop: 3 phones side by side */}
+      {/* Desktop: 3 phones side by side with parallax */}
       <div className="l-phones--desktop">
         <div className="l-phone-wrap l-phone-wrap--side" style={{ transform: `scale(0.93) translateY(28px) ${sideParallax}` }}>
           <PhoneMockup {...HERO_PHONES[0]} />
@@ -182,29 +168,13 @@ function HeroPhones() {
         </div>
       </div>
 
-      {/* Mobile: swipeable carousel with scroll-snap */}
-      <div
-        className="l-phones--mobile"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
-        <div
-          className="l-phones-track"
-          style={{ transform: `translateX(calc(-${active * 100}%))` }}
-        >
+      {/* Mobile: native scroll-snap peek carousel — no dots, next phone peeks on the right */}
+      <div className="l-phones--mobile">
+        <div className="l-phones-track">
           {HERO_PHONES.map((p, i) => (
             <div key={i} className="l-phones-slide">
               <PhoneMockup {...p} />
             </div>
-          ))}
-        </div>
-        <div className="l-phones-dots">
-          {HERO_PHONES.map((_, i) => (
-            <button
-              key={i}
-              className={`l-phones-dot${i === active ? ' l-phones-dot--active' : ''}`}
-              onClick={() => setActive(i)}
-            />
           ))}
         </div>
       </div>
@@ -212,50 +182,50 @@ function HeroPhones() {
   );
 }
 
-// ─── Spreadsheet Mockup ──────────────────────────────────────────────────────
+// ─── Gastos Carousel ─────────────────────────────────────────────────────────
 
-function SpreadsheetMockup() {
-  const rows = [
-    ['Ene 2026', '+1.000 €', '-247 €', '753 €'],
-    ['Feb 2026', '+1.000 €', '-180 €', '820 €'],
-    ['Mar 2026', '+1.000 €', '-320 €', '680 €'],
-    ['Abr 2026', '+1.000 €', '-145 €', '855 €'],
-    ['May 2026', '+1.000 €', '-210 €', '790 €'],
-    ['Jun 2026', '+1.000 €', '-195 €', '805 €'],
-  ];
+const GASTOS_SLIDES = [
+  { src: '/images/gastos-resumen.png',  alt: 'Resumen de gastos' },
+  { src: '/images/gastos-detalle.png',  alt: 'Detalle de gastos' },
+];
+
+function GastosCarousel() {
+  const [active, setActive] = useState(0);
+  const startX = React.useRef(null);
+
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (startX.current === null) return;
+    const diff = startX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      setActive(prev => diff > 0
+        ? Math.min(prev + 1, GASTOS_SLIDES.length - 1)
+        : Math.max(prev - 1, 0));
+    }
+    startX.current = null;
+  };
+
   return (
-    <div className="sheet-wrap">
-      <div className="sheet-bar">
-        <div className="sheet-dots">
-          <span style={{background:'#FF5F57'}}/>
-          <span style={{background:'#FEBC2E'}}/>
-          <span style={{background:'#28C840'}}/>
-        </div>
-        <span className="sheet-title">Carrer quatre vents — gastos 2026</span>
+    <div className="gastos-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div
+        className="gastos-track"
+        style={{ transform: `translateX(-${active * 100}%)` }}
+      >
+        {GASTOS_SLIDES.map((s, i) => (
+          <div key={i} className="gastos-slide">
+            <img src={s.src} alt={s.alt} className="gastos-img" />
+          </div>
+        ))}
       </div>
-      <table className="sheet-table">
-        <thead>
-          <tr>
-            <th>Mes</th>
-            <th>Ingresos</th>
-            <th>Gastos</th>
-            <th>Neto</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([mes, ing, gas, net], i) => (
-            <tr key={i}>
-              <td>{mes}</td>
-              <td style={{color:'#16A34A'}}>{ing}</td>
-              <td style={{color:'#DC2626'}}>{gas}</td>
-              <td style={{fontWeight:'700', color:'#111'}}>{net}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="sheet-total">
-        <span>Total neto</span>
-        <span style={{color:'#16A34A', fontWeight:'700'}}>4.703 €</span>
+      <div className="gastos-dots">
+        {GASTOS_SLIDES.map((_, i) => (
+          <button
+            key={i}
+            className={`gastos-dot${i === active ? ' gastos-dot--active' : ''}`}
+            onClick={() => setActive(i)}
+            aria-label={`Ver ${GASTOS_SLIDES[i].alt}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -424,7 +394,7 @@ function Landing({ onGetStarted, onLogin }) {
               </p>
             </div>
             <div className="l-split__visual sr sr2">
-              <SpreadsheetMockup />
+              <GastosCarousel />
             </div>
           </div>
         </div>
