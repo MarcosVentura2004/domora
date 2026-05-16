@@ -130,8 +130,8 @@ function useScrollReveal() {
 function PhoneMockup({ src, alt }) {
   return (
     <div className="phone-mockup">
+      <div className="phone-mockup__island" />
       <img src={src} alt={alt} className="phone-mockup__screen" />
-      <img src="/images/iphone-frame.png" alt="" className="phone-mockup__frame" aria-hidden="true" />
     </div>
   );
 }
@@ -144,7 +144,14 @@ const HERO_PHONES = [
 
 function HeroPhones() {
   const [active, setActive] = useState(0);
+  const [scrollY, setScrollY] = useState(0);
   const startX = React.useRef(null);
+
+  React.useEffect(() => {
+    const onScroll = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
@@ -158,22 +165,25 @@ function HeroPhones() {
     startX.current = null;
   };
 
+  const sideParallax  = `translateY(${scrollY * 0.06}px)`;
+  const centerParallax = `translateY(${scrollY * 0.03}px)`;
+
   return (
     <>
       {/* Desktop: 3 phones side by side */}
       <div className="l-phones--desktop">
-        <div className="l-phone-wrap l-phone-wrap--side">
+        <div className="l-phone-wrap l-phone-wrap--side" style={{ transform: `scale(0.93) translateY(28px) ${sideParallax}` }}>
           <PhoneMockup {...HERO_PHONES[0]} />
         </div>
-        <div className="l-phone-wrap l-phone-wrap--center">
+        <div className="l-phone-wrap l-phone-wrap--center" style={{ transform: centerParallax }}>
           <PhoneMockup {...HERO_PHONES[1]} />
         </div>
-        <div className="l-phone-wrap l-phone-wrap--side">
+        <div className="l-phone-wrap l-phone-wrap--side" style={{ transform: `scale(0.93) translateY(28px) ${sideParallax}` }}>
           <PhoneMockup {...HERO_PHONES[2]} />
         </div>
       </div>
 
-      {/* Mobile: swipeable carousel */}
+      {/* Mobile: swipeable carousel with scroll-snap */}
       <div
         className="l-phones--mobile"
         onTouchStart={onTouchStart}
