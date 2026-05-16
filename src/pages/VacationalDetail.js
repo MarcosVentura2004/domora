@@ -385,10 +385,11 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
     }
   };
 
-  const handleAddExpense = async (expenseData, extraStartDates) => {
-    const rows = (extraStartDates && extraStartDates.length > 0)
-      ? extraStartDates.map(sd => ({ property_id: String(property.id), landlord_email: landlordEmail, ...expenseData, start_date: sd }))
-      : [{ property_id: String(property.id), landlord_email: landlordEmail, ...expenseData }];
+  const handleAddExpense = async (expenseData, prevStartDates) => {
+    const base = { property_id: String(property.id), landlord_email: landlordEmail, ...expenseData };
+    const rows = (prevStartDates && prevStartDates.length > 0)
+      ? [base, ...prevStartDates.map(sd => ({ ...base, start_date: sd }))]
+      : [base];
     const { data, error } = await supabase.from('expenses').insert(rows).select();
     if (error) { alert(`Error guardando el gasto: ${error.message}`); return; }
     setExpenses(prev => [...(data || []), ...prev]);
@@ -1198,10 +1199,11 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
   const [durationPayments, setDurationPayments] = useState('');
   const [startDate, setStartDate] = useState(defaultDate || today);
   const [expensePct, setExpensePct] = useState(defaultExpensePct != null ? String(defaultExpensePct) : '');
-  const [multiMonthMode, setMultiMonthMode] = useState('single');
-  const defaultMonthKey = defaultDate ? defaultDate.substring(0, 7) : null;
-  const [selectedMonths, setSelectedMonths] = useState(() => defaultMonthKey ? new Set([defaultMonthKey]) : new Set());
-  const [multiPickerYear, setMultiPickerYear] = useState(() => defaultDate ? parseInt(defaultDate.substring(0, 4)) : new Date().getFullYear());
+  const viewedYear = defaultDate ? parseInt(defaultDate.substring(0, 4)) : new Date().getFullYear();
+  const viewedMonth = defaultDate ? parseInt(defaultDate.substring(5, 7)) - 1 : new Date().getMonth();
+  const maxPrevYear = viewedMonth > 0 ? viewedYear : viewedYear - 1;
+  const [selectedMonths, setSelectedMonths] = useState(() => new Set());
+  const [prevPickerYear, setPrevPickerYear] = useState(maxPrevYear);
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
@@ -1236,13 +1238,8 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
       active: true,
       expense_percentage: expensePct ? parseFloat(expensePct) : null,
     };
-    if (multiMonthMode === 'multi') {
-      if (selectedMonths.size === 0) { alert('Selecciona al menos un mes.'); return; }
-      const extraStartDates = Array.from(selectedMonths).sort().map(ym => `${ym}-01`);
-      onAdd(expenseData, extraStartDates);
-    } else {
-      onAdd(expenseData);
-    }
+    const prevDates = Array.from(selectedMonths).sort().map(ym => `${ym}-01`);
+    onAdd(expenseData, prevDates.length > 0 ? prevDates : undefined);
   };
 
   return (
@@ -1329,12 +1326,10 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
             {monthlyEquiv && <p className="monthly-equivalent">Equivalente mensual: {monthlyEquiv} €/mes</p>}
             {repeats && !hasAmount && <p style={{ fontSize: 12, color: '#888', marginTop: 6 }}>Introduces el importe cuando llega la factura.</p>}
           </div>
-          {multiMonthMode !== 'multi' && (
           <div className="form-group">
             <label>Fecha de inicio</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
           </div>
-          )}
           <div className="form-group">
             <label>% de titularidad (opcional)</label>
             <input type="number" placeholder={`${defaultExpensePct ?? 100}`} value={expensePct}
@@ -1352,72 +1347,60 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
               </button>
             </div>
           </div>
-          {isPastMonth && !repeats && (
+          {isPastMonth && (
             <div className="form-group">
-              <label>¿Aplicar a otros meses?</label>
-              <div className="frequency-options">
-                <button type="button"
-                  className={`frequency-option ${multiMonthMode === 'single' ? 'selected' : ''}`}
-                  onClick={() => setMultiMonthMode('single')}>
-                  Solo este mes
-                </button>
-                <button type="button"
-                  className={`frequency-option ${multiMonthMode === 'multi' ? 'selected' : ''}`}
-                  onClick={() => setMultiMonthMode('multi')}>
-                  Seleccionar meses
-                </button>
-              </div>
-              {multiMonthMode === 'multi' && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <button type="button"
-                      onClick={() => setMultiPickerYear(y => y - 1)}
-                      disabled={multiPickerYear <= 2020}
-                      style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#555', padding: '2px 10px', lineHeight: 1 }}>
-                      ‹
-                    </button>
-                    <span style={{ fontWeight: 600, fontSize: 15 }}>{multiPickerYear}</span>
-                    <button type="button"
-                      onClick={() => setMultiPickerYear(y => y + 1)}
-                      disabled={multiPickerYear >= new Date().getFullYear()}
-                      style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#555', padding: '2px 10px', lineHeight: 1 }}>
-                      ›
-                    </button>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                    {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((label, m) => {
-                      const key = `${multiPickerYear}-${String(m + 1).padStart(2, '0')}`;
-                      const disabled = isFutureMonth(multiPickerYear, m);
-                      const isSelected = selectedMonths.has(key);
-                      return (
-                        <button key={m} type="button" disabled={disabled}
-                          onClick={() => {
-                            setSelectedMonths(prev => {
-                              const next = new Set(prev);
-                              if (next.has(key)) next.delete(key); else next.add(key);
-                              return next;
-                            });
-                          }}
-                          style={{
-                            padding: '8px 4px', borderRadius: 8,
-                            border: isSelected ? '2px solid #111' : '1px solid #ddd',
-                            background: isSelected ? '#111' : disabled ? '#f5f5f5' : 'white',
-                            color: isSelected ? 'white' : disabled ? '#ccc' : '#333',
-                            cursor: disabled ? 'not-allowed' : 'pointer',
-                            fontSize: 13, fontWeight: isSelected ? 600 : 400,
-                          }}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedMonths.size > 0 && (
-                    <p style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
-                      {selectedMonths.size} {selectedMonths.size === 1 ? 'mes seleccionado' : 'meses seleccionados'}
-                    </p>
-                  )}
+              <label>¿Aplicar a meses anteriores?</label>
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <button type="button"
+                    onClick={() => setPrevPickerYear(y => y - 1)}
+                    disabled={prevPickerYear <= 2020}
+                    style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#555', padding: '2px 10px', lineHeight: 1 }}>
+                    ‹
+                  </button>
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>{prevPickerYear}</span>
+                  <button type="button"
+                    onClick={() => setPrevPickerYear(y => y + 1)}
+                    disabled={prevPickerYear >= maxPrevYear}
+                    style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#555', padding: '2px 10px', lineHeight: 1 }}>
+                    ›
+                  </button>
                 </div>
-              )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+                  {['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((label, m) => {
+                    const key = `${prevPickerYear}-${String(m + 1).padStart(2, '0')}`;
+                    const disabled = prevPickerYear > viewedYear
+                      || (prevPickerYear === viewedYear && m >= viewedMonth)
+                      || prevPickerYear < 2020;
+                    const isSelected = selectedMonths.has(key);
+                    return (
+                      <button key={m} type="button" disabled={disabled}
+                        onClick={() => {
+                          setSelectedMonths(prev => {
+                            const next = new Set(prev);
+                            if (next.has(key)) next.delete(key); else next.add(key);
+                            return next;
+                          });
+                        }}
+                        style={{
+                          padding: '8px 4px', borderRadius: 8,
+                          border: isSelected ? '2px solid #111' : '1px solid #ddd',
+                          background: isSelected ? '#111' : disabled ? '#f5f5f5' : 'white',
+                          color: isSelected ? 'white' : disabled ? '#ccc' : '#333',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                        }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedMonths.size > 0 && (
+                  <p style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+                    {selectedMonths.size} {selectedMonths.size === 1 ? 'mes seleccionado' : 'meses seleccionados'}
+                  </p>
+                )}
+              </div>
             </div>
           )}
           <button type="submit" className="submit-button">Añadir gasto</button>
