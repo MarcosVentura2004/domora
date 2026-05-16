@@ -1452,6 +1452,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const maxPrevYear = viewedMonth > 0 ? viewedYear : viewedYear - 1;
   const [selectedMonths, setSelectedMonths] = useState(() => new Set());
   const [prevPickerYear, setPrevPickerYear] = useState(maxPrevYear);
+  const [applyToPrev, setApplyToPrev] = useState(false);
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
@@ -1507,7 +1508,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
     if (isEditing) {
       onUpdate(initialExpense.id, expenseData);
     } else {
-      const prevDates = Array.from(selectedMonths).sort().map(ym => `${ym}-01`);
+      const prevDates = applyToPrev ? Array.from(selectedMonths).sort().map(ym => `${ym}-01`) : [];
       onAdd(expenseData, prevDates.length > 0 ? prevDates : undefined);
     }
   };
@@ -1539,14 +1540,16 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
               </div>
             </div>
           )}
-          <div className="form-group">
-            <label>¿Se repite?</label>
-            <div className="frequency-options">
-              <button type="button" className={`frequency-option ${!repeats ? 'selected' : ''}`} onClick={() => setRepeats(false)}>No</button>
-              <button type="button" className={`frequency-option ${repeats ? 'selected' : ''}`} onClick={() => setRepeats(true)}>Sí</button>
+          {!(isPastMonth && !isEditing) && (
+            <div className="form-group">
+              <label>¿Se repite?</label>
+              <div className="frequency-options">
+                <button type="button" className={`frequency-option ${!repeats ? 'selected' : ''}`} onClick={() => setRepeats(false)}>No</button>
+                <button type="button" className={`frequency-option ${repeats ? 'selected' : ''}`} onClick={() => setRepeats(true)}>Sí</button>
+              </div>
             </div>
-          </div>
-          {repeats && (
+          )}
+          {repeats && !(isPastMonth && !isEditing) && (
             <>
               <div className="form-group">
                 <label>Frecuencia</label>
@@ -1643,7 +1646,11 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
           {isPastMonth && !isEditing && (
             <div className="form-group">
               <label>¿Aplicar a meses anteriores?</label>
-              <div style={{ marginTop: 8 }}>
+              <div className="frequency-options" style={{ marginBottom: applyToPrev ? 10 : 0 }}>
+                <button type="button" className={`frequency-option ${!applyToPrev ? 'selected' : ''}`} onClick={() => { setApplyToPrev(false); setSelectedMonths(new Set()); }}>No</button>
+                <button type="button" className={`frequency-option ${applyToPrev ? 'selected' : ''}`} onClick={() => setApplyToPrev(true)}>Sí</button>
+              </div>
+              {applyToPrev && <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <button type="button"
                     onClick={() => setPrevPickerYear(y => y - 1)}
@@ -1693,7 +1700,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
                     {selectedMonths.size} {selectedMonths.size === 1 ? 'mes seleccionado' : 'meses seleccionados'}
                   </p>
                 )}
-              </div>
+              </div>}
             </div>
           )}
           <button type="submit" className="submit-button" disabled={uploading}>{isEditing ? 'Guardar cambios' : 'Añadir gasto'}</button>
