@@ -1,8 +1,36 @@
 import './Welcome.css';
 
-function Welcome({ onSelectUserType }) {
+function Welcome({ onSelectUserType, onBack }) {
   return (
     <div className="welcome-container">
+      {onBack && (
+        <button
+          onClick={onBack}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#888',
+            padding: '8px 10px',
+            borderRadius: '10px',
+            transition: 'color 0.15s, background 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#111'; e.currentTarget.style.background = '#f3f4f6'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.background = 'none'; }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4L6 9L11 14"/>
+          </svg>
+          Volver
+        </button>
+      )}
       <div className="welcome-content">
 
         <div className="welcome-logo">

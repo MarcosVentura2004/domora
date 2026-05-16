@@ -269,7 +269,7 @@ function App() {
       )}
 
       {currentPage === 'welcome' && (
-        <Welcome onSelectUserType={handleSelectUserType} />
+        <Welcome onSelectUserType={handleSelectUserType} onBack={() => setPage('landing')} />
       )}
 
       {currentPage === 'auth' && (
