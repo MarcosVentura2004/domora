@@ -206,6 +206,12 @@
   letter-spacing: -0.02em;
   font-family: inherit;
 }
+.l-nav__logo-img {
+  height: 26px;
+  width: 26px;
+  object-fit: contain;
+  display: block;
+}
 .l-nav__links {
   display: flex;
   gap: 2px;
@@ -1166,6 +1172,37 @@
   /* Mobile phone size */
   .phone-mockup {
     width: 204px;
+  }
+
+  /* Blobs: scale down to fit the mobile viewport without over-saturating */
+  .l-hero__blob--1 {
+    width: 300px;
+    height: 300px;
+    top: -60px;
+    left: -70px;
+    opacity: 0.42;
+  }
+  .l-hero__blob--2 {
+    width: 260px;
+    height: 260px;
+    bottom: -40px;
+    right: -70px;
+    opacity: 0.35;
+  }
+  .l-hero__blob--3 {
+    width: 220px;
+    height: 220px;
+    opacity: 0.28;
+  }
+
+  /* Shadow: reduce spread so it stays within the carousel's overflow:hidden clip */
+  .phone-mockup__screen {
+    filter: drop-shadow(0 14px 22px rgba(15, 23, 42, 0.18));
+  }
+
+  /* Extra padding-bottom gives the shadow room inside the overflow:hidden boundary */
+  .l-phones--mobile {
+    padding-bottom: 36px;
   }
 
   .l-feat-grid,

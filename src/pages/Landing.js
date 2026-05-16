@@ -285,7 +285,7 @@ function Landing({ onGetStarted, onLogin }) {
       <nav className={`l-nav${scrolled ? ' l-nav--scrolled' : ''}`}>
         <div className="l-nav__inner">
           <button className="l-nav__logo" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <LogoIcon />
+            <img src="/images/house-logo.png" alt="" className="l-nav__logo-img" aria-hidden="true" />
             <span>domio</span>
           </button>
           <div className="l-nav__links">
