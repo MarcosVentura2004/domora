@@ -265,9 +265,74 @@
 .l-hero {
   padding-top: 112px;
   padding-bottom: 0;
-  background: linear-gradient(160deg, #EEF3FF 0%, #F5F8FF 40%, #fafbff 80%, #fff 100%);
+  background: linear-gradient(135deg, #EEF2FF 0%, #DBEAFE 45%, #E0E7FF 75%, #EEF2FF 100%);
   text-align: center;
   overflow: hidden;
+  position: relative;
+}
+
+/* Ensure content sits above the animated blobs */
+.l-hero > .l-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Hero background blobs ── */
+.l-hero__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.l-hero__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+}
+.l-hero__blob--1 {
+  width: 720px;
+  height: 720px;
+  background: radial-gradient(circle, #C7D2FE 0%, transparent 70%);
+  top: -220px;
+  left: -160px;
+  opacity: 0.58;
+  animation: heroBlob1 28s ease-in-out infinite alternate;
+}
+.l-hero__blob--2 {
+  width: 640px;
+  height: 640px;
+  background: radial-gradient(circle, #BFDBFE 0%, transparent 70%);
+  bottom: -120px;
+  right: -160px;
+  opacity: 0.50;
+  animation: heroBlob2 22s ease-in-out infinite alternate;
+}
+.l-hero__blob--3 {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, #E0E7FF 0%, transparent 70%);
+  top: 25%;
+  left: 38%;
+  opacity: 0.42;
+  animation: heroBlob3 35s ease-in-out infinite alternate;
+}
+
+@keyframes heroBlob1 {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(210px, 190px); }
+}
+@keyframes heroBlob2 {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(-190px, -130px); }
+}
+@keyframes heroBlob3 {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-110px, 90px) scale(1.18); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .l-hero__blob { animation: none; }
 }
 .l-hero__badge {
   display: inline-flex;
@@ -429,47 +494,30 @@
   transform: scale(1.25);
 }
 
-/* ── Phone mockup (CSS frame) ── */
+/* ── Phone mockup (images include the full iPhone frame) ── */
 .phone-mockup {
   position: relative;
-  width: 286px;           /* 600px tall × (9/19) aspect */
-  height: 600px;
-  background: #111111;
-  border-radius: 52px;
-  padding: 12px;
-  box-shadow:
-    0 30px 80px -20px rgba(0, 0, 0, 0.55),
-    0 60px 120px -30px rgba(0, 0, 0, 0.25),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+  width: 286px;
   flex-shrink: 0;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: bottom center;
 }
 
-/* Dynamic Island */
-.phone-mockup__island {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 120px;
-  height: 34px;
-  background: #111111;
-  border-radius: 20px;
-  z-index: 10;
-}
-
-/* Screenshot */
+/* Image fills the container naturally — no artificial frame */
 .phone-mockup__screen {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 36px;   /* push content below the Island */
-  border-radius: 40px;
+  height: auto;
   display: block;
+  /* Realistic shadow that follows the silhouette of the PNG */
+  filter:
+    drop-shadow(0 30px 60px rgba(15, 23, 42, 0.25))
+    drop-shadow(0 10px 20px rgba(15, 23, 42, 0.15));
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* If white halo is still visible after drop-shadow, uncomment the line below: */
+  /* mix-blend-mode: multiply; */
 }
 
-/* Hover lift */
-.phone-mockup:hover {
+/* Hover lift on the image */
+.phone-mockup:hover .phone-mockup__screen {
   transform: translateY(-6px);
 }
 
@@ -1100,11 +1148,7 @@
 @media (max-width: 1024px) {
   .phone-mockup {
     width: 220px;
-    height: 464px;
-    border-radius: 44px;
   }
-  .phone-mockup__island { width: 100px; height: 28px; top: 14px; }
-  .phone-mockup__screen { border-radius: 33px; object-position: center 28px; }
   .l-pricing-grid { grid-template-columns: repeat(2, 1fr); }
   .l-feat-grid     { grid-template-columns: repeat(2, 1fr); }
 }
@@ -1122,11 +1166,7 @@
   /* Mobile phone size */
   .phone-mockup {
     width: 204px;
-    height: 430px;
-    border-radius: 40px;
   }
-  .phone-mockup__island { width: 90px; height: 26px; top: 12px; }
-  .phone-mockup__screen { border-radius: 30px; object-position: center 26px; }
 
   .l-feat-grid,
   .l-steps-grid { grid-template-columns: 1fr; }

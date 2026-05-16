@@ -130,7 +130,6 @@ function useScrollReveal() {
 function PhoneMockup({ src, alt }) {
   return (
     <div className="phone-mockup">
-      <div className="phone-mockup__island" />
       <img src={src} alt={alt} className="phone-mockup__screen" />
     </div>
   );
@@ -304,6 +303,12 @@ function Landing({ onGetStarted, onLogin }) {
 
       {/* ── Hero ── */}
       <section className="l-hero">
+        {/* Animated gradient blobs */}
+        <div className="l-hero__bg" aria-hidden="true">
+          <div className="l-hero__blob l-hero__blob--1" />
+          <div className="l-hero__blob l-hero__blob--2" />
+          <div className="l-hero__blob l-hero__blob--3" />
+        </div>
         <div className="l-wrap">
           <div className="l-hero__badge sr">
             <span className="l-hero__dot" />
