@@ -127,102 +127,81 @@ function useScrollReveal() {
 
 // ─── Phone Mockups ───────────────────────────────────────────────────────────
 
-function PhoneMockup({ variant }) {
+function PhoneMockup({ src, alt }) {
   return (
     <div className="phone-frame">
       <div className="phone-island" />
-      <div className="phone-screen">
-        {variant === 'list' && <PhoneList />}
-        {variant === 'payment' && <PhonePayment />}
-        {variant === 'summary' && <PhoneSummary />}
+      <div className="phone-screen phone-screen--img">
+        <img src={src} alt={alt} className="phone-screenshot" />
       </div>
     </div>
   );
 }
 
-function PhoneList() {
-  const items = [
-    { name: 'Carrer quatre vents 9b', sub: '1 reserva este mes', rent: '1.000 €/mes', bg: '#EFF6FF', color: '#2563EB' },
-    { name: 'Calle San Lucas 5', sub: 'Por subarriendos', rent: null, bg: '#F0FDF4', color: '#16A34A' },
-    { name: 'Carrer rector vives 14', sub: 'Por subarriendos', rent: '900 €/mes', bg: '#FFF7ED', color: '#EA580C' },
-    { name: 'Calle mayor 12', sub: 'Alquilado', rent: '1.200 €/mes', bg: '#F5F3FF', color: '#7C3AED' },
-  ];
+const HERO_PHONES = [
+  { src: '/images/hero-propiedades.png', alt: 'Propiedades' },
+  { src: '/images/hero-velazquez.png',   alt: 'Calle Velzquez' },
+  { src: '/images/hero-resumen.png',     alt: 'Resumen' },
+];
+
+function HeroPhones() {
+  const [active, setActive] = useState(0);
+  const startX = React.useRef(null);
+
+  const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (startX.current === null) return;
+    const diff = startX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      setActive(prev => diff > 0
+        ? Math.min(prev + 1, HERO_PHONES.length - 1)
+        : Math.max(prev - 1, 0));
+    }
+    startX.current = null;
+  };
+
   return (
-    <div className="ph-content">
-      <div className="ph-row-header">
-        <span className="ph-title">En alquiler</span>
-        <span className="ph-badge-blue">+ Añadir</span>
-      </div>
-      {items.map((item, i) => (
-        <div key={i} className="ph-prop-row">
-          <div className="ph-prop-icon" style={{ background: item.bg, color: item.color }}>
-            <HomeIcon />
-          </div>
-          <div className="ph-prop-text">
-            <div className="ph-prop-name">{item.name}</div>
-            <div className="ph-prop-sub">{item.sub}</div>
-          </div>
-          {item.rent && <div className="ph-prop-rent">{item.rent}</div>}
+    <>
+      {/* Desktop: 3 phones side by side */}
+      <div className="l-phones l-phones--desktop">
+        <div className="l-phone-wrap l-phone-wrap--side">
+          <PhoneMockup {...HERO_PHONES[0]} />
         </div>
-      ))}
-    </div>
-  );
-}
+        <div className="l-phone-wrap l-phone-wrap--center">
+          <PhoneMockup {...HERO_PHONES[1]} />
+        </div>
+        <div className="l-phone-wrap l-phone-wrap--side">
+          <PhoneMockup {...HERO_PHONES[2]} />
+        </div>
+      </div>
 
-function PhonePayment() {
-  return (
-    <div className="ph-content">
-      <div className="ph-row-header">
-        <span className="ph-title">Calle Mikayas</span>
+      {/* Mobile: swipeable carousel */}
+      <div
+        className="l-phones--mobile"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <div
+          className="l-phones-track"
+          style={{ transform: `translateX(calc(-${active * 100}%))` }}
+        >
+          {HERO_PHONES.map((p, i) => (
+            <div key={i} className="l-phones-slide">
+              <PhoneMockup {...p} />
+            </div>
+          ))}
+        </div>
+        <div className="l-phones-dots">
+          {HERO_PHONES.map((_, i) => (
+            <button
+              key={i}
+              className={`l-phones-dot${i === active ? ' l-phones-dot--active' : ''}`}
+              onClick={() => setActive(i)}
+            />
+          ))}
+        </div>
       </div>
-      <div className="ph-gauge-wrap">
-        <svg viewBox="0 0 130 80" width="120">
-          <path d="M12 72 A56 56 0 0 1 118 72" fill="none" stroke="#E5E7EB" strokeWidth="10" strokeLinecap="round"/>
-          <path d="M12 72 A56 56 0 0 1 118 72" fill="none" stroke="#22C55E" strokeWidth="10" strokeLinecap="round"
-            strokeDasharray="175" strokeDashoffset="44"/>
-        </svg>
-        <div className="ph-gauge-amount">+803.33 €</div>
-        <div className="ph-gauge-label">Mes de 2026</div>
-      </div>
-      <div style={{display:'flex',justifyContent:'center',marginBottom:'10px'}}>
-        <span className="ph-badge-green">En alquiler</span>
-      </div>
-      <div className="ph-detail-row">
-        <span>Pago del alquiler</span>
-        <span style={{color:'#16A34A',fontWeight:'600'}}>1.000 €</span>
-      </div>
-      <div className="ph-detail-row" style={{borderBottom:'none'}}>
-        <span>Estado</span>
-        <span className="ph-badge-green-sm">Confirmado</span>
-      </div>
-    </div>
-  );
-}
-
-function PhoneSummary() {
-  return (
-    <div className="ph-content">
-      <div className="ph-row-header">
-        <span className="ph-title">Resumen</span>
-      </div>
-      <div className="ph-big-amount">+2.371 €</div>
-      <div className="ph-amount-label">Mes de 2026</div>
-      <div className="ph-detail-row">
-        <span>Recibido</span>
-        <span style={{color:'#16A34A',fontWeight:'600'}}>+2.900 €</span>
-      </div>
-      <div className="ph-detail-row">
-        <span>Gastos</span>
-        <span style={{color:'#DC2626',fontWeight:'600'}}>-529 €</span>
-      </div>
-      <div className="ph-alerts-title">
-        Alertas importantes
-        <span className="ph-alert-count">3</span>
-      </div>
-      <div className="ph-alert orange">1 pago pendiente <span>→</span></div>
-      <div className="ph-alert yellow">2 incidencias abiertas <span>→</span></div>
-      <div className="ph-alert blue">Atención fiscalidad <span>→</span></div>
-    </div>
+    </>
   );
 }
 
@@ -344,17 +323,7 @@ function Landing({ onGetStarted, onLogin }) {
             <span className="l-trust-line" />
           </div>
           <div className="l-hero__phones sr sr5">
-            <div className="l-phones">
-              <div className="l-phone-wrap l-phone-wrap--side">
-                <PhoneMockup variant="list" />
-              </div>
-              <div className="l-phone-wrap l-phone-wrap--center">
-                <PhoneMockup variant="payment" />
-              </div>
-              <div className="l-phone-wrap l-phone-wrap--side">
-                <PhoneMockup variant="summary" />
-              </div>
-            </div>
+            <HeroPhones />
           </div>
         </div>
       </section>
