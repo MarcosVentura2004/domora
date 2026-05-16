@@ -151,13 +151,16 @@ function HeroPhones() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Start at the center phone (index 1, hero-velazquez) so both sides peek
+  // Snap to the center phone (index 1) on mount so both neighbors peek on either side.
+  // Math: with track padding = (100vw - slideWidth) / 2, snap scrollLeft = slideWidth + gap
   React.useEffect(() => {
     const el = mobileRef.current;
     if (!el) return;
-    const slide = el.querySelector('.l-phones-slide');
-    if (!slide) return;
-    el.scrollLeft = slide.offsetWidth + 14; // width of slide 0 + gap
+    requestAnimationFrame(() => {
+      const slide = el.querySelector('.l-phones-slide');
+      if (!slide) return;
+      el.scrollLeft = slide.offsetWidth + 12; // slide-0-width + gap → centers slide 1
+    });
   }, []);
 
   const sideParallax   = `translateY(${scrollY * 0.06}px)`;
@@ -200,8 +203,12 @@ const GASTOS_SLIDES = [
 ];
 
 function GastosCarousel() {
-  const [active, setActive] = useState(0);
+  const [active,   setActive]   = useState(0);
+  const [lightbox, setLightbox] = useState(null); // null | slide index
   const startX = React.useRef(null);
+
+  const openLightbox  = (i) => setLightbox(i);
+  const closeLightbox = ()  => setLightbox(null);
 
   const onTouchStart = (e) => { startX.current = e.touches[0].clientX; };
   const onTouchEnd = (e) => {
@@ -217,10 +224,26 @@ function GastosCarousel() {
 
   return (
     <>
-      {/* Desktop: both images stacked, full width, no carousel */}
+      {/* Lightbox — tap outside the image to close */}
+      {lightbox !== null && (
+        <div className="gastos-lightbox" onClick={closeLightbox}>
+          <img
+            src={GASTOS_SLIDES[lightbox].src}
+            alt={GASTOS_SLIDES[lightbox].alt}
+            className="gastos-lightbox__img"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* Desktop: both images stacked, full width */}
       <div className="gastos-stack">
         {GASTOS_SLIDES.map((s, i) => (
-          <img key={i} src={s.src} alt={s.alt} className="gastos-img" />
+          <img
+            key={i} src={s.src} alt={s.alt}
+            className="gastos-img gastos-img--zoomable"
+            onClick={() => openLightbox(i)}
+          />
         ))}
       </div>
 
@@ -232,7 +255,11 @@ function GastosCarousel() {
         >
           {GASTOS_SLIDES.map((s, i) => (
             <div key={i} className="gastos-slide">
-              <img src={s.src} alt={s.alt} className="gastos-img" />
+              <img
+                src={s.src} alt={s.alt}
+                className="gastos-img gastos-img--zoomable"
+                onClick={() => openLightbox(i)}
+              />
             </div>
           ))}
         </div>

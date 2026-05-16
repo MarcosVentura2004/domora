@@ -459,28 +459,31 @@
   position: relative;
 }
 
-/* ── Mobile carousel (centered peek — center phone fills viewport, neighbors peek) ── */
+/* ── Mobile carousel (centered peek — padding lives on the TRACK, not the container) ──
+   Math: slide = 75vw, track padding = 12.5vw each side
+   → (container/2) = (trackPadding + slide/2) → first slide center-snaps at scrollLeft=0
+   → peek per side = 12.5vw − gap ≈ 35px on a 375px screen
+   → snap scrollLeft for slide N = N × (slideWidth + gap)
+*/
 .l-phones--mobile {
   display: none;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  /* Equal padding creates symmetric peek space for center snap */
-  padding: 0 11% 52px;
-  width: 100%;
-  box-sizing: border-box;
+  padding-bottom: 52px; /* room for shadow */
+  /* NO horizontal padding — it is on .l-phones-track instead */
 }
 .l-phones--mobile::-webkit-scrollbar { display: none; }
 
 .l-phones-track {
   display: flex;
-  gap: 14px;
+  gap: 12px;
+  /* Symmetric padding lets first & last slides reach center-snap */
+  padding: 0 12.5vw;
 }
 .l-phones-slide {
-  /* Slide fills exactly the space between the two padding edges */
-  flex: 0 0 78vw;
-  max-width: 310px;
+  flex: 0 0 75vw;
   scroll-snap-align: center;
   display: flex;
   justify-content: center;
@@ -632,6 +635,44 @@
 .gastos-dot--active {
   background: var(--blue);
   transform: scale(1.25);
+}
+
+/* Zoom cursor on zoomable images */
+.gastos-img--zoomable {
+  cursor: zoom-in;
+}
+
+/* ── Gastos Lightbox ── */
+.gastos-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(10, 14, 28, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+  animation: lbFadeIn 0.22s ease;
+}
+@keyframes lbFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.gastos-lightbox__img {
+  max-width: 100%;
+  max-height: 90dvh;
+  width: auto;
+  height: auto;
+  display: block;
+  border-radius: 14px;
+  box-shadow: 0 32px 96px rgba(0, 0, 0, 0.55);
+  cursor: default;
+  animation: lbImgIn 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes lbImgIn {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
 
 /* ─── Features ────────────────────────────────────────────────────────────── */
