@@ -409,6 +409,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [editingExpense, setEditingExpense] = useState(null);
   const [openMenuExpenseId, setOpenMenuExpenseId] = useState(null);
   const [showExpenseSummary, setShowExpenseSummary] = useState(false);
+  const [attachmentLightbox, setAttachmentLightbox] = useState(null);
   const [tenants, setTenants] = useState(property.tenants || []);
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [editingTenant, setEditingTenant] = useState(null);
@@ -1538,11 +1539,16 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                           </span>
                         )}
                         {expense.attachment_url && (
-                          <a href={expense.attachment_url} target="_blank" rel="noreferrer" title="Ver adjunto" onClick={e => e.stopPropagation()} style={{ color: '#90CAF9', lineHeight: 1, display: 'flex', alignItems: 'center' }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                            </svg>
-                          </a>
+                          /\.(jpg|jpeg|png|gif|webp|heic|heif|avif)(\?|$)/i.test(expense.attachment_url)
+                            ? (
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setAttachmentLightbox(expense.attachment_url); }} title="Ver imagen" style={{ background: 'none', border: 'none', padding: 0, color: '#90CAF9', lineHeight: 1, display: 'flex', alignItems: 'center', cursor: 'zoom-in' }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                              </button>
+                            ) : (
+                              <a href={expense.attachment_url} target="_blank" rel="noreferrer" title="Ver adjunto" onClick={e => e.stopPropagation()} style={{ color: '#90CAF9', lineHeight: 1, display: 'flex', alignItems: 'center' }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                              </a>
+                            )
                         )}
                         {typeLabel && <span className={`frequency-badge ${expense.type}`} style={{ fontSize: 10 }}>{typeLabel}</span>}
                         {freqLabel && expense.frequency !== 'unico' && (
@@ -1837,6 +1843,25 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           </div>
         );
       })()}
+
+      {/* Image lightbox for expense attachments */}
+      {attachmentLightbox && (
+        <div
+          onClick={() => setAttachmentLightbox(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <button
+            onClick={() => setAttachmentLightbox(null)}
+            style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#fff', fontSize: 36, cursor: 'pointer', lineHeight: 1, padding: '4px 10px' }}
+          >×</button>
+          <img
+            src={attachmentLightbox}
+            alt="Adjunto"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '95vw', maxHeight: '90dvh', objectFit: 'contain', borderRadius: 8 }}
+          />
+        </div>
+      )}
     </div>
   );
 }

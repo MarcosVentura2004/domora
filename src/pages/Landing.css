@@ -480,10 +480,11 @@
   display: flex;
   gap: 12px;
   /* Symmetric padding lets first & last slides reach center-snap */
-  padding: 0 12.5vw;
+  /* Math: padding = (100vw - slideWidth) / 2 = (100 - 62) / 2 = 19vw */
+  padding: 0 19vw;
 }
 .l-phones-slide {
-  flex: 0 0 75vw;
+  flex: 0 0 62vw;
   scroll-snap-align: center;
   display: flex;
   justify-content: center;
