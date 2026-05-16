@@ -129,11 +129,9 @@ function useScrollReveal() {
 
 function PhoneMockup({ src, alt }) {
   return (
-    <div className="phone-frame">
-      <div className="phone-island" />
-      <div className="phone-screen phone-screen--img">
-        <img src={src} alt={alt} className="phone-screenshot" />
-      </div>
+    <div className="phone-mockup">
+      <img src={src} alt={alt} className="phone-mockup__screen" />
+      <img src="/images/iphone-frame.png" alt="" className="phone-mockup__frame" aria-hidden="true" />
     </div>
   );
 }
@@ -163,7 +161,7 @@ function HeroPhones() {
   return (
     <>
       {/* Desktop: 3 phones side by side */}
-      <div className="l-phones l-phones--desktop">
+      <div className="l-phones--desktop">
         <div className="l-phone-wrap l-phone-wrap--side">
           <PhoneMockup {...HERO_PHONES[0]} />
         </div>
