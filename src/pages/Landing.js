@@ -143,11 +143,21 @@ const HERO_PHONES = [
 
 function HeroPhones() {
   const [scrollY, setScrollY] = useState(0);
+  const mobileRef = React.useRef(null);
 
   React.useEffect(() => {
     const onScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Start at the center phone (index 1, hero-velazquez) so both sides peek
+  React.useEffect(() => {
+    const el = mobileRef.current;
+    if (!el) return;
+    const slide = el.querySelector('.l-phones-slide');
+    if (!slide) return;
+    el.scrollLeft = slide.offsetWidth + 14; // width of slide 0 + gap
   }, []);
 
   const sideParallax   = `translateY(${scrollY * 0.06}px)`;
@@ -168,8 +178,8 @@ function HeroPhones() {
         </div>
       </div>
 
-      {/* Mobile: native scroll-snap peek carousel — no dots, next phone peeks on the right */}
-      <div className="l-phones--mobile">
+      {/* Mobile: scroll-snap centered peek — center phone visible, others peek both sides */}
+      <div className="l-phones--mobile" ref={mobileRef}>
         <div className="l-phones-track">
           {HERO_PHONES.map((p, i) => (
             <div key={i} className="l-phones-slide">
@@ -206,28 +216,38 @@ function GastosCarousel() {
   };
 
   return (
-    <div className="gastos-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div
-        className="gastos-track"
-        style={{ transform: `translateX(-${active * 100}%)` }}
-      >
+    <>
+      {/* Desktop: both images stacked, full width, no carousel */}
+      <div className="gastos-stack">
         {GASTOS_SLIDES.map((s, i) => (
-          <div key={i} className="gastos-slide">
-            <img src={s.src} alt={s.alt} className="gastos-img" />
-          </div>
+          <img key={i} src={s.src} alt={s.alt} className="gastos-img" />
         ))}
       </div>
-      <div className="gastos-dots">
-        {GASTOS_SLIDES.map((_, i) => (
-          <button
-            key={i}
-            className={`gastos-dot${i === active ? ' gastos-dot--active' : ''}`}
-            onClick={() => setActive(i)}
-            aria-label={`Ver ${GASTOS_SLIDES[i].alt}`}
-          />
-        ))}
+
+      {/* Mobile: swipeable carousel with dots */}
+      <div className="gastos-carousel" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div
+          className="gastos-track"
+          style={{ transform: `translateX(-${active * 100}%)` }}
+        >
+          {GASTOS_SLIDES.map((s, i) => (
+            <div key={i} className="gastos-slide">
+              <img src={s.src} alt={s.alt} className="gastos-img" />
+            </div>
+          ))}
+        </div>
+        <div className="gastos-dots">
+          {GASTOS_SLIDES.map((_, i) => (
+            <button
+              key={i}
+              className={`gastos-dot${i === active ? ' gastos-dot--active' : ''}`}
+              onClick={() => setActive(i)}
+              aria-label={`Ver ${GASTOS_SLIDES[i].alt}`}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -368,7 +388,7 @@ function Landing({ onGetStarted, onLogin }) {
       {/* ── Gastos ── */}
       <section id="gastos" className="l-section l-section--white">
         <div className="l-wrap">
-          <div className="l-split">
+          <div className="l-split l-split--text-first">
             <div className="l-split__text">
               <div className="l-label sr">GASTOS</div>
               <h2 className="l-title sr sr1">

@@ -459,29 +459,29 @@
   position: relative;
 }
 
-/* ── Mobile carousel (peek / scroll-snap, no dots) ── */
+/* ── Mobile carousel (centered peek — center phone fills viewport, neighbors peek) ── */
 .l-phones--mobile {
   display: none;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;          /* Firefox */
-  padding-bottom: 48px;           /* room for drop-shadow within clip boundary */
+  scrollbar-width: none;
+  /* Equal padding creates symmetric peek space for center snap */
+  padding: 0 11% 52px;
   width: 100%;
+  box-sizing: border-box;
 }
 .l-phones--mobile::-webkit-scrollbar { display: none; }
 
 .l-phones-track {
   display: flex;
   gap: 14px;
-  /* Left padding offsets the first slide so the peek gap is even on first load */
-  padding: 0 10% 0 7%;
-  width: max-content;
 }
 .l-phones-slide {
-  flex: 0 0 76vw;
-  max-width: 300px;
-  scroll-snap-align: start;
+  /* Slide fills exactly the space between the two padding edges */
+  flex: 0 0 78vw;
+  max-width: 310px;
+  scroll-snap-align: center;
   display: flex;
   justify-content: center;
 }
@@ -499,13 +499,11 @@
   width: 100%;
   height: auto;
   display: block;
-  /* Realistic shadow that follows the silhouette of the PNG */
+  /* Drop-shadow follows the PNG silhouette (desktop only — removed on mobile for sharpness) */
   filter:
     drop-shadow(0 30px 60px rgba(15, 23, 42, 0.25))
     drop-shadow(0 10px 20px rgba(15, 23, 42, 0.15));
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  /* If white halo is still visible after drop-shadow, uncomment the line below: */
-  /* mix-blend-mode: multiply; */
 }
 
 /* Hover lift on the image */
@@ -580,13 +578,33 @@
   color: var(--black);
 }
 
-/* ─── Gastos Carousel ─────────────────────────────────────────────────────── */
-.gastos-carousel {
+/* ─── Gastos Visual ───────────────────────────────────────────────────────── */
+
+/* Desktop: both images stacked at full column width */
+.gastos-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   width: 100%;
-  max-width: 440px;
+}
+
+/* Mobile carousel: hidden on desktop */
+.gastos-carousel {
+  display: none;
+  width: 100%;
   position: relative;
   overflow: hidden;
 }
+
+/* Image: no filter — renders at native sharpness */
+.gastos-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 10px;
+}
+
+/* Carousel internals (mobile only) */
 .gastos-track {
   display: flex;
   transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
@@ -594,22 +612,12 @@
 }
 .gastos-slide {
   flex: 0 0 100%;
-  display: flex;
-  justify-content: center;
-}
-.gastos-img {
-  width: 100%;
-  height: auto;
-  display: block;
-  filter:
-    drop-shadow(0 24px 48px rgba(15, 23, 42, 0.18))
-    drop-shadow(0 8px 16px rgba(15, 23, 42, 0.10));
 }
 .gastos-dots {
   display: flex;
   justify-content: center;
   gap: 7px;
-  margin-top: 18px;
+  margin-top: 16px;
 }
 .gastos-dot {
   width: 7px;
@@ -1177,9 +1185,17 @@
     grid-template-columns: 1fr;
     gap: 40px;
   }
+  /* By default, visual comes before text on mobile */
   .l-split__visual {
     order: -1;
   }
+  /* Gastos section: text first, images below */
+  .l-split--text-first .l-split__visual {
+    order: 1;
+  }
+  /* Gastos: hide desktop stack, show mobile carousel */
+  .gastos-stack    { display: none; }
+  .gastos-carousel { display: block; }
 }
 
 /* Tablet: shrink phones a bit */
@@ -1204,6 +1220,11 @@
   /* Mobile phone size — fills the peek-carousel slide */
   .phone-mockup {
     width: 100%;
+  }
+
+  /* Phone images: remove filter on mobile for maximum sharpness */
+  .phone-mockup__screen {
+    filter: none;
   }
 
   /* Blobs: scale down to fit the mobile viewport without over-saturating */
