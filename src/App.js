@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import Landing from './pages/Landing';
 import Welcome from './pages/Welcome';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -22,7 +23,7 @@ function App() {
     ? 'gestor-invite'
     : window.location.pathname === '/gestor-invite-landlord'
     ? 'gestor-invite-landlord'
-    : 'welcome';
+    : 'landing';
   const [currentPage, rawSetPage] = useState(initialPage);
   const currentPageRef = useRef(initialPage);
   const setPage = (page) => { currentPageRef.current = page; rawSetPage(page); };
@@ -260,6 +261,13 @@ function App() {
 
   return (
     <div className="App">
+      {currentPage === 'landing' && (
+        <Landing
+          onGetStarted={() => setPage('welcome')}
+          onLogin={() => { setAuthInitialStep('login'); setPage('auth'); }}
+        />
+      )}
+
       {currentPage === 'welcome' && (
         <Welcome onSelectUserType={handleSelectUserType} />
       )}
