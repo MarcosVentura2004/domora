@@ -1352,7 +1352,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
               </button>
             </div>
           </div>
-          {isPastMonth && (
+          {isPastMonth && !repeats && (
             <div className="form-group">
               <label>¿Aplicar a otros meses?</label>
               <div className="frequency-options">

@@ -2175,7 +2175,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
             )}
             {uploading && <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Subiendo archivo…</p>}
           </div>
-          {isPastMonth && !isEditing && (
+          {isPastMonth && !isEditing && !repeats && (
             <div className="form-group">
               <label>¿Aplicar a otros meses?</label>
               <div className="frequency-options">
