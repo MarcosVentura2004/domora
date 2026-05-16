@@ -243,7 +243,7 @@ export default function ProfileMenu({
             justifyContent: 'center',
             padding: '24px',
           }}
-          onClick={() => !creatingLandlord && setShowLandlordModal(false)}
+          onClick={() => setShowLandlordModal(false)}
         >
           <div
             onClick={e => e.stopPropagation()}
