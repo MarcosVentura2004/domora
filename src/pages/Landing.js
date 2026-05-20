@@ -415,34 +415,32 @@ function Landing({ onGetStarted, onLogin }) {
       {/* ── Gastos ── */}
       <section id="gastos" className="l-section l-section--white">
         <div className="l-wrap">
-          <div className="l-split l-split--text-first">
-            <div className="l-split__text">
-              <div className="l-label sr">GASTOS</div>
-              <h2 className="l-title sr sr1">
-                Cada euro que sale,<br />
-                <span className="c-blue">registrado.</span>
-              </h2>
-              <p className="l-subtitle sr sr2">
-                Hipoteca, comunidad, seguros, reparaciones, IBI, gestoría. Domio los agrupa por categoría,
-                calcula totales y te dice qué piso te cuesta más cada mes.
-              </p>
-              <ul className="l-checklist sr sr3">
-                {[
-                  'Categorías predefinidas y personalizables',
-                  'Frecuencia mensual, anual o puntual',
-                  'Adjunta facturas con la cámara desde el móvil',
-                  'Filtra por inmueble, mes o categoría',
-                ].map((item, i) => (
-                  <li key={i}><CheckCircle />{item}</li>
-                ))}
-              </ul>
-              <p className="l-note sr sr4">
-                Y cuando llega abril, exporta todo a PDF o Excel listo para tu gestor.
-              </p>
-            </div>
-            <div className="l-split__visual sr sr2">
-              <GastosCarousel />
-            </div>
+          <div className="l-gastos-header">
+            <div className="l-label sr">GASTOS</div>
+            <h2 className="l-title sr sr1">
+              Cada euro que sale,<br />
+              <span className="c-blue">registrado.</span>
+            </h2>
+            <p className="l-subtitle sr sr2">
+              Hipoteca, comunidad, seguros, reparaciones, IBI, gestoría. Domio los agrupa por categoría,
+              calcula totales y te dice qué piso te cuesta más cada mes.
+            </p>
+            <ul className="l-checklist sr sr3">
+              {[
+                'Categorías predefinidas y personalizables',
+                'Frecuencia mensual, anual o puntual',
+                'Adjunta facturas con la cámara desde el móvil',
+                'Filtra por inmueble, mes o categoría',
+              ].map((item, i) => (
+                <li key={i}><CheckCircle />{item}</li>
+              ))}
+            </ul>
+            <p className="l-note sr sr4">
+              Y cuando llega abril, exporta todo a PDF o Excel listo para tu gestor.
+            </p>
+          </div>
+          <div className="l-gastos-visual sr sr2">
+            <GastosCarousel />
           </div>
         </div>
       </section>

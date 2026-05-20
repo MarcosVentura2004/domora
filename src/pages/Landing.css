@@ -582,6 +582,33 @@
   color: var(--black);
 }
 
+/* ─── Gastos Section Layout ──────────────────────────────────────────────── */
+
+/* Text block: centered, max-width so it doesn't stretch too wide */
+.l-gastos-header {
+  max-width: 680px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+.l-gastos-header .l-checklist {
+  text-align: left;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Full-width images get a border and shadow to frame them as product screenshots */
+.l-gastos-visual .gastos-img {
+  border: 1px solid var(--gray-200);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+  border-radius: 12px;
+}
+
+/* Full-width visual container */
+.l-gastos-visual {
+  width: 100%;
+}
+
 /* ─── Gastos Visual ───────────────────────────────────────────────────────── */
 
 /* Desktop: both images stacked at full column width */
@@ -1238,6 +1265,15 @@
   /* Gastos: hide desktop stack, show mobile carousel */
   .gastos-stack    { display: none; }
   .gastos-carousel { display: block; }
+
+  /* Gastos header: left-align on mobile */
+  .l-gastos-header {
+    text-align: left;
+    margin-bottom: 32px;
+  }
+  .l-gastos-header .l-checklist {
+    display: flex;
+  }
 }
 
 /* Tablet: shrink phones a bit */
