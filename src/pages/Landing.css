@@ -872,6 +872,13 @@
   color: var(--gray-500);
   margin: 0;
 }
+.l-gestor-img {
+  width: 100%;
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.1);
+  display: block;
+}
+
 .l-gestor-mock {
   background: #fff;
   border: 1px solid var(--gray-200);
@@ -948,9 +955,15 @@
 /* ─── About ───────────────────────────────────────────────────────────────── */
 .l-about-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 380px 1fr;
   gap: 72px;
   align-items: start;
+}
+.l-about-img img {
+  width: 100%;
+  border-radius: var(--r-xl);
+  box-shadow: 0 16px 56px rgba(0, 0, 0, 0.14);
+  display: block;
 }
 .l-about-body {
   font-size: 15.5px;
@@ -1247,6 +1260,9 @@
   .l-about-grid {
     grid-template-columns: 1fr;
   }
+  /* Mobile: text first, photo below */
+  .l-about-text { order: 1; }
+  .l-about-img  { order: 2; }
   .l-about-card {
     position: static;
   }

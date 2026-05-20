@@ -503,35 +503,7 @@ function Landing({ onGetStarted, onLogin }) {
               </div>
             </div>
             <div className="l-split__visual sr sr2">
-              <div className="l-gestor-mock">
-                <div className="l-mock-header">
-                  <div className="l-mock-dots">
-                    <span style={{background:'#FF5F57'}}/>
-                    <span style={{background:'#FEBC2E'}}/>
-                    <span style={{background:'#28C840'}}/>
-                  </div>
-                  <span className="l-mock-title">Panel del gestor · Domio</span>
-                </div>
-                <div className="l-mock-tabs">
-                  <span className="l-mock-tab active">Mis propiedades (32)</span>
-                  <span className="l-mock-tab">Clientes (13)</span>
-                </div>
-                {[
-                  { initials: 'CM', color: '#EFF6FF', tc: '#2563EB', name: 'Carlos Méndez', sub: 'Gestor', amount: '3.240 €' },
-                  { initials: 'MG', color: '#F0FDF4', tc: '#16A34A', name: 'María García', sub: '4 pisos', amount: '1.580 €' },
-                  { initials: 'AS', color: '#FFF7ED', tc: '#EA580C', name: 'Ana Soto', sub: '3 pisos', amount: '4.910 €' },
-                  { initials: 'LR', color: '#F5F3FF', tc: '#7C3AED', name: 'Luis Romero', sub: '1 piso', amount: '20 €' },
-                ].map((c, i) => (
-                  <div key={i} className="l-mock-row">
-                    <div className="l-mock-avatar" style={{background: c.color, color: c.tc}}>{c.initials}</div>
-                    <div className="l-mock-info">
-                      <div className="l-mock-name">{c.name}</div>
-                      <div className="l-mock-sub">{c.sub}</div>
-                    </div>
-                    <div className="l-mock-amount">{c.amount}</div>
-                  </div>
-                ))}
-              </div>
+              <img src="/images/dashboard-gestor.png" alt="Dashboard del gestor" className="l-gestor-img" />
             </div>
           </div>
         </div>
@@ -541,6 +513,9 @@ function Landing({ onGetStarted, onLogin }) {
       <section id="sobre-nosotros" className="l-section l-section--gray">
         <div className="l-wrap">
           <div className="l-about-grid">
+            <div className="l-about-img sr">
+              <img src="/images/gael-marcos.png" alt="Marcos y Gael" />
+            </div>
             <div className="l-about-text">
               <div className="l-label sr">SOBRE NOSOTROS</div>
               <p className="l-about-body sr sr1"><strong>Somos Marcos y Gael.</strong></p>
@@ -570,23 +545,6 @@ function Landing({ onGetStarted, onLogin }) {
                 <div className="l-founder" style={{background:'#EFF6FF',color:'#2563EB'}}>M</div>
                 <div className="l-founder" style={{background:'#F0FDF4',color:'#16A34A'}}>G</div>
                 <span>Marcos y Gael · Madrid</span>
-              </div>
-            </div>
-            <div className="l-about-card sr sr2">
-              <div className="l-info-card">
-                <div className="l-info-label">DOMIO EN CORTO</div>
-                <div className="l-info-row">
-                  <div className="l-info-value">MADRID</div>
-                  <div className="l-info-meta">Dónde lo construimos</div>
-                </div>
-                <div className="l-info-row">
-                  <div className="l-info-value">2026</div>
-                  <div className="l-info-meta">Año de lanzamiento</div>
-                </div>
-                <div className="l-info-row" style={{borderBottom:'none'}}>
-                  <div className="l-info-value">BETA</div>
-                  <div className="l-info-meta">Estado actual</div>
-                </div>
               </div>
             </div>
           </div>
