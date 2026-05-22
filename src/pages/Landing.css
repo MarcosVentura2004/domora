@@ -1375,6 +1375,35 @@
   .l-final-btns { flex-direction: column; }
 }
 
+/* ─── Planes próximamente ────────────────────────────────────────────────────── */
+.l-plans-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: #F8FAFF;
+  border: 1.5px solid #E0EAFF;
+  border-radius: 20px;
+  padding: 48px 32px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.l-plans-soon__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: #EFF6FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.l-plans-soon__text {
+  font-size: 16px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
 /* ─── Hero CTA principal (más grande) ───────────────────────────────────────── */
 .l-hero__cta-main {
   padding: 18px 40px;

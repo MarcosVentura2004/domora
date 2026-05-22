@@ -802,12 +802,6 @@ function Landing({ onLogin }) {
                   <li key={i}><CheckCircle />{item}</li>
                 ))}
               </ul>
-              <div className="l-manager-cta sr sr3">
-                <button className="btn-primary" onClick={() => scrollTo('planes')}>
-                  Ver plan Business <ArrowRight />
-                </button>
-                <p className="l-price-note">Desde 29,99€/mes · Sin contratos</p>
-              </div>
             </div>
             <div className="l-split__visual sr sr2">
               <img src="/images/dashboard-gestor.png" alt="Dashboard del gestor" className="l-gestor-img" />
@@ -862,69 +856,25 @@ function Landing({ onLogin }) {
       <section id="planes" className="l-section l-section--white">
         <div className="l-wrap l-text-center">
           <div className="l-label sr">PLANES</div>
-          <h2 className="l-title sr sr1">Empieza gratis. Crece sin sorpresas.</h2>
+          <h2 className="l-title sr sr1">Precios pensados para propietarios.</h2>
           <p className="l-subtitle l-subtitle--centered sr sr2">
-            Sin permanencia, sin comisiones por cobro. Tú decides cuánto vas a usar Domio.
+            Estamos ultimando los detalles. Serás el primero en saberlo.
           </p>
-          <div className="l-pricing-grid">
-            {/* Free */}
-            <div className="l-plan sr sr1">
-              <div className="l-plan__name">Free</div>
-              <div className="l-plan__price"><span className="l-plan__amount">0€</span><span className="l-plan__period">/siempre</span></div>
-              <div className="l-plan__desc">Para empezar con tu primer piso</div>
-              <ul className="l-plan__features">
-                <li><CheckCircle />Hasta 1 inmueble</li>
-                <li><CheckCircle />Inquilinos con código</li>
-                <li><CheckCircle />Pagos y chat</li>
-                <li><CheckCircle />Gastos básicos</li>
-              </ul>
-              <button className="l-plan__btn l-plan__btn--outline" onClick={handleWaitlistOpen}>Apúntate</button>
+          <div className="l-plans-soon sr sr3">
+            <div className="l-plans-soon__icon">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#2563EB" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="13" cy="13" r="11"/>
+                <path d="M13 7v6l4 2"/>
+              </svg>
             </div>
-            {/* Pro */}
-            <div className="l-plan sr sr2">
-              <div className="l-plan__name">Pro</div>
-              <div className="l-plan__price"><span className="l-plan__amount">9,99€</span><span className="l-plan__period">/mes</span></div>
-              <div className="l-plan__desc">Para propietarios con varios pisos</div>
-              <ul className="l-plan__features">
-                <li><CheckCircle />Inmuebles ilimitados</li>
-                <li><CheckCircle />Reporte fiscal (PDF + Excel)</li>
-                <li><CheckCircle />Datos de inversión y rentabilidad</li>
-                <li><CheckCircle />Comparador de inmuebles</li>
-                <li><CheckCircle />Navegación por meses pasados</li>
-              </ul>
-              <button className="l-plan__btn l-plan__btn--outline" onClick={handleWaitlistOpen}>Apúntate</button>
-            </div>
-            {/* Pro+ */}
-            <div className="l-plan l-plan--featured sr sr3">
-              <div className="l-plan__badge">Más popular</div>
-              <div className="l-plan__name">Pro+</div>
-              <div className="l-plan__price"><span className="l-plan__amount">14,99€</span><span className="l-plan__period">/mes</span></div>
-              <div className="l-plan__desc">Para quien delega en un gestor</div>
-              <ul className="l-plan__features">
-                <li><CheckCircle />Todo lo de Pro</li>
-                <li><CheckCircle />Invitación a gestores</li>
-                <li><CheckCircle />Permisos granulares</li>
-                <li><CheckCircle />Soporte prioritario</li>
-              </ul>
-              <button className="l-plan__btn l-plan__btn--blue" onClick={handleWaitlistOpen}>Apúntate</button>
-            </div>
-            {/* Business */}
-            <div className="l-plan sr sr4">
-              <div className="l-plan__name">Business</div>
-              <div className="l-plan__price"><span className="l-plan__amount">29,99€</span><span className="l-plan__period">/mes</span></div>
-              <div className="l-plan__desc">Para gestores profesionales con cartera</div>
-              <ul className="l-plan__features">
-                <li><CheckCircle />Todo lo de Pro+</li>
-                <li><CheckCircle />Cartera de propietarios</li>
-                <li><CheckCircle />Perfil profesional público</li>
-                <li><CheckCircle />Dashboard de gestor</li>
-              </ul>
-              <button className="l-plan__btn l-plan__btn--outline" onClick={handleWaitlistOpen}>Apúntate</button>
-            </div>
+            <p className="l-plans-soon__text">
+              Los planes estarán disponibles próximamente.<br />
+              Apúntate y te avisamos cuando lancemos.
+            </p>
+            <button className="btn-primary" onClick={handleWaitlistOpen}>
+              Apúntate <ArrowRight />
+            </button>
           </div>
-          <p className="l-pricing-note sr">
-            Todos los planes incluyen acceso web, app y soporte por email en soporte@trydomio.com
-          </p>
         </div>
       </section>
 
