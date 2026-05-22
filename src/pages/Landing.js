@@ -650,20 +650,17 @@ function Landing({ onLogin }) {
             Sabes exactamente cuánto ganas con cada piso, sin abrir Excel.
           </p>
           <div className="l-hero__ctas sr sr3">
-            <button className="btn-primary btn-lg" onClick={handleWaitlistOpen}>
+            <button className="btn-primary btn-lg l-hero__cta-main" onClick={handleWaitlistOpen}>
               Apúntate <ArrowRight />
             </button>
-            <button className="btn-ghost btn-lg" onClick={() => scrollTo('como-funciona')}>
-              Ver cómo funciona
-            </button>
           </div>
-          <div className="l-hero__trust sr sr4">
-            <span className="l-trust-line" />
-            Sin tarjeta · Cancela cuando quieras
-            <span className="l-trust-line" />
-          </div>
-          <div className="l-hero__phones sr sr5">
+          <div className="l-hero__phones sr sr4">
             <HeroPhones />
+          </div>
+          <div className="l-scroll-hint" aria-hidden="true" onClick={() => scrollTo('caracteristicas')}>
+            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M4 8l7 7 7-7"/>
+            </svg>
           </div>
         </div>
       </section>

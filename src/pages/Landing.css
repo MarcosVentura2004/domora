@@ -1374,3 +1374,29 @@
   .l-hero__ctas { flex-direction: column; }
   .l-final-btns { flex-direction: column; }
 }
+
+/* ─── Hero CTA principal (más grande) ───────────────────────────────────────── */
+.l-hero__cta-main {
+  padding: 18px 40px;
+  font-size: 18px;
+  gap: 10px;
+}
+
+/* ─── Scroll hint ────────────────────────────────────────────────────────────── */
+.l-scroll-hint {
+  display: flex;
+  justify-content: center;
+  margin-top: 36px;
+  color: rgba(30, 41, 59, 0.4);
+  cursor: pointer;
+  animation: scroll-bounce 2s ease-in-out infinite;
+  transition: color 0.2s;
+}
+.l-scroll-hint:hover {
+  color: rgba(30, 41, 59, 0.7);
+}
+
+@keyframes scroll-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(8px); }
+}
