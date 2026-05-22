@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './Landing.css';
+import { supabase } from '../supabaseClient';
 
 // ─── Access Code ─────────────────────────────────────────────────────────────
 
@@ -108,6 +109,124 @@ const ArrowRight = () => (
   </svg>
 );
 
+// ─── Waitlist Modal ───────────────────────────────────────────────────────────
+
+function WaitlistModal({ onClose }) {
+  const [email, setEmail]     = useState('');
+  const [status, setStatus]   = useState('idle'); // idle | loading | success | error | duplicate
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+
+  const handleSubmit = async () => {
+    if (!isValidEmail(email)) {
+      setErrorMsg('Introduce un correo válido.');
+      setStatus('error');
+      return;
+    }
+
+    setStatus('loading');
+
+    const { error } = await supabase
+      .from('waitlist')
+      .insert({ email: email.trim().toLowerCase() });
+
+    if (!error) {
+      setStatus('success');
+      return;
+    }
+
+    // Unique constraint violation → already registered
+    if (error.code === '23505') {
+      setStatus('duplicate');
+      return;
+    }
+
+    setErrorMsg('Algo salió mal. Inténtalo de nuevo.');
+    setStatus('error');
+  };
+
+  const handleChange = (e) => {
+    setEmail(e.target.value);
+    if (status === 'error') { setStatus('idle'); setErrorMsg(''); }
+    if (status === 'duplicate') setStatus('idle');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && status !== 'loading' && status !== 'success') handleSubmit();
+    if (e.key === 'Escape') onClose();
+  };
+
+  return (
+    <div style={modalStyles.overlay} onClick={onClose}>
+      <div style={modalStyles.modal} onClick={e => e.stopPropagation()}>
+
+        {status === 'success' ? (
+          <>
+            <div style={modalStyles.successIcon}>
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <circle cx="14" cy="14" r="14" fill="#DCFCE7"/>
+                <path d="M8 14l4 4 8-8" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h2 style={modalStyles.title}>Apuntado.</h2>
+            <p style={modalStyles.sub}>
+              Te avisamos en cuanto Domio esté disponible para todos. Gracias por el apoyo.
+            </p>
+            <button style={modalStyles.btnPrimary} onClick={onClose}>Cerrar</button>
+          </>
+        ) : (
+          <>
+            <div style={modalStyles.icon}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+            </div>
+            <h2 style={modalStyles.title}>Únete a la lista de espera</h2>
+            <p style={modalStyles.sub}>
+              Domio está en fase de acceso privado. Déjanos tu correo y te avisamos cuando abramos para todos.
+            </p>
+            <input
+              style={{
+                ...modalStyles.input,
+                ...(status === 'error' ? modalStyles.inputError : {}),
+              }}
+              type="email"
+              value={email}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              placeholder="tu@correo.com"
+              autoFocus
+              autoComplete="email"
+              disabled={status === 'loading'}
+            />
+            {status === 'error' && (
+              <p style={modalStyles.errorMsg}>{errorMsg}</p>
+            )}
+            {status === 'duplicate' && (
+              <p style={modalStyles.duplicateMsg}>Este correo ya está en la lista.</p>
+            )}
+            <button
+              style={{
+                ...modalStyles.btnPrimary,
+                ...(status === 'loading' ? modalStyles.btnLoading : {}),
+              }}
+              onClick={handleSubmit}
+              disabled={status === 'loading'}
+            >
+              {status === 'loading' ? 'Enviando...' : 'Apuntarme'}
+            </button>
+            <button style={modalStyles.btnCancel} onClick={onClose}>
+              Cancelar
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Access Code Modal ────────────────────────────────────────────────────────
 
 function AccessModal({ onClose, onSuccess }) {
@@ -133,18 +252,18 @@ function AccessModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
-        <div style={styles.modalIcon}>
+    <div style={modalStyles.overlay} onClick={onClose}>
+      <div style={modalStyles.modal} onClick={e => e.stopPropagation()}>
+        <div style={modalStyles.icon}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="1.8" strokeLinecap="round">
             <rect x="3" y="11" width="18" height="11" rx="2"/>
             <path d="M7 11V7a5 5 0 0110 0v4"/>
           </svg>
         </div>
-        <h2 style={styles.modalTitle}>Acceso privado</h2>
-        <p style={styles.modalSub}>Introduce tu código de acceso para continuar.</p>
+        <h2 style={modalStyles.title}>Acceso privado</h2>
+        <p style={modalStyles.sub}>Introduce tu código de acceso para continuar.</p>
         <input
-          style={{ ...styles.input, ...(error ? styles.inputError : {}) }}
+          style={{ ...modalStyles.input, ...(error ? modalStyles.inputError : {}) }}
           type="text"
           value={code}
           onChange={handleChange}
@@ -155,12 +274,12 @@ function AccessModal({ onClose, onSuccess }) {
           spellCheck={false}
         />
         {error && (
-          <p style={styles.errorMsg}>Código no válido</p>
+          <p style={modalStyles.errorMsg}>Código no válido</p>
         )}
-        <button style={styles.btnPrimary} onClick={handleSubmit}>
+        <button style={modalStyles.btnPrimary} onClick={handleSubmit}>
           Acceder
         </button>
-        <button style={styles.btnCancel} onClick={onClose}>
+        <button style={modalStyles.btnCancel} onClick={onClose}>
           Cancelar
         </button>
       </div>
@@ -168,7 +287,9 @@ function AccessModal({ onClose, onSuccess }) {
   );
 }
 
-const styles = {
+// ─── Shared Modal Styles ──────────────────────────────────────────────────────
+
+const modalStyles = {
   overlay: {
     position: 'fixed',
     inset: 0,
@@ -186,14 +307,13 @@ const styles = {
     borderRadius: '16px',
     padding: '36px 32px 28px',
     width: '100%',
-    maxWidth: '360px',
+    maxWidth: '380px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '0',
     boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
   },
-  modalIcon: {
+  icon: {
     width: '52px',
     height: '52px',
     borderRadius: '14px',
@@ -203,19 +323,27 @@ const styles = {
     justifyContent: 'center',
     marginBottom: '16px',
   },
-  modalTitle: {
+  successIcon: {
+    width: '56px',
+    height: '56px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '16px',
+  },
+  title: {
     fontSize: '20px',
     fontWeight: '700',
     color: '#0F172A',
     margin: '0 0 8px',
     textAlign: 'center',
   },
-  modalSub: {
+  sub: {
     fontSize: '14px',
     color: '#64748B',
     margin: '0 0 20px',
     textAlign: 'center',
-    lineHeight: '1.5',
+    lineHeight: '1.55',
   },
   input: {
     width: '100%',
@@ -227,7 +355,6 @@ const styles = {
     color: '#0F172A',
     outline: 'none',
     marginBottom: '8px',
-    letterSpacing: '0.04em',
     transition: 'border-color 0.15s',
   },
   inputError: {
@@ -236,6 +363,12 @@ const styles = {
   errorMsg: {
     fontSize: '13px',
     color: '#EF4444',
+    margin: '0 0 12px',
+    alignSelf: 'flex-start',
+  },
+  duplicateMsg: {
+    fontSize: '13px',
+    color: '#CA8A04',
     margin: '0 0 12px',
     alignSelf: 'flex-start',
   },
@@ -251,6 +384,10 @@ const styles = {
     cursor: 'pointer',
     marginTop: '8px',
     marginBottom: '10px',
+  },
+  btnLoading: {
+    opacity: 0.7,
+    cursor: 'not-allowed',
   },
   btnCancel: {
     background: 'none',
@@ -439,8 +576,9 @@ function GastosCarousel() {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 function Landing({ onLogin }) {
-  const [scrolled, setScrolled] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const [scrolled,     setScrolled]     = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [showAccess,   setShowAccess]   = useState(false);
   useScrollReveal();
 
   useEffect(() => {
@@ -454,20 +592,21 @@ function Landing({ onLogin }) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleLoginClick = () => setShowModal(true);
-  const handleModalClose = () => setShowModal(false);
-  const handleAccessSuccess = () => {
-    setShowModal(false);
-    onLogin();
-  };
+  const handleLoginClick   = () => setShowAccess(true);
+  const handleAccessClose  = () => setShowAccess(false);
+  const handleAccessSuccess = () => { setShowAccess(false); onLogin(); };
+
+  const handleWaitlistOpen  = () => setShowWaitlist(true);
+  const handleWaitlistClose = () => setShowWaitlist(false);
 
   return (
     <div className="landing">
 
+      {/* ── Waitlist Modal ── */}
+      {showWaitlist && <WaitlistModal onClose={handleWaitlistClose} />}
+
       {/* ── Access Code Modal ── */}
-      {showModal && (
-        <AccessModal onClose={handleModalClose} onSuccess={handleAccessSuccess} />
-      )}
+      {showAccess && <AccessModal onClose={handleAccessClose} onSuccess={handleAccessSuccess} />}
 
       {/* ── Nav ── */}
       <nav className={`l-nav${scrolled ? ' l-nav--scrolled' : ''}`}>
@@ -484,7 +623,7 @@ function Landing({ onLogin }) {
           </div>
           <div className="l-nav__actions">
             <button className="l-nav__login" onClick={handleLoginClick}>Iniciar sesión</button>
-            <button className="l-nav__cta" disabled>Próximamente</button>
+            <button className="l-nav__cta" onClick={handleWaitlistOpen}>Apúntate</button>
           </div>
         </div>
       </nav>
@@ -511,8 +650,8 @@ function Landing({ onLogin }) {
             Sabes exactamente cuánto ganas con cada piso, sin abrir Excel.
           </p>
           <div className="l-hero__ctas sr sr3">
-            <button className="btn-primary btn-lg" disabled>
-              Próximamente
+            <button className="btn-primary btn-lg" onClick={handleWaitlistOpen}>
+              Apúntate <ArrowRight />
             </button>
             <button className="btn-ghost btn-lg" onClick={() => scrollTo('como-funciona')}>
               Ver cómo funciona
@@ -742,7 +881,7 @@ function Landing({ onLogin }) {
                 <li><CheckCircle />Pagos y chat</li>
                 <li><CheckCircle />Gastos básicos</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--outline" disabled>Próximamente</button>
+              <button className="l-plan__btn l-plan__btn--outline" onClick={handleWaitlistOpen}>Apúntate</button>
             </div>
             {/* Pro */}
             <div className="l-plan sr sr2">
@@ -756,7 +895,7 @@ function Landing({ onLogin }) {
                 <li><CheckCircle />Comparador de inmuebles</li>
                 <li><CheckCircle />Navegación por meses pasados</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--outline" disabled>Próximamente</button>
+              <button className="l-plan__btn l-plan__btn--outline" onClick={handleWaitlistOpen}>Apúntate</button>
             </div>
             {/* Pro+ */}
             <div className="l-plan l-plan--featured sr sr3">
@@ -770,7 +909,7 @@ function Landing({ onLogin }) {
                 <li><CheckCircle />Permisos granulares</li>
                 <li><CheckCircle />Soporte prioritario</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--blue" disabled>Próximamente</button>
+              <button className="l-plan__btn l-plan__btn--blue" onClick={handleWaitlistOpen}>Apúntate</button>
             </div>
             {/* Business */}
             <div className="l-plan sr sr4">
@@ -783,7 +922,7 @@ function Landing({ onLogin }) {
                 <li><CheckCircle />Perfil profesional público</li>
                 <li><CheckCircle />Dashboard de gestor</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--outline" disabled>Próximamente</button>
+              <button className="l-plan__btn l-plan__btn--outline" onClick={handleWaitlistOpen}>Apúntate</button>
             </div>
           </div>
           <p className="l-pricing-note sr">
@@ -804,8 +943,8 @@ function Landing({ onLogin }) {
             te ayudamos a exportarlo todo y cerramos sin drama.
           </p>
           <div className="l-final-btns sr sr2">
-            <button className="btn-primary btn-lg" disabled>
-              Próximamente
+            <button className="btn-primary btn-lg" onClick={handleWaitlistOpen}>
+              Apúntate <ArrowRight />
             </button>
             <button className="btn-ghost-light btn-lg" onClick={handleLoginClick}>
               Habla con nosotros
