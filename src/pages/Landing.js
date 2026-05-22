@@ -821,26 +821,24 @@ function Landing({ onLogin }) {
               <div className="l-label sr">SOBRE NOSOTROS</div>
               <p className="l-about-body sr sr1"><strong>Somos Marcos y Gael.</strong></p>
               <p className="l-about-body sr sr1">
-                Nos conocimos hace tres años en Cambridge y ahora vivimos en Madrid, una ciudad en la que ambos
-                hemos decidido seguir creciendo profesionalmente y construir nuestros proyectos. Entre los dos
-                estudiamos Negocios Internacionales, Economía y Finanzas, y mientras Gael hace prácticas en una
-                inmobiliaria, empezamos a ver algo que nos sorprendió bastante: en pleno 2026, gestionar un
-                alquiler sigue siendo caótico.
+                Nos conocimos hace tres años siendo estudiantes y, desde entonces, siempre hemos compartido la misma
+                forma de ver las cosas: creemos que la tecnología debería hacer la vida más simple, no más complicada.
               </p>
               <p className="l-about-body sr sr2">
-                En nuestro entorno veíamos constantemente los mismos problemas: Excels interminables, documentos
-                perdidos, mensajes que se mezclaban y demasiadas cosas que controlar para algo que debería ser
-                mucho más simple. Y las herramientas que existían nos parecían complicadas, impersonales o
-                pensadas para grandes empresas.
+                Mientras estudiábamos Negocios Internacionales, Economía y Finanzas, empezamos a ver un problema que
+                se repetía constantemente: gestionar un alquiler seguía siendo caótico. Excels interminables, documentos
+                perdidos, mensajes mezclados y demasiadas cosas que controlar para algo que debería ser mucho más sencillo.
               </p>
               <p className="l-about-body sr sr2">
-                Ahí fue cuando nació Domio. No queríamos crear "otro software inmobiliario". Queríamos hacer
-                una herramienta que cualquiera pudiera entender desde el primer minuto. Algo limpio, simple y
-                pensado para propietarios que quieren tener todo organizado sin complicarse la vida.
+                Ahí nació Domio.
+              </p>
+              <p className="l-about-body sr sr2">
+                No queríamos crear "otro software inmobiliario". Queríamos construir una herramienta simple, limpia e
+                intuitiva; una plataforma pensada para propietarios que quieren tenerlo todo organizado sin perder tiempo
+                ni complicarse la vida.
               </p>
               <p className="l-about-body sr sr3">
-                Estamos empezando, sí. Pero creemos que gestionar un alquiler no debería sentirse como tener
-                otro trabajo encima. Y eso es exactamente lo que estamos intentando construir.
+                Estamos empezando, sí. Pero creemos que gestionar un alquiler no debería sentirse como tener otro trabajo encima.
               </p>
               <div className="l-founders sr sr3">
                 <div className="l-founder" style={{background:'#EFF6FF',color:'#2563EB'}}>M</div>
