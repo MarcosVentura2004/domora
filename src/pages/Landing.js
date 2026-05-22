@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import './Landing.css';
 
+// ─── Access Code ─────────────────────────────────────────────────────────────
+
+const ACCESS_CODE = 'PRUEBA';
+
 // ─── SVG Icons ───────────────────────────────────────────────────────────────
 
 const LogoIcon = () => (
@@ -103,6 +107,160 @@ const ArrowRight = () => (
     <path d="M2.5 7.5h10M9 4l3.5 3.5L9 11"/>
   </svg>
 );
+
+// ─── Access Code Modal ────────────────────────────────────────────────────────
+
+function AccessModal({ onClose, onSuccess }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = () => {
+    if (code.trim().toUpperCase() === ACCESS_CODE) {
+      onSuccess();
+    } else {
+      setError(true);
+    }
+  };
+
+  const handleChange = (e) => {
+    setCode(e.target.value);
+    if (error) setError(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSubmit();
+    if (e.key === 'Escape') onClose();
+  };
+
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+        <div style={styles.modalIcon}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="1.8" strokeLinecap="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+        </div>
+        <h2 style={styles.modalTitle}>Acceso privado</h2>
+        <p style={styles.modalSub}>Introduce tu código de acceso para continuar.</p>
+        <input
+          style={{ ...styles.input, ...(error ? styles.inputError : {}) }}
+          type="text"
+          value={code}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder="Código de acceso"
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {error && (
+          <p style={styles.errorMsg}>Código no válido</p>
+        )}
+        <button style={styles.btnPrimary} onClick={handleSubmit}>
+          Acceder
+        </button>
+        <button style={styles.btnCancel} onClick={onClose}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const styles = {
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(15, 23, 42, 0.5)',
+    backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+    padding: '16px',
+  },
+  modal: {
+    background: '#fff',
+    borderRadius: '16px',
+    padding: '36px 32px 28px',
+    width: '100%',
+    maxWidth: '360px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+  },
+  modalIcon: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '14px',
+    background: '#EFF6FF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '16px',
+  },
+  modalTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: '#0F172A',
+    margin: '0 0 8px',
+    textAlign: 'center',
+  },
+  modalSub: {
+    fontSize: '14px',
+    color: '#64748B',
+    margin: '0 0 20px',
+    textAlign: 'center',
+    lineHeight: '1.5',
+  },
+  input: {
+    width: '100%',
+    boxSizing: 'border-box',
+    border: '1.5px solid #E2E8F0',
+    borderRadius: '10px',
+    padding: '11px 14px',
+    fontSize: '15px',
+    color: '#0F172A',
+    outline: 'none',
+    marginBottom: '8px',
+    letterSpacing: '0.04em',
+    transition: 'border-color 0.15s',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+  },
+  errorMsg: {
+    fontSize: '13px',
+    color: '#EF4444',
+    margin: '0 0 12px',
+    alignSelf: 'flex-start',
+  },
+  btnPrimary: {
+    width: '100%',
+    background: '#2563EB',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '10px',
+    padding: '12px',
+    fontSize: '15px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    marginTop: '8px',
+    marginBottom: '10px',
+  },
+  btnCancel: {
+    background: 'none',
+    border: 'none',
+    color: '#64748B',
+    fontSize: '14px',
+    cursor: 'pointer',
+    padding: '4px 8px',
+  },
+};
 
 // ─── Scroll Reveal Hook ──────────────────────────────────────────────────────
 
@@ -280,8 +438,9 @@ function GastosCarousel() {
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-function Landing({ onGetStarted, onLogin }) {
+function Landing({ onLogin }) {
   const [scrolled, setScrolled] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   useScrollReveal();
 
   useEffect(() => {
@@ -295,8 +454,20 @@ function Landing({ onGetStarted, onLogin }) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const handleLoginClick = () => setShowModal(true);
+  const handleModalClose = () => setShowModal(false);
+  const handleAccessSuccess = () => {
+    setShowModal(false);
+    onLogin();
+  };
+
   return (
     <div className="landing">
+
+      {/* ── Access Code Modal ── */}
+      {showModal && (
+        <AccessModal onClose={handleModalClose} onSuccess={handleAccessSuccess} />
+      )}
 
       {/* ── Nav ── */}
       <nav className={`l-nav${scrolled ? ' l-nav--scrolled' : ''}`}>
@@ -312,8 +483,8 @@ function Landing({ onGetStarted, onLogin }) {
             <button onClick={() => scrollTo('planes')}>Planes</button>
           </div>
           <div className="l-nav__actions">
-            <button className="l-nav__login" onClick={onLogin}>Iniciar sesión</button>
-            <button className="l-nav__cta" onClick={onGetStarted}>Empieza gratis</button>
+            <button className="l-nav__login" onClick={handleLoginClick}>Iniciar sesión</button>
+            <button className="l-nav__cta" disabled>Próximamente</button>
           </div>
         </div>
       </nav>
@@ -340,8 +511,8 @@ function Landing({ onGetStarted, onLogin }) {
             Sabes exactamente cuánto ganas con cada piso, sin abrir Excel.
           </p>
           <div className="l-hero__ctas sr sr3">
-            <button className="btn-primary btn-lg" onClick={onGetStarted}>
-              Empieza gratis <ArrowRight />
+            <button className="btn-primary btn-lg" disabled>
+              Próximamente
             </button>
             <button className="btn-ghost btn-lg" onClick={() => scrollTo('como-funciona')}>
               Ver cómo funciona
@@ -571,7 +742,7 @@ function Landing({ onGetStarted, onLogin }) {
                 <li><CheckCircle />Pagos y chat</li>
                 <li><CheckCircle />Gastos básicos</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--outline" onClick={onGetStarted}>Empezar gratis</button>
+              <button className="l-plan__btn l-plan__btn--outline" disabled>Próximamente</button>
             </div>
             {/* Pro */}
             <div className="l-plan sr sr2">
@@ -585,7 +756,7 @@ function Landing({ onGetStarted, onLogin }) {
                 <li><CheckCircle />Comparador de inmuebles</li>
                 <li><CheckCircle />Navegación por meses pasados</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--outline" onClick={onGetStarted}>Probar Pro</button>
+              <button className="l-plan__btn l-plan__btn--outline" disabled>Próximamente</button>
             </div>
             {/* Pro+ */}
             <div className="l-plan l-plan--featured sr sr3">
@@ -599,7 +770,7 @@ function Landing({ onGetStarted, onLogin }) {
                 <li><CheckCircle />Permisos granulares</li>
                 <li><CheckCircle />Soporte prioritario</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--blue" onClick={onGetStarted}>Probar Pro+</button>
+              <button className="l-plan__btn l-plan__btn--blue" disabled>Próximamente</button>
             </div>
             {/* Business */}
             <div className="l-plan sr sr4">
@@ -612,7 +783,7 @@ function Landing({ onGetStarted, onLogin }) {
                 <li><CheckCircle />Perfil profesional público</li>
                 <li><CheckCircle />Dashboard de gestor</li>
               </ul>
-              <button className="l-plan__btn l-plan__btn--outline" onClick={onGetStarted}>Hablar con ventas</button>
+              <button className="l-plan__btn l-plan__btn--outline" disabled>Próximamente</button>
             </div>
           </div>
           <p className="l-pricing-note sr">
@@ -633,10 +804,10 @@ function Landing({ onGetStarted, onLogin }) {
             te ayudamos a exportarlo todo y cerramos sin drama.
           </p>
           <div className="l-final-btns sr sr2">
-            <button className="btn-primary btn-lg" onClick={onGetStarted}>
-              Empieza gratis <ArrowRight />
+            <button className="btn-primary btn-lg" disabled>
+              Próximamente
             </button>
-            <button className="btn-ghost-light btn-lg" onClick={onLogin}>
+            <button className="btn-ghost-light btn-lg" onClick={handleLoginClick}>
               Habla con nosotros
             </button>
           </div>
