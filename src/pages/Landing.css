@@ -1375,6 +1375,20 @@
   .l-final-btns { flex-direction: column; }
 }
 
+/* ─── Step opcional badge ───────────────────────────────────────────────────── */
+.l-step-optional {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #94A3B8;
+  background: #F1F5F9;
+  border-radius: 20px;
+  padding: 2px 8px;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+}
+
 /* ─── Footer simplificado ───────────────────────────────────────────────────── */
 .l-footer__simple {
   display: flex;

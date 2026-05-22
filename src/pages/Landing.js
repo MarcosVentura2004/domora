@@ -706,12 +706,15 @@ function Landing({ onLogin }) {
           <div className="l-steps-grid">
             {[
               { n: '01', title: 'Añade tus inmuebles', desc: 'Dirección, fotos, renta, fianza, contrato y datos de compra. Residencial, por habitaciones, vacacional o local — cada tipo con su flujo.' },
-              { n: '02', title: 'Invita a tus inquilinos', desc: 'Generas un código de 6 caracteres y lo mandas por WhatsApp. Entran en trydomio.com, sin registro ni app.' },
-              { n: '03', title: 'Cobra y declara tranquilo', desc: 'Pagos confirmados desde el móvil, gastos categorizados y reporte fiscal en PDF listo para Hacienda al cierre del año.' },
+              { n: '02', title: 'Invita a tus inquilinos', optional: true, desc: 'Generas un código de 6 caracteres y lo mandas por WhatsApp. Entran en trydomio.com, sin registro ni app.' },
+              { n: '03', title: 'Cobra y declara tranquilo', desc: 'Confirma pagos desde el móvil, gastos categorizados y reporte fiscal en PDF listo para Hacienda al cierre del año.' },
             ].map((s, i) => (
               <div key={i} className={`l-step-card sr sr${i + 1}`}>
                 <div className="l-step-num">{s.n}</div>
-                <h3 className="l-step-title">{s.title}</h3>
+                <h3 className="l-step-title">
+                  {s.title}
+                  {s.optional && <span className="l-step-optional">opcional</span>}
+                </h3>
                 <p className="l-step-desc">{s.desc}</p>
               </div>
             ))}
@@ -884,8 +887,8 @@ function Landing({ onLogin }) {
             <span className="c-blue-light">Empieza a cobrar bien.</span>
           </h2>
           <p className="l-final-sub sr sr1">
-            Crea tu cuenta en 2 minutos y mete tu primer inmueble. Si no te enamora,
-            te ayudamos a exportarlo todo y cerramos sin drama.
+            Añade tu primer inmueble y empieza a tenerlo todo organizado.
+            Si no te convence, exportas todo y cerramos sin drama.
           </p>
           <div className="l-final-btns sr sr2">
             <button className="btn-primary btn-lg" onClick={handleWaitlistOpen}>
