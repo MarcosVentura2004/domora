@@ -1375,6 +1375,52 @@
   .l-final-btns { flex-direction: column; }
 }
 
+/* ─── Footer simplificado ───────────────────────────────────────────────────── */
+.l-footer__simple {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 24px 36px;
+  text-align: center;
+}
+.l-footer__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0F172A;
+}
+.l-footer__logo-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.l-footer__tagline {
+  font-size: 13px;
+  color: #94A3B8;
+  margin: 0;
+}
+.l-footer__bottom-links {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.l-footer__bottom-links a {
+  font-size: 13px;
+  color: #64748B;
+  text-decoration: none;
+}
+.l-footer__bottom-links a:hover {
+  color: #0F172A;
+}
+.l-footer__copy {
+  font-size: 12px;
+  color: #CBD5E1;
+}
+
 /* ─── Planes próximamente ────────────────────────────────────────────────────── */
 .l-plans-soon {
   display: flex;

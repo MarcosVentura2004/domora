@@ -8,12 +8,6 @@ const ACCESS_CODE = 'PRUEBA';
 
 // ─── SVG Icons ───────────────────────────────────────────────────────────────
 
-const LogoIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-    <path d="M2 10L11 3L20 10V19C20 19.55 19.55 20 19 20H14V15H8V20H3C2.45 20 2 19.55 2 19V10Z"
-      stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" fill="none"/>
-  </svg>
-);
 
 const ChartIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
@@ -23,10 +17,11 @@ const ChartIcon = () => (
   </svg>
 );
 
-const PersonIcon = () => (
+const FileDocIcon = () => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-    <circle cx="10" cy="7" r="3.5"/>
-    <path d="M2.5 18.5c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/>
+    <path d="M4 2h8l5 5v11a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/>
+    <path d="M12 2v5h5"/>
+    <path d="M6.5 10.5h7M6.5 13.5h5"/>
   </svg>
 );
 
@@ -676,7 +671,7 @@ function Landing({ onLogin }) {
           <div className="l-feat-grid">
             {[
               { icon: <ChartIcon />, bg: '#EFF6FF', color: '#2563EB', title: 'Dashboard financiero', desc: 'Ingresos, gastos y neto de cada mes. Edita meses pasados y mira el resultado de cada inmueble.' },
-              { icon: <PersonIcon />, bg: '#F0FDF4', color: '#16A34A', title: 'Inquilinos sin registro', desc: 'Generas un código de 6 caracteres y tu inquilino entra en trydomio.com. Sin descargas, sin contraseñas. Y chateas con él desde la propia app.' },
+              { icon: <FileDocIcon />, bg: '#FFF7ED', color: '#EA580C', title: 'Reporte fiscal', desc: 'Exporta todos tus ingresos y gastos en PDF o Excel listo para tu gestor. Declaración de IRPF sin complicaciones.' },
               { icon: <CardIcon />, bg: '#FFF7ED', color: '#EA580C', title: 'Pagos inteligentes', desc: 'El inquilino confirma el pago, tú lo validas. Acepta pagos parciales hasta completar el total.' },
               { icon: <ReceiptIcon />, bg: '#FEFCE8', color: '#CA8A04', title: 'Gastos e incidencias', desc: 'Registra gastos por categoría y abre incidencias con seguimiento. Adjunta facturas y fotos.' },
               { icon: <PercentIcon />, bg: '#F0FDF4', color: '#16A34A', title: 'Rentabilidad real', desc: 'ROI, cashflow, payback y equity. Calculadora de hipoteca y semáforo verde/amarillo/rojo por inmueble.' },
@@ -900,45 +895,18 @@ function Landing({ onLogin }) {
 
       {/* ── Footer ── */}
       <footer className="l-footer">
-        <div className="l-footer__inner">
-          <div className="l-footer__brand">
-            <div className="l-footer__logo">
-              <LogoIcon />
-              <span>domio</span>
-            </div>
-            <p>La app para propietarios particulares en España.<br />Hecha en Madrid, con cariño.</p>
+        <div className="l-footer__simple">
+          <div className="l-footer__logo">
+            <img src="/images/logo192.png" alt="domio" className="l-footer__logo-img" />
+            <span>domio</span>
           </div>
-          <div className="l-footer__links">
-            <div className="l-footer__col">
-              <div className="l-footer__col-title">PRODUCTO</div>
-              <button onClick={() => scrollTo('caracteristicas')}>Características</button>
-              <button onClick={() => scrollTo('como-funciona')}>Cómo funciona</button>
-              <button onClick={() => scrollTo('planes')}>Planes</button>
-              <button>Cambios</button>
-            </div>
-            <div className="l-footer__col">
-              <div className="l-footer__col-title">EMPRESA</div>
-              <button onClick={() => scrollTo('sobre-nosotros')}>Sobre nosotros</button>
-              <button>Blog</button>
-              <button>Contacto</button>
-              <button>Trabaja con nosotros</button>
-            </div>
-            <div className="l-footer__col">
-              <div className="l-footer__col-title">SOPORTE</div>
-              <button>Centro de ayuda</button>
-              <button>Estado del servicio</button>
-              <button>Guía fiscal</button>
-              <a href="mailto:soporte@trydomio.com">soporte@trydomio.com</a>
-            </div>
-          </div>
-        </div>
-        <div className="l-footer__bottom">
-          <span>© 2025 Domio · Hecho en Madrid</span>
-          <div>
+          <p className="l-footer__tagline">La app para propietarios en España · Hecha en Madrid</p>
+          <div className="l-footer__bottom-links">
             <a href="/politica-de-privacidad">Política de privacidad</a>
             <a href="/terminos-de-servicio">Términos</a>
-            <a href="/aviso-legal">Aviso legal</a>
+            <a href="mailto:soporte@trydomio.com">soporte@trydomio.com</a>
           </div>
+          <span className="l-footer__copy">© 2025 Domio</span>
         </div>
       </footer>
 
