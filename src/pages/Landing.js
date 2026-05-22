@@ -652,11 +652,16 @@ function Landing({ onLogin }) {
           <div className="l-hero__phones sr sr4">
             <HeroPhones />
           </div>
-          <div className="l-scroll-hint" aria-hidden="true" onClick={() => scrollTo('caracteristicas')}>
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M4 8l7 7 7-7"/>
-            </svg>
-          </div>
+        </div>
+        {/* Scroll hint — absolute al fondo del hero, desaparece al hacer scroll */}
+        <div
+          className={`l-scroll-hint${scrolled ? ' l-scroll-hint--hidden' : ''}`}
+          aria-hidden="true"
+          onClick={() => scrollTo('caracteristicas')}
+        >
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M4 8l7 7 7-7"/>
+          </svg>
         </div>
       </section>
 
@@ -897,7 +902,7 @@ function Landing({ onLogin }) {
       <footer className="l-footer">
         <div className="l-footer__simple">
           <div className="l-footer__logo">
-            <img src="/images/logo192.png" alt="domio" className="l-footer__logo-img" />
+            <img src="/images/house-logo.png" alt="domio" className="l-footer__logo-img" />
             <span>domio</span>
           </div>
           <p className="l-footer__tagline">La app para propietarios en España · Hecha en Madrid</p>
