@@ -253,6 +253,9 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
   const [showMortgagePrompt, setShowMortgagePrompt] = useState(false);
   const [pendingMortgageAmount, setPendingMortgageAmount] = useState(null);
   const [showAddMortgageExpense, setShowAddMortgageExpense] = useState(false);
+  const [calcTriggered, setCalcTriggered] = useState(false);
+  const [showMortgageChangePrompt, setShowMortgageChangePrompt] = useState(false);
+  const [promptCalcAmount, setPromptCalcAmount] = useState(null);
 
   // ── Derived values ──────────────────────────────────────────────────────────
   const isHerencia = investmentData.acquisitionType === 'herencia_donacion';
@@ -267,8 +270,8 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
   const mortgageInExpenses = !!mortgageExpense;
   const detectedMortgageAmount = mortgageExpense ? getMonthlyEquivalent(mortgageExpense) : 0;
 
-  // Mortgage calculation (only when enabled and not already in expenses)
-  const mortgageCalc = (investmentData.mortgageEnabled && !mortgageInExpenses)
+  // Mortgage calculation (whenever enabled)
+  const mortgageCalc = investmentData.mortgageEnabled
     ? computeMortgage(loanCapital, investmentData.interestRate, investmentData.loanYears, investmentData.loanStartDate)
     : null;
 
@@ -333,7 +336,7 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
   const payback = initialInvestment > 0 && effectiveCashflowNeto * 12 > 0
     ? initialInvestment / (effectiveCashflowNeto * 12)
     : null;
-  const remainingCapital = mortgageCalc
+  const remainingCapital = (mortgageCalc && !mortgageInExpenses)
     ? mortgageCalc.remainingCapital
     : (mortgageInExpenses ? null : loanCapital);
   const equity = purchasePrice > 0 && remainingCapital != null
@@ -369,6 +372,32 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
   const update = (key, value) => {
     setInvestmentData(prev => ({ ...prev, [key]: value }));
     setSaved(false);
+    if (['interestRate', 'rateType', 'loanYears', 'loanStartDate', 'purchasePrice', 'downPayment'].includes(key)) {
+      setCalcTriggered(false);
+      setShowMortgageChangePrompt(false);
+    }
+  };
+
+  // ── Mortgage calculator button ─────────────────────────────────────────────────
+  const handleCalculateMortgage = () => {
+    setCalcTriggered(true);
+    setShowMortgageChangePrompt(false);
+    if (mortgageCalc && mortgageInExpenses) {
+      const diff = Math.abs(mortgageCalc.monthlyPayment - detectedMortgageAmount);
+      if (diff > 0.5) {
+        setPromptCalcAmount(mortgageCalc.monthlyPayment.toFixed(0));
+        setShowMortgageChangePrompt(true);
+      }
+    }
+  };
+
+  const handleUpdateMortgageExpense = async () => {
+    if (!mortgageExpense || !promptCalcAmount) return;
+    await supabase.from('expenses')
+      .update({ amount: parseFloat(promptCalcAmount) })
+      .eq('id', mortgageExpense.id);
+    setShowMortgageChangePrompt(false);
+    if (onExpenseAdded) onExpenseAdded();
   };
 
   // ── Save handler ──────────────────────────────────────────────────────────────
@@ -536,117 +565,167 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
               </span>
               <ToggleSwitch
                 value={investmentData.mortgageEnabled}
-                onChange={v => update('mortgageEnabled', v)}
+                onChange={v => {
+                  update('mortgageEnabled', v);
+                  if (!v) { setCalcTriggered(false); setShowMortgageChangePrompt(false); }
+                }}
               />
             </div>
 
             {investmentData.mortgageEnabled && (
-              mortgageInExpenses ? (
-                /* Hipoteca ya detectada en gastos */
-                <div style={{
-                  background: '#E8F5E9', borderRadius: '12px', padding: '14px',
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="#2E7D32" strokeWidth="1.5"/>
-                    <path d="M8 12l3 3 5-5" stroke="#2E7D32" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#2E7D32', lineHeight: 1.4 }}>
-                    <strong>Hipoteca detectada en tus gastos:</strong> {detectedMortgageAmount.toFixed(0)} €/mes.
-                    El cashflow ya la incluye.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Tipo de interés */}
-                  <div>
-                    <label style={labelStyle}>Tipo de interés (%)</label>
-                    <SegmentedToggle
-                      value={investmentData.rateType}
-                      onChange={v => update('rateType', v)}
-                      options={[
-                        { value: 'fijo', label: 'Fijo' },
-                        { value: 'variable', label: 'Variable' },
-                      ]}
+              <>
+                {/* Si la hipoteca ya está en gastos, mostrar cuota actual */}
+                {mortgageInExpenses && (
+                  <div style={{
+                    background: '#E8F5E9', borderRadius: '12px', padding: '12px 14px',
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="#2E7D32" strokeWidth="1.5"/>
+                      <path d="M8 12l3 3 5-5" stroke="#2E7D32" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#2E7D32', lineHeight: 1.4 }}>
+                      <strong>Cuota actual registrada:</strong> {detectedMortgageAmount.toFixed(0)} €/mes
+                    </p>
+                  </div>
+                )}
+
+                {/* Tipo de interés */}
+                <div>
+                  <label style={labelStyle}>Tipo de interés (%)</label>
+                  <SegmentedToggle
+                    value={investmentData.rateType}
+                    onChange={v => update('rateType', v)}
+                    options={[
+                      { value: 'fijo', label: 'Fijo' },
+                      { value: 'variable', label: 'Variable' },
+                    ]}
+                  />
+                  <div style={{ position: 'relative', marginTop: '8px' }}>
+                    <input
+                      type="number" min="0" step="0.01"
+                      placeholder={investmentData.rateType === 'variable' ? 'Ej: 3.5 (Euribor + diferencial)' : 'Ej: 2.5'}
+                      style={{ ...inputStyle, paddingRight: '36px' }}
+                      value={investmentData.interestRate}
+                      onChange={e => update('interestRate', e.target.value)}
                     />
-                    <div style={{ position: 'relative', marginTop: '8px' }}>
-                      <input
-                        type="number" min="0" step="0.01"
-                        placeholder={investmentData.rateType === 'variable' ? 'Ej: 3.5 (Euribor + diferencial)' : 'Ej: 2.5'}
-                        style={{ ...inputStyle, paddingRight: '36px' }}
-                        value={investmentData.interestRate}
-                        onChange={e => update('interestRate', e.target.value)}
-                      />
-                      <span style={{
-                        position: 'absolute', right: '12px', top: '50%',
-                        transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px', pointerEvents: 'none',
-                      }}>%</span>
-                    </div>
+                    <span style={{
+                      position: 'absolute', right: '12px', top: '50%',
+                      transform: 'translateY(-50%)', color: '#aaa', fontSize: '14px', pointerEvents: 'none',
+                    }}>%</span>
+                  </div>
+                  {investmentData.rateType === 'variable' && (
+                    <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#F57F17', lineHeight: 1.4 }}>
+                      Cálculo aproximado — actualízalo cuando cambie tu cuota.
+                    </p>
+                  )}
+                </div>
+
+                {/* Años totales */}
+                <div>
+                  <label style={labelStyle}>Años totales</label>
+                  <input
+                    type="number" min="1" max="40" placeholder="Ej: 25"
+                    style={inputStyle}
+                    value={investmentData.loanYears}
+                    onChange={e => update('loanYears', e.target.value)}
+                  />
+                </div>
+
+                {/* Fecha de inicio */}
+                <div>
+                  <label style={labelStyle}>Fecha de inicio</label>
+                  <input
+                    type="date" style={inputStyle}
+                    value={investmentData.loanStartDate}
+                    onChange={e => update('loanStartDate', e.target.value)}
+                  />
+                </div>
+
+                {/* Botón calcular */}
+                <button
+                  type="button"
+                  onClick={handleCalculateMortgage}
+                  disabled={!mortgageCalc}
+                  style={{
+                    padding: '12px', borderRadius: '12px', border: '1px solid #111',
+                    background: 'white', color: '#111', fontSize: '14px', fontWeight: 600,
+                    cursor: mortgageCalc ? 'pointer' : 'not-allowed',
+                    opacity: mortgageCalc ? 1 : 0.4,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  Calcular hipoteca
+                </button>
+
+                {/* Resultados tras pulsar calcular */}
+                {calcTriggered && mortgageCalc && (
+                  <div style={{ background: '#F0F4FF', borderRadius: '12px', padding: '14px' }}>
                     {investmentData.rateType === 'variable' && (
-                      <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#F57F17', lineHeight: 1.4 }}>
-                        Cálculo aproximado — actualízalo cuando cambie tu cuota.
-                      </p>
+                      <div style={{ background: '#FFF3E0', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px' }}>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#E65100', fontWeight: 500 }}>
+                          Cálculo aproximado — tipo variable sujeto a revisión periódica
+                        </p>
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      {[
+                        { label: 'Cuota mensual', value: `${mortgageCalc.monthlyPayment.toFixed(0)} €`, tooltip: null },
+                        { label: 'Capital pendiente', value: `${mortgageCalc.remainingCapital.toFixed(0)} €`, tooltip: null },
+                        { label: 'Intereses este mes', value: `${mortgageCalc.monthlyInterest.toFixed(0)} €`, tooltip: null },
+                        {
+                          label: 'Amortización este mes',
+                          value: `${mortgageCalc.monthlyAmortization.toFixed(0)} €`,
+                          tooltip: 'La parte de la cuota que reduce tu deuda. Al principio es poca, al final es mucha.',
+                        },
+                      ].map(({ label, value, tooltip }) => (
+                        <div key={label} style={{ background: 'white', borderRadius: '10px', padding: '11px', textAlign: 'center' }}>
+                          <p style={{
+                            margin: '0 0 3px', fontSize: '10px', color: '#888',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px',
+                          }}>
+                            {label}
+                            {tooltip && <InfoTooltip text={tooltip} />}
+                          </p>
+                          <p style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#3949AB' }}>{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Prompt: la cuota calculada difiere de la registrada */}
+                    {showMortgageChangePrompt && (
+                      <div style={{ marginTop: '12px', background: 'white', borderRadius: '10px', padding: '14px' }}>
+                        <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#333', lineHeight: 1.5 }}>
+                          La calculadora indica <strong>{promptCalcAmount} €/mes</strong>, pero tienes
+                          registrado <strong>{detectedMortgageAmount.toFixed(0)} €/mes</strong>. ¿Deseas actualizar la cuota?
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={handleUpdateMortgageExpense}
+                            style={{
+                              flex: 1, padding: '10px', borderRadius: '10px', border: 'none',
+                              background: '#111', color: 'white', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                            }}
+                          >
+                            Sí, actualizar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowMortgageChangePrompt(false)}
+                            style={{
+                              padding: '10px 16px', borderRadius: '10px', border: '1px solid #ddd',
+                              background: 'white', fontSize: '13px', color: '#666', cursor: 'pointer',
+                            }}
+                          >
+                            No, mantener
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {/* Años totales */}
-                  <div>
-                    <label style={labelStyle}>Años totales</label>
-                    <input
-                      type="number" min="1" max="40" placeholder="Ej: 25"
-                      style={inputStyle}
-                      value={investmentData.loanYears}
-                      onChange={e => update('loanYears', e.target.value)}
-                    />
-                  </div>
-
-                  {/* Fecha de inicio */}
-                  <div>
-                    <label style={labelStyle}>Fecha de inicio</label>
-                    <input
-                      type="date" style={inputStyle}
-                      value={investmentData.loanStartDate}
-                      onChange={e => update('loanStartDate', e.target.value)}
-                    />
-                  </div>
-
-                  {/* Resultados calculados */}
-                  {mortgageCalc && (
-                    <div style={{ background: '#F0F4FF', borderRadius: '12px', padding: '14px' }}>
-                      {investmentData.rateType === 'variable' && (
-                        <div style={{ background: '#FFF3E0', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px' }}>
-                          <p style={{ margin: 0, fontSize: '12px', color: '#E65100', fontWeight: 500 }}>
-                            Cálculo aproximado — tipo variable sujeto a revisión periódica
-                          </p>
-                        </div>
-                      )}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {[
-                          { label: 'Cuota mensual', value: `${mortgageCalc.monthlyPayment.toFixed(0)} €`, tooltip: null },
-                          { label: 'Capital pendiente', value: `${mortgageCalc.remainingCapital.toFixed(0)} €`, tooltip: null },
-                          { label: 'Intereses este mes', value: `${mortgageCalc.monthlyInterest.toFixed(0)} €`, tooltip: null },
-                          {
-                            label: 'Amortización este mes',
-                            value: `${mortgageCalc.monthlyAmortization.toFixed(0)} €`,
-                            tooltip: 'La parte de la cuota que reduce tu deuda. Al principio es poca, al final es mucha.',
-                          },
-                        ].map(({ label, value, tooltip }) => (
-                          <div key={label} style={{ background: 'white', borderRadius: '10px', padding: '11px', textAlign: 'center' }}>
-                            <p style={{
-                              margin: '0 0 3px', fontSize: '10px', color: '#888',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px',
-                            }}>
-                              {label}
-                              {tooltip && <InfoTooltip text={tooltip} />}
-                            </p>
-                            <p style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#3949AB' }}>{value}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )
+                )}
+              </>
             )}
           </div>
         )}
