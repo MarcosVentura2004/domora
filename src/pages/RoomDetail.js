@@ -273,8 +273,11 @@ function AddTenantToRoomModal({ onClose, onAdd, room }) {
             <input type="text" placeholder="Ej: Laura Martínez" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="form-group">
-            <label>Teléfono</label>
-            <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label style={{ margin: 0 }}>Teléfono</label>
+              <span style={{ fontSize: '11px', color: '#aaa', background: '#ebebeb', borderRadius: '6px', padding: '2px 8px', fontWeight: 500 }}>Opcional</span>
+            </div>
+            <input type="tel" placeholder="622 280 559" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div className="form-group">
             <label>Rango de días para pagar el alquiler</label>

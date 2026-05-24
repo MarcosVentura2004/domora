@@ -1336,6 +1336,11 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
   const [hasVat, setHasVat] = useState(property?.has_vat ?? true);
   const [hasIrpfRetention, setHasIrpfRetention] = useState(property?.has_irpf_retention ?? false);
 
+  // ── Inquilino opcional (solo al crear con estado alquilado) ──
+  const [tenantName, setTenantName] = useState('');
+  const [tenantEmail, setTenantEmail] = useState('');
+  const [tenantPhone, setTenantPhone] = useState('');
+
   // ── Habitaciones ──
   const [numberOfRooms, setNumberOfRooms] = useState('');
   // roomPrices: array de strings, uno por habitación
@@ -1373,7 +1378,9 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
       createdAt: property?.createdAt || new Date().toISOString(),
       expenses: property?.expenses || [],
       payments: property?.payments || [],
-      tenants: property?.tenants || [],
+      tenants: (status === 'alquilado' && !property && tenantName.trim())
+        ? [{ id: Date.now().toString(), name: tenantName.trim(), email: tenantEmail.trim(), phone: tenantPhone.trim(), amount: effectivePrice, isShared: false }]
+        : (property?.tenants || []),
       rooms: property?.rooms || [],
       bookings: property?.bookings || [],
     };
@@ -1678,6 +1685,40 @@ function AddPropertyModal({ property, onClose, onSave, onDelete }) {
               <p className="payment-range-note">
                 El inquilino deberá marcar el pago entre el día {paymentStartDay} y {paymentEndDay} de cada mes
               </p>
+            </div>
+          )}
+
+          {/* ── Inquilino opcional (solo al crear con alquilado) ── */}
+          {status === 'alquilado' && !property && (
+            <div className="form-group" style={{ background: '#f9f9f9', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#111' }}>Inquilino</label>
+                <span style={{ fontSize: '11px', color: '#aaa', background: '#ebebeb', borderRadius: '6px', padding: '2px 8px', fontWeight: 500 }}>Opcional</span>
+              </div>
+              <input
+                type="text"
+                className="settings-input"
+                placeholder="Nombre completo"
+                value={tenantName}
+                onChange={e => setTenantName(e.target.value)}
+                style={{ margin: 0 }}
+              />
+              <input
+                type="email"
+                className="settings-input"
+                placeholder="Email"
+                value={tenantEmail}
+                onChange={e => setTenantEmail(e.target.value)}
+                style={{ margin: 0 }}
+              />
+              <input
+                type="tel"
+                className="settings-input"
+                placeholder="Teléfono"
+                value={tenantPhone}
+                onChange={e => setTenantPhone(e.target.value)}
+                style={{ margin: 0 }}
+              />
             </div>
           )}
 
