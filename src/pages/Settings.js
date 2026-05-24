@@ -919,7 +919,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
               </div>
               <div className="settings-row-content">
                 <p className="settings-row-title">Email de soporte</p>
-                <p className="settings-row-subtitle">soporte@trydomio.com</p>
+                <p className="settings-row-subtitle">domioapp.sl@gmail.com</p>
               </div>
             </div>
             <a href="https://wa.me/34626280539?text=Hola%2C%20necesito%20ayuda%20con%20Domio" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
