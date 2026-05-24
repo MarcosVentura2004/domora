@@ -45,6 +45,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [deleteText, setDeleteText] = useState('');
   const [deleting, setDeleting] = useState(false);
 
+  // ── Sugerencias ──────────────────────────────────────────
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
+  const [suggestionText, setSuggestionText] = useState('');
+  const [suggestionSending, setSuggestionSending] = useState(false);
+  const [suggestionSent, setSuggestionSent] = useState(false);
+
   // ── Gestores ─────────────────────────────────────────────
   const [gestores, setGestores] = useState([]);
   const [ownerProperties, setOwnerProperties] = useState([]);
@@ -394,6 +400,17 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     });
     setPasswordSending(false);
     setPasswordSent(true);
+  };
+
+  const handleSendSuggestion = async () => {
+    if (!suggestionText.trim()) return;
+    setSuggestionSending(true);
+    await supabase.from('suggestions').insert({
+      user_email: userEmail,
+      text: suggestionText.trim(),
+    });
+    setSuggestionSending(false);
+    setSuggestionSent(true);
   };
 
   const handleDeleteAccount = async () => {
@@ -861,6 +878,33 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>
 
         {/* ════════════════════════════════════════
+            SECCION 5b — Sugerencias
+        ════════════════════════════════════════ */}
+        <div>
+          <p className="settings-section-label">Sugerencias</p>
+          <div className="settings-card">
+            <button
+              className="settings-card-row"
+              style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+              onClick={() => { setShowSuggestionModal(true); setSuggestionText(''); setSuggestionSent(false); }}
+            >
+              <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div className="settings-row-content">
+                <p className="settings-row-title">Enviar sugerencia</p>
+                <p className="settings-row-subtitle">Cuentanos que podemos mejorar</p>
+              </div>
+              <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════
             SECCION 6 — Contacto
         ════════════════════════════════════════ */}
         <div>
@@ -1292,6 +1336,64 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       )}
 
       {/* ════════════════════════════════════════
+          MODAL — Sugerencias
+      ════════════════════════════════════════ */}
+      {showSuggestionModal && (
+        <div className="settings-modal-overlay" onClick={() => !suggestionSending && setShowSuggestionModal(false)}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()}>
+            <p className="settings-modal-title">Enviar sugerencia</p>
+
+            {suggestionSent ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <p style={{ margin: 0, fontWeight: 700, color: '#111' }}>Gracias por tu sugerencia</p>
+                <p style={{ margin: '6px 0 20px', fontSize: '13px', color: '#888' }}>La tendremos en cuenta para mejorar Domora.</p>
+                <button className="settings-modal-btn-cancel" onClick={() => setShowSuggestionModal(false)}>
+                  Cerrar
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="settings-modal-desc">
+                  Cuentanos que funcionalidad echais en falta, que podria funcionar mejor o cualquier idea que se te ocurra.
+                </p>
+                <textarea
+                  className="settings-modal-input"
+                  placeholder="Escribe aqui tu sugerencia..."
+                  value={suggestionText}
+                  onChange={e => setSuggestionText(e.target.value)}
+                  disabled={suggestionSending}
+                  rows={5}
+                  style={{ resize: 'none', lineHeight: 1.5 }}
+                />
+                <button
+                  className="settings-modal-btn-primary"
+                  onClick={handleSendSuggestion}
+                  disabled={suggestionSending || !suggestionText.trim()}
+                >
+                  {suggestionSending ? (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <div className="settings-spinner" />
+                      Enviando…
+                    </span>
+                  ) : 'Enviar sugerencia'}
+                </button>
+                {!suggestionSending && (
+                  <button className="settings-modal-btn-cancel" onClick={() => setShowSuggestionModal(false)}>
+                    Cancelar
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
           MODAL — Eliminar cuenta
       ════════════════════════════════════════ */}
       {showDeleteModal && (
@@ -1347,4 +1449,19 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   Este campo controla si el gestor puede ver y usar la seccion de Mensajes.
   El valor por defecto es true para mantener compatibilidad con registros existentes.
+
+  Tabla para sugerencias de usuarios:
+
+  CREATE TABLE IF NOT EXISTS public.suggestions (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_email text NOT NULL,
+    text text NOT NULL,
+    created_at timestamptz DEFAULT now()
+  );
+
+  ALTER TABLE public.suggestions ENABLE ROW LEVEL SECURITY;
+
+  CREATE POLICY "usuarios pueden insertar sus sugerencias"
+    ON public.suggestions FOR INSERT
+    WITH CHECK (user_email = auth.jwt() ->> 'email');
 */
