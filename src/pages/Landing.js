@@ -110,36 +110,154 @@ const ChevronLeftIcon = () => (
   </svg>
 );
 
+// ─── Mobile Card Thumbnails ───────────────────────────────────────────────────
+
+function ThumbCaracteristicas() {
+  const chips = [
+    { bg: '#EFF6FF', dot: '#2563EB' }, { bg: '#FFF7ED', dot: '#EA580C' },
+    { bg: '#FEFCE8', dot: '#CA8A04' }, { bg: '#F0FDF4', dot: '#16A34A' },
+    { bg: '#FFF1F2', dot: '#E11D48' }, { bg: '#EFF6FF', dot: '#6366F1' },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#EFF6FF 0%,#BFDBFE 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 20px', position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:-40, right:-40, width:140, height:140, borderRadius:'50%', background:'rgba(37,99,235,0.08)' }} />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, width:'100%', maxWidth:230 }}>
+        {chips.map((c, i) => (
+          <div key={i} style={{ background:c.bg, borderRadius:10, padding:'10px 8px', border:'1px solid rgba(0,0,0,0.05)' }}>
+            <div style={{ width:12, height:12, borderRadius:3, background:c.dot, marginBottom:5 }} />
+            <div style={{ width:'100%', height:4, borderRadius:2, background:'rgba(0,0,0,0.09)' }} />
+            <div style={{ width:'68%', height:4, borderRadius:2, background:'rgba(0,0,0,0.05)', marginTop:4 }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThumbComoFunciona() {
+  return (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#EEF2FF 0%,#C7D2FE 100%)', display:'flex', alignItems:'center', justifyContent:'center', gap:0, position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', bottom:-50, left:-50, width:150, height:150, borderRadius:'50%', background:'rgba(99,102,241,0.09)' }} />
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        {['01','02','03'].map((n, i) => (
+          <React.Fragment key={n}>
+            <div style={{ width:48, height:48, borderRadius:'50%', background: i===1 ? '#6366F1' : 'white', border:'2px solid '+(i===1?'#6366F1':'#C7D2FE'), display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:14, color: i===1?'white':'#6366F1', boxShadow: i===1?'0 4px 14px rgba(99,102,241,0.35)':'none', letterSpacing:'-0.02em' }}>
+              {n}
+            </div>
+            {i < 2 && (
+              <svg width="18" height="10" viewBox="0 0 18 10" fill="none">
+                <path d="M1 5h12M10 2l3 3-3 3" stroke="#A5B4FC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThumbGastos() {
+  const bars = [55, 80, 42, 68, 95, 58, 44];
+  return (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#FEFCE8 0%,#FDE68A 100%)', display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'18px 28px 0', gap:6, position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:-30, right:-30, width:100, height:100, borderRadius:'50%', background:'rgba(202,138,4,0.12)' }} />
+      {bars.map((h, i) => (
+        <div key={i} style={{ flex:1, height:`${h}%`, borderRadius:'5px 5px 0 0', background: i===4 ? '#CA8A04' : `rgba(202,138,4,${0.2+i*0.07})`, maxWidth:26 }} />
+      ))}
+    </div>
+  );
+}
+
+function ThumbTipos() {
+  const types = [
+    { icon: <HomeIcon />,     bg:'#EFF6FF', color:'#2563EB', label:'Residencial' },
+    { icon: <GridIcon />,     bg:'#FEFCE8', color:'#CA8A04', label:'Habitaciones' },
+    { icon: <CalIcon />,      bg:'#FFF1F2', color:'#E11D48', label:'Vacacional'  },
+    { icon: <BuildingIcon />, bg:'#FFF7ED', color:'#EA580C', label:'Local'       },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#F8FAFC 0%,#EEF2FF 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px', gap:8 }}>
+      {types.map((t, i) => (
+        <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:5 }}>
+          <div style={{ width:38, height:38, borderRadius:10, background:t.bg, color:t.color, display:'flex', alignItems:'center', justifyContent:'center', border:'1px solid rgba(0,0,0,0.05)', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
+            {t.icon}
+          </div>
+          <span style={{ fontSize:9, fontWeight:600, color:'#94A3B8', textAlign:'center', lineHeight:1.2 }}>{t.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ThumbGestores() {
+  const rows = [
+    { init:'M', bg:'#EFF6FF', color:'#2563EB', w:60 },
+    { init:'L', bg:'#F0FDF4', color:'#16A34A', w:75 },
+    { init:'A', bg:'#FFF7ED', color:'#EA580C', w:50 },
+  ];
+  return (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#F0FDF4 0%,#DCFCE7 100%)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'10px 18px', gap:7, position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:-40, right:-40, width:120, height:120, borderRadius:'50%', background:'rgba(22,163,74,0.08)' }} />
+      {rows.map((r, i) => (
+        <div key={i} style={{ width:'100%', background:'white', borderRadius:10, padding:'8px 11px', display:'flex', alignItems:'center', gap:9, border:'1px solid rgba(0,0,0,0.05)', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
+          <div style={{ width:26, height:26, borderRadius:'50%', background:r.bg, color:r.color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0 }}>{r.init}</div>
+          <div style={{ flex:1 }}>
+            <div style={{ width:`${r.w}%`, height:5, borderRadius:2.5, background:'#E2E8F0' }} />
+            <div style={{ width:`${r.w-18}%`, height:4, borderRadius:2, background:'#F1F5F9', marginTop:4 }} />
+          </div>
+          <div style={{ width:30, height:13, borderRadius:4, background:r.bg }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ThumbSobreNosotros() {
+  return (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%)', display:'flex', alignItems:'center', justifyContent:'center', gap:20, position:'relative', overflow:'hidden' }}>
+      <div style={{ position:'absolute', top:-50, left:'50%', transform:'translateX(-50%)', width:180, height:180, borderRadius:'50%', background:'rgba(234,88,12,0.07)' }} />
+      {[{l:'M',bg:'#FFF7ED',c:'#EA580C',name:'Marcos'},{l:'G',bg:'#F0FDF4',c:'#16A34A',name:'Gael'}].map((a,i) => (
+        <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
+          <div style={{ width:56, height:56, borderRadius:'50%', background:a.bg, border:`2.5px solid ${a.c}44`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, fontWeight:800, color:a.c, boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>{a.l}</div>
+          <span style={{ fontSize:11, color:'#94A3B8', fontWeight:500 }}>{a.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Mobile Section Navigator ─────────────────────────────────────────────────
 
 const MOB_NAV_SECTIONS = [
-  { id: 'caracteristicas', label: 'CARACTERÍSTICAS',  title: 'Todo lo que necesitas',   desc: 'Dashboard, pagos, gastos, rentabilidad y más.',        img: '/images/hero-propiedades.png' },
-  { id: 'como-funciona',   label: 'CÓMO FUNCIONA',    title: 'En tres pasos sencillos', desc: 'Añade inmuebles, invita inquilinos y cobra tranquilo.', img: '/images/hero-resumen.png'     },
-  { id: 'gastos',          label: 'GASTOS',            title: 'Cada euro registrado',    desc: 'Hipoteca, IBI, seguros y reparaciones por categoría.', img: '/images/gastos-resumen.png'   },
-  { id: 'tipos',           label: 'TIPOS DE ALQUILER', title: 'Un flujo para cada caso', desc: 'Residencial, habitaciones, vacacional o local.',        img: '/images/hero-velazquez.png'   },
-  { id: 'gestores',        label: 'PARA GESTORES',     title: '¿Llevas pisos de otros?', desc: 'Un dashboard para toda tu cartera de clientes.',       img: '/images/dashboard-gestor.png' },
-  { id: 'sobre-nosotros',  label: 'SOBRE NOSOTROS',    title: 'Somos Marcos y Gael',     desc: 'Dos universitarios que construyeron Domio en Madrid.', img: '/images/gael-marcos.png'      },
+  { id: 'caracteristicas', label: 'CARACTERÍSTICAS',  title: 'Todo lo que necesitas',   desc: 'Dashboard, pagos, gastos, rentabilidad y más.',        thumb: ThumbCaracteristicas },
+  { id: 'como-funciona',   label: 'CÓMO FUNCIONA',    title: 'En tres pasos sencillos', desc: 'Añade inmuebles, invita inquilinos y cobra tranquilo.', thumb: ThumbComoFunciona   },
+  { id: 'gastos',          label: 'GASTOS',            title: 'Cada euro registrado',    desc: 'Hipoteca, IBI, seguros y reparaciones por categoría.', thumb: ThumbGastos         },
+  { id: 'tipos',           label: 'TIPOS DE ALQUILER', title: 'Un flujo para cada caso', desc: 'Residencial, habitaciones, vacacional o local.',        thumb: ThumbTipos          },
+  { id: 'gestores',        label: 'PARA GESTORES',     title: '¿Llevas pisos de otros?', desc: 'Un dashboard para toda tu cartera de clientes.',       thumb: ThumbGestores       },
+  { id: 'sobre-nosotros',  label: 'SOBRE NOSOTROS',    title: 'Somos Marcos y Gael',     desc: 'Dos universitarios que construyeron Domio en Madrid.', thumb: ThumbSobreNosotros  },
 ];
 
 function MobileCardNav({ onOpen }) {
   return (
     <div className="l-mob-nav">
-      {MOB_NAV_SECTIONS.map((s) => (
-        <button key={s.id} className="l-mob-card" onClick={() => onOpen(s.id)}>
-          <div className="l-mob-card__thumb">
-            <img src={s.img} alt="" className="l-mob-card__img" aria-hidden="true" />
-            <div className="l-mob-card__img-overlay" aria-hidden="true" />
-          </div>
-          <div className="l-mob-card__body">
-            <div className="l-mob-card__text">
-              <span className="l-mob-card__label">{s.label}</span>
-              <p className="l-mob-card__title">{s.title}</p>
-              <p className="l-mob-card__desc">{s.desc}</p>
+      {MOB_NAV_SECTIONS.map((s) => {
+        const Thumb = s.thumb;
+        return (
+          <button key={s.id} className="l-mob-card" onClick={() => onOpen(s.id)}>
+            <div className="l-mob-card__thumb">
+              <Thumb />
             </div>
-            <div className="l-mob-card__arrow" aria-hidden="true"><ArrowRight /></div>
-          </div>
-        </button>
-      ))}
+            <div className="l-mob-card__body">
+              <div className="l-mob-card__text">
+                <span className="l-mob-card__label">{s.label}</span>
+                <p className="l-mob-card__title">{s.title}</p>
+                <p className="l-mob-card__desc">{s.desc}</p>
+              </div>
+              <div className="l-mob-card__arrow" aria-hidden="true"><ArrowRight /></div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
