@@ -104,6 +104,58 @@ const ArrowRight = () => (
   </svg>
 );
 
+const ChevronLeftIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4l-5 5 5 5"/>
+  </svg>
+);
+
+// ─── Mobile Section Navigator ─────────────────────────────────────────────────
+
+const MOB_NAV_SECTIONS = [
+  { id: 'caracteristicas', label: 'CARACTERÍSTICAS',  title: 'Todo lo que necesitas',   desc: 'Dashboard, pagos, gastos, rentabilidad y más.',        img: '/images/hero-propiedades.png' },
+  { id: 'como-funciona',   label: 'CÓMO FUNCIONA',    title: 'En tres pasos sencillos', desc: 'Añade inmuebles, invita inquilinos y cobra tranquilo.', img: '/images/hero-resumen.png'     },
+  { id: 'gastos',          label: 'GASTOS',            title: 'Cada euro registrado',    desc: 'Hipoteca, IBI, seguros y reparaciones por categoría.', img: '/images/gastos-resumen.png'   },
+  { id: 'tipos',           label: 'TIPOS DE ALQUILER', title: 'Un flujo para cada caso', desc: 'Residencial, habitaciones, vacacional o local.',        img: '/images/hero-velazquez.png'   },
+  { id: 'gestores',        label: 'PARA GESTORES',     title: '¿Llevas pisos de otros?', desc: 'Un dashboard para toda tu cartera de clientes.',       img: '/images/dashboard-gestor.png' },
+  { id: 'sobre-nosotros',  label: 'SOBRE NOSOTROS',    title: 'Somos Marcos y Gael',     desc: 'Dos universitarios que construyeron Domio en Madrid.', img: '/images/gael-marcos.png'      },
+];
+
+function MobileCardNav({ onOpen }) {
+  return (
+    <div className="l-mob-nav">
+      {MOB_NAV_SECTIONS.map((s) => (
+        <button key={s.id} className="l-mob-card" onClick={() => onOpen(s.id)}>
+          <div className="l-mob-card__thumb">
+            <img src={s.img} alt="" className="l-mob-card__img" aria-hidden="true" />
+            <div className="l-mob-card__img-overlay" aria-hidden="true" />
+          </div>
+          <div className="l-mob-card__body">
+            <div className="l-mob-card__text">
+              <span className="l-mob-card__label">{s.label}</span>
+              <p className="l-mob-card__title">{s.title}</p>
+              <p className="l-mob-card__desc">{s.desc}</p>
+            </div>
+            <div className="l-mob-card__arrow" aria-hidden="true"><ArrowRight /></div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MobBackBar({ title, onBack }) {
+  return (
+    <div className="l-mob-back-bar">
+      <button className="l-mob-back-btn" onClick={onBack}>
+        <ChevronLeftIcon /><span>Volver</span>
+      </button>
+      <span className="l-mob-back-title">{title}</span>
+      <div className="l-mob-back-spacer" aria-hidden="true" />
+    </div>
+  );
+}
+
 // ─── Waitlist Modal ───────────────────────────────────────────────────────────
 
 function WaitlistModal({ onClose }) {
@@ -571,10 +623,26 @@ function GastosCarousel() {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 function Landing({ onLogin }) {
-  const [scrolled,     setScrolled]     = useState(false);
-  const [showWaitlist, setShowWaitlist] = useState(false);
-  const [showAccess,   setShowAccess]   = useState(false);
+  const [scrolled,          setScrolled]          = useState(false);
+  const [showWaitlist,      setShowWaitlist]      = useState(false);
+  const [showAccess,        setShowAccess]        = useState(false);
+  const [mobileSectionOpen, setMobileSectionOpen] = useState(null);
   useScrollReveal();
+
+  // Body-scroll lock + instant sr-visible when a section opens on mobile
+  useEffect(() => {
+    if (mobileSectionOpen) {
+      if (window.innerWidth <= 768) document.body.style.overflow = 'hidden';
+      const el = document.getElementById(mobileSectionOpen);
+      if (el) {
+        el.querySelectorAll('.sr').forEach(n => n.classList.add('sr-visible'));
+        el.scrollTo(0, 0);
+      }
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileSectionOpen]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -665,8 +733,12 @@ function Landing({ onLogin }) {
         </div>
       </section>
 
+      {/* ── Mobile Section Navigator (hidden on desktop) ── */}
+      <MobileCardNav onOpen={setMobileSectionOpen} />
+
       {/* ── Características ── */}
-      <section id="caracteristicas" className="l-section l-section--white">
+      <section id="caracteristicas" className={`l-section l-section--white l-section--mob${mobileSectionOpen === 'caracteristicas' ? ' is-mob-open' : ''}`}>
+        {mobileSectionOpen === 'caracteristicas' && <MobBackBar title="Características" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap l-text-center">
           <div className="l-label sr">CARACTERÍSTICAS</div>
           <h2 className="l-title sr sr1">Todo lo que necesitas para<br />ser propietario, sin Excel.</h2>
@@ -693,7 +765,8 @@ function Landing({ onLogin }) {
       </section>
 
       {/* ── Cómo funciona ── */}
-      <section id="como-funciona" className="l-section l-section--gray">
+      <section id="como-funciona" className={`l-section l-section--gray l-section--mob${mobileSectionOpen === 'como-funciona' ? ' is-mob-open' : ''}`}>
+        {mobileSectionOpen === 'como-funciona' && <MobBackBar title="Cómo funciona" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap l-text-center">
           <div className="l-label sr">CÓMO FUNCIONA</div>
           <h2 className="l-title sr sr1">
@@ -723,7 +796,8 @@ function Landing({ onLogin }) {
       </section>
 
       {/* ── Gastos ── */}
-      <section id="gastos" className="l-section l-section--white">
+      <section id="gastos" className={`l-section l-section--white l-section--mob${mobileSectionOpen === 'gastos' ? ' is-mob-open' : ''}`}>
+        {mobileSectionOpen === 'gastos' && <MobBackBar title="Gastos" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap">
           <div className="l-gastos-header">
             <div className="l-label sr">GASTOS</div>
@@ -756,7 +830,8 @@ function Landing({ onLogin }) {
       </section>
 
       {/* ── Tipos de inmueble ── */}
-      <section id="tipos" className="l-section l-section--gray">
+      <section id="tipos" className={`l-section l-section--gray l-section--mob${mobileSectionOpen === 'tipos' ? ' is-mob-open' : ''}`}>
+        {mobileSectionOpen === 'tipos' && <MobBackBar title="Tipos de alquiler" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap l-text-center">
           <div className="l-label sr">PARA CADA TIPO DE ALQUILER</div>
           <h2 className="l-title sr sr1">Un flujo para cada inmueble.</h2>
@@ -783,7 +858,8 @@ function Landing({ onLogin }) {
       </section>
 
       {/* ── Gestores ── */}
-      <section id="gestores" className="l-section l-section--white">
+      <section id="gestores" className={`l-section l-section--white l-section--mob${mobileSectionOpen === 'gestores' ? ' is-mob-open' : ''}`}>
+        {mobileSectionOpen === 'gestores' && <MobBackBar title="Para gestores" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap">
           <div className="l-split">
             <div className="l-split__text">
@@ -814,7 +890,8 @@ function Landing({ onLogin }) {
       </section>
 
       {/* ── Sobre nosotros ── */}
-      <section id="sobre-nosotros" className="l-section l-section--gray">
+      <section id="sobre-nosotros" className={`l-section l-section--gray l-section--mob${mobileSectionOpen === 'sobre-nosotros' ? ' is-mob-open' : ''}`}>
+        {mobileSectionOpen === 'sobre-nosotros' && <MobBackBar title="Sobre nosotros" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap">
           <div className="l-about-grid">
             <div className="l-about-img sr">
