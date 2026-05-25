@@ -709,16 +709,24 @@ input[type="number"] {
   align-items: center;
 }
 
+.month-nav-edit-actions-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 0 16px 12px;
+}
+
 .month-nav-save-btn {
   background: #111;
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 9px 0;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  flex: 1;
 }
 
 .month-nav-save-btn:hover {
@@ -730,10 +738,11 @@ input[type="number"] {
   color: #888;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 9px 0;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s;
+  flex: 1;
 }
 
 .month-nav-cancel-btn:hover {

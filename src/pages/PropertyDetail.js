@@ -840,12 +840,13 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     setShowAddExpense(false);
   };
 
-  const handleDeleteExpense = (expense) => {
+  const handleDeleteExpense = async (expense) => {
     const isRecurring = expense.type === 'recurrente_fijo' || expense.type === 'recurrente_temporal';
     if (isRecurring) {
       setDeleteExpenseModal({ expense });
     } else {
-      supabase.from('expenses').delete().eq('id', expense.id);
+      const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+      if (error) { alert(`Error al eliminar el gasto: ${error.message}`); return; }
       setExpenses(prev => prev.filter(e => e.id !== expense.id));
     }
   };
@@ -1203,6 +1204,11 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           </div>
         </div>
         <p className="profitability-label">{isCurrentMonthFuture ? 'Sin datos todavía' : 'Rentabilidad mensual estimada'}</p>
+        {!isCurrentMonthFuture && (
+          <p style={{ margin: '-8px 0 0', fontSize: 11, color: '#aaa', textAlign: 'center' }}>
+            {expenseView === 'real' ? 'Gastos reales' : 'Gastos prorrateados'}
+          </p>
+        )}
       </div>
 
       {/* Estado */}

@@ -404,7 +404,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
           background: 'white', borderRadius: '20px', padding: '24px',
           boxShadow: '0 2px 12px rgba(0,0,0,0.07)', textAlign: 'center'
         }}>
-          <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#aaa' }}>Neto total este mes</p>
+          <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#aaa' }}>Neto real este mes</p>
           <p style={{
             margin: '0 0 20px', fontSize: '38px', fontWeight: 700,
             color: totalNet >= 0 ? '#2E7D32' : '#C62828'

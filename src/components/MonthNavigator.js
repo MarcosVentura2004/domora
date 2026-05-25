@@ -72,14 +72,14 @@ export default function MonthNavigator({
               <PencilIcon />
             </button>
           )}
-          {isPastMonth && isEditMode && (
-            <div className="month-nav-edit-actions">
-              <button className="month-nav-save-btn" type="button" onClick={onSave}>Guardar</button>
-              <button className="month-nav-cancel-btn" type="button" onClick={onCancel}>Descartar</button>
-            </div>
-          )}
         </div>
       </div>
+      {isPastMonth && isEditMode && (
+        <div className="month-nav-edit-actions-row">
+          <button className="month-nav-cancel-btn" type="button" onClick={onCancel}>Descartar</button>
+          <button className="month-nav-save-btn" type="button" onClick={onSave}>Guardar</button>
+        </div>
+      )}
 
       {pickerOpen && (
         <div className="month-picker">
