@@ -235,11 +235,10 @@ const MOB_NAV_SECTIONS = [
 function MobileCardNav({ onOpen }) {
   return (
     <div className="l-mob-nav">
-      {MOB_NAV_SECTIONS.map((s, idx) => {
+      {MOB_NAV_SECTIONS.map((s) => {
         const Thumb = s.thumb;
-        const dir = idx % 2 === 0 ? 'sr-left' : 'sr-right';
         return (
-          <button key={s.id} className={`l-mob-card sr ${dir}`} onClick={() => onOpen(s.id)}>
+          <button key={s.id} className="l-mob-card sr" onClick={() => onOpen(s.id)}>
             <div className="l-mob-card__thumb">
               <Thumb />
             </div>
