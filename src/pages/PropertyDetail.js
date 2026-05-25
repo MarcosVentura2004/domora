@@ -431,6 +431,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   const [unreadCounts, setUnreadCounts] = useState({}); // { [tenantId]: number }
   const [showInvestmentSection, setShowInvestmentSection] = useState(false);
   const [deleteExpenseModal, setDeleteExpenseModal] = useState(null); // { expense }
+  const [duplicateExpenseModal, setDuplicateExpenseModal] = useState(null); // { newExpenseData, conflict, prevStartDates }
 
   const handleCopyCode = (code) => {
     navigator.clipboard?.writeText(code).catch(() => {});
@@ -829,7 +830,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     return months.reverse();
   };
 
-  const handleAddExpense = async (expenseData, prevStartDates) => {
+  const doInsertExpense = async (expenseData, prevStartDates) => {
     const base = { property_id: String(property.id), landlord_email: landlordEmail, ...expenseData };
     const rows = (prevStartDates && prevStartDates.length > 0)
       ? [base, ...prevStartDates.map(sd => ({ ...base, start_date: sd }))]
@@ -837,6 +838,38 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     const { data, error } = await supabase.from('expenses').insert(rows).select();
     if (error) { alert(`Error guardando el gasto: ${error.message}`); return; }
     setExpenses(prev => [...(data || []), ...prev]);
+    setShowAddExpense(false);
+  };
+
+  const handleAddExpense = async (expenseData, prevStartDates) => {
+    // When adding a recurring expense from a past month, check for duplicates
+    if (isPastMonth && expenseData.frequency !== 'unico') {
+      const newStart = new Date(expenseData.start_date.substring(0, 10) + 'T12:00:00');
+      const conflict = expenses.find(e => {
+        if (e.active === false) return false;
+        if (e.frequency === 'unico' || e.type === 'puntual') return false;
+        if (e.category !== expenseData.category) return false;
+        if (e.frequency !== expenseData.frequency) return false;
+        const existStart = new Date((e.start_date || e.created_at || '').substring(0, 10) + 'T12:00:00');
+        return existStart > newStart;
+      });
+      if (conflict) {
+        setDuplicateExpenseModal({ newExpenseData: expenseData, conflict, prevStartDates });
+        return;
+      }
+    }
+    await doInsertExpense(expenseData, prevStartDates);
+  };
+
+  const handleExtendExistingExpense = async () => {
+    const { newExpenseData, conflict } = duplicateExpenseModal;
+    const { error } = await supabase
+      .from('expenses')
+      .update({ start_date: newExpenseData.start_date })
+      .eq('id', conflict.id);
+    if (error) { alert(`Error actualizando el gasto: ${error.message}`); return; }
+    setExpenses(prev => prev.map(e => e.id === conflict.id ? { ...e, start_date: newExpenseData.start_date } : e));
+    setDuplicateExpenseModal(null);
     setShowAddExpense(false);
   };
 
@@ -1842,6 +1875,48 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                   <span style={{ display: 'block', fontWeight: 600 }}>Definitivamente</span>
                   <span style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>
                     Elimina el gasto de forma permanente
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Duplicate expense detection modal */}
+      {duplicateExpenseModal && (() => {
+        const { newExpenseData, conflict, prevStartDates } = duplicateExpenseModal;
+        const freqLabel = { mensual: 'mensual', trimestral: 'trimestral', anual: 'anual' }[newExpenseData.frequency] || newExpenseData.frequency;
+        const conflictStart = new Date((conflict.start_date || '').substring(0, 10) + 'T12:00:00');
+        const conflictStartLabel = conflictStart.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        const newStartLabel = new Date(newExpenseData.start_date.substring(0, 10) + 'T12:00:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        return (
+          <div className="modal-overlay" onClick={() => setDuplicateExpenseModal(null)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Gasto ya existente</h2>
+                <button className="modal-close" onClick={() => setDuplicateExpenseModal(null)}>×</button>
+              </div>
+              <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
+                Ya tienes un gasto <strong>{freqLabel}</strong> de la misma categoría que empieza en <strong>{conflictStartLabel}</strong> ({conflict.name}).
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  onClick={handleExtendExistingExpense}
+                  style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#333', textAlign: 'left' }}
+                >
+                  <span style={{ display: 'block', fontWeight: 600 }}>Adelantar el inicio a {newStartLabel}</span>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#888', marginTop: 2 }}>
+                    El gasto existente empieza desde antes, sin duplicados
+                  </span>
+                </button>
+                <button
+                  onClick={async () => { setDuplicateExpenseModal(null); await doInsertExpense(newExpenseData, prevStartDates); }}
+                  style={{ padding: '12px', borderRadius: '10px', border: 'none', background: '#111', fontSize: '15px', cursor: 'pointer', color: 'white', textAlign: 'left' }}
+                >
+                  <span style={{ display: 'block', fontWeight: 600 }}>Añadir igualmente</span>
+                  <span style={{ display: 'block', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+                    Se crearán dos gastos separados
                   </span>
                 </button>
               </div>
