@@ -119,7 +119,7 @@ function ThumbCaracteristicas() {
     { bg: '#FFF1F2', dot: '#E11D48' }, { bg: '#EFF6FF', dot: '#6366F1' },
   ];
   return (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#EFF6FF 0%,#BFDBFE 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 20px' }}>
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(to bottom,#EFF6FF 0%,#BFDBFE 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 20px' }}>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, width:'100%', maxWidth:230 }}>
         {chips.map((c, i) => (
           <div key={i} style={{ background:c.bg, borderRadius:10, padding:'10px 8px', border:'1px solid rgba(0,0,0,0.05)' }}>
@@ -135,7 +135,7 @@ function ThumbCaracteristicas() {
 
 function ThumbComoFunciona() {
   return (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#EEF2FF 0%,#C7D2FE 100%)', display:'flex', alignItems:'center', justifyContent:'center', gap:0 }}>
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(to bottom,#EEF2FF 0%,#C7D2FE 100%)', display:'flex', alignItems:'center', justifyContent:'center', gap:0 }}>
       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
         {['01','02','03'].map((n, i) => (
           <React.Fragment key={n}>
@@ -157,7 +157,7 @@ function ThumbComoFunciona() {
 function ThumbGastos() {
   const bars = [55, 80, 42, 68, 95, 58, 44];
   return (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#FEFCE8 0%,#FDE68A 100%)', display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'18px 28px 0', gap:6 }}>
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(to bottom,#FEFCE8 0%,#FDE68A 100%)', display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'18px 28px 0', gap:6 }}>
       {bars.map((h, i) => (
         <div key={i} style={{ flex:1, height:`${h}%`, borderRadius:'5px 5px 0 0', background: i===4 ? '#CA8A04' : `rgba(202,138,4,${0.2+i*0.07})`, maxWidth:26 }} />
       ))}
@@ -173,7 +173,7 @@ function ThumbTipos() {
     { icon: <BuildingIcon />, bg:'#FFF7ED', color:'#EA580C', label:'Local'       },
   ];
   return (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#F8FAFC 0%,#EEF2FF 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px', gap:8 }}>
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(to bottom,#F8FAFC 0%,#EEF2FF 100%)', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 16px', gap:8 }}>
       {types.map((t, i) => (
         <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:5 }}>
           <div style={{ width:38, height:38, borderRadius:10, background:t.bg, color:t.color, display:'flex', alignItems:'center', justifyContent:'center', border:'1px solid rgba(0,0,0,0.05)', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -193,7 +193,7 @@ function ThumbGestores() {
     { init:'A', bg:'#FFF7ED', color:'#EA580C', w:50 },
   ];
   return (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#F0FDF4 0%,#DCFCE7 100%)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'10px 18px', gap:7 }}>
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(to bottom,#F0FDF4 0%,#DCFCE7 100%)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'10px 18px', gap:7 }}>
       {rows.map((r, i) => (
         <div key={i} style={{ width:'100%', background:'white', borderRadius:10, padding:'8px 11px', display:'flex', alignItems:'center', gap:9, border:'1px solid rgba(0,0,0,0.05)', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
           <div style={{ width:26, height:26, borderRadius:'50%', background:r.bg, color:r.color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0 }}>{r.init}</div>
@@ -210,7 +210,7 @@ function ThumbGestores() {
 
 function ThumbSobreNosotros() {
   return (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%)', display:'flex', alignItems:'center', justifyContent:'center', gap:20 }}>
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(to bottom,#FFF7ED 0%,#FFEDD5 100%)', display:'flex', alignItems:'center', justifyContent:'center', gap:20 }}>
       {[{l:'M',bg:'#FFF7ED',c:'#EA580C',name:'Marcos'},{l:'G',bg:'#F0FDF4',c:'#16A34A',name:'Gael'}].map((a,i) => (
         <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
           <div style={{ width:56, height:56, borderRadius:'50%', background:a.bg, border:`2.5px solid ${a.c}44`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, fontWeight:800, color:a.c, boxShadow:'0 4px 16px rgba(0,0,0,0.08)' }}>{a.l}</div>
@@ -235,10 +235,11 @@ const MOB_NAV_SECTIONS = [
 function MobileCardNav({ onOpen }) {
   return (
     <div className="l-mob-nav">
-      {MOB_NAV_SECTIONS.map((s) => {
+      {MOB_NAV_SECTIONS.map((s, idx) => {
         const Thumb = s.thumb;
+        const dir = idx % 2 === 0 ? 'sr-left' : 'sr-right';
         return (
-          <button key={s.id} className="l-mob-card" onClick={() => onOpen(s.id)}>
+          <button key={s.id} className={`l-mob-card sr ${dir}`} onClick={() => onOpen(s.id)}>
             <div className="l-mob-card__thumb">
               <Thumb />
             </div>
