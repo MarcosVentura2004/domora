@@ -19,19 +19,25 @@
 /* ─── Scroll Reveal ──────────────────────────────────────────────────────── */
 .sr {
   opacity: 0;
-  transform: translateY(28px);
-  transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateY(48px);
+  transition: opacity 0.78s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.78s cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Directional variants */
+.sr.sr-left  { transform: translateX(-56px); }
+.sr.sr-right { transform: translateX(56px); }
+.sr.sr-scale { transform: scale(0.86) translateY(20px); }
+
 .sr.sr-visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
 }
-.sr1 { transition-delay: 0.08s; }
-.sr2 { transition-delay: 0.18s; }
-.sr3 { transition-delay: 0.28s; }
-.sr4 { transition-delay: 0.38s; }
-.sr5 { transition-delay: 0.48s; }
+.sr1 { transition-delay: 0.06s; }
+.sr2 { transition-delay: 0.14s; }
+.sr3 { transition-delay: 0.22s; }
+.sr4 { transition-delay: 0.30s; }
+.sr5 { transition-delay: 0.38s; }
+.sr6 { transition-delay: 0.46s; }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */
 .landing {
@@ -109,10 +115,28 @@
   transition: transform 0.2s, box-shadow 0.2s;
   font-family: inherit;
   box-shadow: 0 4px 18px rgba(37, 99, 235, 0.38);
+  position: relative;
+  overflow: hidden;
+  animation: glowPulse 3s ease-in-out infinite;
+}
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  transform: skewX(-18deg);
+  animation: shineSweep 3.5s ease-in-out infinite 1.2s;
 }
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 32px rgba(37, 99, 235, 0.52);
+  transform: translateY(-3px);
+  box-shadow: 0 14px 40px rgba(37, 99, 235, 0.58);
+  animation-play-state: paused;
+}
+.btn-primary:hover::after {
+  animation-play-state: paused;
 }
 
 .btn-ghost {
@@ -339,6 +363,19 @@
 
 @media (prefers-reduced-motion: reduce) {
   .l-hero__blob { animation: none; }
+}
+
+@keyframes floatY {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-12px); }
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 4px 18px rgba(37,99,235,0.38); }
+  50%       { box-shadow: 0 10px 44px rgba(37,99,235,0.68), 0 0 70px rgba(99,102,241,0.18); }
+}
+@keyframes shineSweep {
+  0%   { left: -80%; }
+  100% { left: 160%; }
 }
 .l-hero__badge {
   display: inline-flex;
@@ -717,9 +754,9 @@
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.22s;
 }
 .l-feat-card:hover {
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
-  transform: translateY(-3px);
-  border-color: var(--gray-300);
+  box-shadow: 0 16px 48px rgba(37, 99, 235, 0.1), 0 4px 16px rgba(0,0,0,0.06);
+  transform: translateY(-6px) scale(1.015);
+  border-color: rgba(37, 99, 235, 0.18);
 }
 .l-feat-icon {
   width: 44px;
@@ -757,8 +794,8 @@
   transition: box-shadow 0.2s, transform 0.22s;
 }
 .l-step-card:hover {
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
-  transform: translateY(-3px);
+  box-shadow: 0 16px 48px rgba(37, 99, 235, 0.12), 0 4px 16px rgba(0,0,0,0.05);
+  transform: translateY(-6px);
 }
 .l-step-num {
   font-size: 40px;
@@ -834,8 +871,8 @@
   transition: box-shadow 0.2s, transform 0.22s;
 }
 .l-type-card:hover {
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
-  transform: translateY(-3px);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.1);
+  transform: translateY(-6px);
 }
 .l-type-icon {
   width: 40px;
@@ -1302,6 +1339,9 @@
 }
 
 @media (max-width: 768px) {
+  .sr.sr-left  { transform: translateX(-28px); }
+  .sr.sr-right { transform: translateX(28px); }
+
   .l-nav__links { display: none; }
   .l-section { padding: 72px 0; }
   .l-hero { padding-top: 90px; }
@@ -1469,6 +1509,29 @@
   padding: 18px 40px;
   font-size: 18px;
   gap: 10px;
+}
+
+/* ─── Scroll progress bar ────────────────────────────────────────────────────── */
+.l-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2563EB 0%, #6366F1 50%, #60A5FA 100%);
+  z-index: 200;
+  border-radius: 0 3px 3px 0;
+  transition: width 0.1s linear;
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(99,102,241,0.5);
+}
+
+/* ─── Section decorative blobs ───────────────────────────────────────────────── */
+.l-section-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(70px);
+  opacity: 0.45;
 }
 
 /* ─── Scroll hint ────────────────────────────────────────────────────────────── */

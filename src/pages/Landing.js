@@ -229,7 +229,7 @@ const MOB_NAV_SECTIONS = [
   { id: 'gastos',          label: 'GASTOS',            title: 'Cada euro registrado',    desc: 'Hipoteca, IBI, seguros y reparaciones por categoría.', thumb: ThumbGastos         },
   { id: 'tipos',           label: 'TIPOS DE ALQUILER', title: 'Un flujo para cada caso', desc: 'Residencial, habitaciones, vacacional o local.',        thumb: ThumbTipos          },
   { id: 'gestores',        label: 'PARA GESTORES',     title: '¿Llevas pisos de otros?', desc: 'Un dashboard para toda tu cartera de clientes.',       thumb: ThumbGestores       },
-  { id: 'sobre-nosotros',  label: 'SOBRE NOSOTROS',    title: 'Somos Marcos y Gael',     desc: 'Dos universitarios que construyeron Domio en Madrid.', thumb: ThumbSobreNosotros  },
+  { id: 'sobre-nosotros',  label: 'SOBRE NOSOTROS',    title: 'Somos Marcos y Gael',     desc: 'Dos amigos que construyeron Domio en Madrid.',         thumb: ThumbSobreNosotros  },
 ];
 
 function MobileCardNav({ onOpen }) {
@@ -737,6 +737,7 @@ function GastosCarousel() {
 
 function Landing({ onLogin }) {
   const [scrolled,          setScrolled]          = useState(false);
+  const [scrollProgress,    setScrollProgress]    = useState(0);
   const [showWaitlist,      setShowWaitlist]      = useState(false);
   const [showAccess,        setShowAccess]        = useState(false);
   const [mobileSectionOpen, setMobileSectionOpen] = useState(null);
@@ -758,7 +759,11 @@ function Landing({ onLogin }) {
   }, [mobileSectionOpen]);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 24);
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollProgress(total > 0 ? (window.scrollY / total) * 100 : 0);
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
@@ -777,6 +782,9 @@ function Landing({ onLogin }) {
 
   return (
     <div className="landing">
+
+      {/* ── Scroll progress bar ── */}
+      <div className="l-progress" style={{ width: `${scrollProgress}%` }} aria-hidden="true" />
 
       {/* ── Waitlist Modal ── */}
       {showWaitlist && <WaitlistModal onClose={handleWaitlistClose} />}
@@ -866,13 +874,15 @@ function Landing({ onLogin }) {
               { icon: <ReceiptIcon />, bg: '#FEFCE8', color: '#CA8A04', title: 'Gastos e incidencias', desc: 'Registra gastos por categoría y abre incidencias con seguimiento. Adjunta facturas y fotos.' },
               { icon: <PercentIcon />, bg: '#F0FDF4', color: '#16A34A', title: 'Rentabilidad real', desc: 'ROI, cashflow, payback y equity. Calculadora de hipoteca y semáforo verde/amarillo/rojo por inmueble.' },
               { icon: <CompareIcon />, bg: '#EFF6FF', color: '#2563EB', title: 'Comparador de inmuebles', desc: 'Pon dos pisos lado a lado en cualquier período y descubre cuál rinde más.' },
-            ].map((f, i) => (
-              <div key={i} className={`l-feat-card sr sr${(i % 3) + 1}`} style={{textAlign:'left'}}>
+            ].map((f, i) => {
+              const dir = i % 3 === 0 ? 'sr-left' : i % 3 === 2 ? 'sr-right' : '';
+              return (
+              <div key={i} className={`l-feat-card sr ${dir} sr${(i % 3) + 1}`} style={{textAlign:'left'}}>
                 <div className="l-feat-icon" style={{ background: f.bg, color: f.color }}>{f.icon}</div>
                 <h3 className="l-feat-title">{f.title}</h3>
                 <p className="l-feat-desc">{f.desc}</p>
               </div>
-            ))}
+            ); })}
           </div>
         </div>
       </section>
@@ -892,10 +902,12 @@ function Landing({ onLogin }) {
           <div className="l-steps-grid">
             {[
               { n: '01', title: 'Añade tus inmuebles', desc: 'Dirección, fotos, renta, fianza, contrato y datos de compra. Residencial, por habitaciones, vacacional o local — cada tipo con su flujo.' },
-              { n: '02', title: 'Invita a tus inquilinos', optional: true, desc: 'Generas un código de 6 caracteres y lo mandas por WhatsApp. Entran en trydomio.com, sin registro ni app.' },
+              { n: '02', title: 'Invita a tus inquilinos', optional: true, desc: 'Generas un código de 6 caracteres y lo mandas por WhatsApp. Entran en trydomio.com o desde la app.' },
               { n: '03', title: 'Cobra y declara tranquilo', desc: 'Confirma pagos desde el móvil, gastos categorizados y reporte fiscal en PDF listo para Hacienda al cierre del año.' },
-            ].map((s, i) => (
-              <div key={i} className={`l-step-card sr sr${i + 1}`}>
+            ].map((s, i) => {
+              const dir = i === 0 ? 'sr-left' : i === 2 ? 'sr-right' : 'sr-scale';
+              return (
+              <div key={i} className={`l-step-card sr ${dir} sr${i + 1}`}>
                 <div className="l-step-num">{s.n}</div>
                 <h3 className="l-step-title">
                   {s.title}
@@ -903,7 +915,7 @@ function Landing({ onLogin }) {
                 </h3>
                 <p className="l-step-desc">{s.desc}</p>
               </div>
-            ))}
+            ); })}
           </div>
         </div>
       </section>
@@ -958,7 +970,7 @@ function Landing({ onLogin }) {
               { icon: <CalIcon />, bg: '#FFF1F2', color: '#E11D48', title: 'Vacacional', desc: 'Calendario de reservas, rotación rápida, ingresos por noche.' },
               { icon: <BuildingIcon />, bg: '#FFF7ED', color: '#EA580C', title: 'Locales y oficinas', desc: 'IVA 21% y retención IRPF 19% calculados automáticamente.' },
             ].map((t, i) => (
-              <div key={i} className={`l-type-card sr sr${(i % 2) + 1}`}>
+              <div key={i} className={`l-type-card sr ${i % 2 === 0 ? 'sr-left' : 'sr-right'} sr${Math.floor(i / 2) + 1}`}>
                 <div className="l-type-icon" style={{ background: t.bg, color: t.color }}>{t.icon}</div>
                 <div>
                   <h3 className="l-type-title">{t.title}</h3>
@@ -995,7 +1007,7 @@ function Landing({ onLogin }) {
                 ))}
               </ul>
             </div>
-            <div className="l-split__visual sr sr2">
+            <div className="l-split__visual sr sr-right sr2">
               <img src="/images/dashboard-gestor.png" alt="Dashboard del gestor" className="l-gestor-img" />
             </div>
           </div>
@@ -1007,7 +1019,7 @@ function Landing({ onLogin }) {
         {mobileSectionOpen === 'sobre-nosotros' && <MobBackBar title="Sobre nosotros" onBack={() => setMobileSectionOpen(null)} />}
         <div className="l-wrap">
           <div className="l-about-grid">
-            <div className="l-about-img sr">
+            <div className="l-about-img sr sr-left">
               <img src="/images/gael-marcos.png" alt="Marcos y Gael" />
             </div>
             <div className="l-about-text">
