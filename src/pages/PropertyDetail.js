@@ -2097,16 +2097,14 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
               </div>
             </div>
           )}
-          {!(isPastMonth && !isEditing) && (
-            <div className="form-group">
+          <div className="form-group">
               <label>¿Se repite?</label>
               <div className="frequency-options">
                 <button type="button" className={`frequency-option ${!repeats ? 'selected' : ''}`} onClick={() => setRepeats(false)}>No</button>
                 <button type="button" className={`frequency-option ${repeats ? 'selected' : ''}`} onClick={() => setRepeats(true)}>Sí</button>
               </div>
             </div>
-          )}
-          {repeats && !(isPastMonth && !isEditing) && (
+          {repeats && (
             <>
               <div className="form-group">
                 <label>Frecuencia</label>
@@ -2159,6 +2157,11 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
           <div className="form-group">
             <label>{!repeats ? 'Fecha del gasto' : 'Fecha de inicio'}</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
+            {isPastMonth && !isEditing && repeats && (
+              <p style={{ fontSize: 12, color: '#888', marginTop: 6, lineHeight: 1.4 }}>
+                El gasto empezará en esta fecha y aparecerá en el mes actual y futuros según la frecuencia elegida.
+              </p>
+            )}
           </div>
           <div className="form-group">
             <label>% de titularidad (opcional)</label>
@@ -2206,7 +2209,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
             )}
             {uploading && <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Subiendo archivo…</p>}
           </div>
-          {isPastMonth && !isEditing && (
+          {isPastMonth && !isEditing && !repeats && (
             <div className="form-group">
               <label>¿Aplicar a meses anteriores?</label>
               <div className="frequency-options" style={{ marginBottom: applyToPrev ? 10 : 0 }}>
