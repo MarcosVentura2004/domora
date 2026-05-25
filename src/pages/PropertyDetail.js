@@ -850,20 +850,24 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   };
 
   const handleAddExpense = async (expenseData, prevStartDates) => {
-    // When adding a recurring expense from a past month, check for duplicates
-    if (isPastMonth && expenseData.frequency !== 'unico') {
-      const newStart = new Date(expenseData.start_date.substring(0, 10) + 'T12:00:00');
-      const conflict = expenses.find(e => {
-        if (e.active === false) return false;
-        if (e.frequency === 'unico' || e.type === 'puntual') return false;
-        if (e.category !== expenseData.category) return false;
-        if (e.frequency !== expenseData.frequency) return false;
-        const existStart = new Date((e.start_date || e.created_at || '').substring(0, 10) + 'T12:00:00');
-        return existStart > newStart;
-      });
-      if (conflict) {
-        setDuplicateExpenseModal({ newExpenseData: expenseData, conflict, prevStartDates });
-        return;
+    // Check for duplicate recurring expenses: the new expense and an existing one
+    // both active in the currently viewed month, same category + frequency
+    if (expenseData.frequency !== 'unico') {
+      const newExpenseActive = getExpensesForMonth([{ ...expenseData, active: true }], currentYear, currentMonth).length > 0;
+      if (newExpenseActive) {
+        const conflict = expenses.find(e => {
+          if (e.active === false) return false;
+          if (e.frequency === 'unico' || e.type === 'puntual') return false;
+          if (e.category !== expenseData.category) return false;
+          if (e.frequency !== expenseData.frequency) return false;
+          return getExpensesForMonth([e], currentYear, currentMonth).length > 0;
+        });
+        if (conflict) {
+          const newStart = new Date(expenseData.start_date.substring(0, 10) + 'T12:00:00');
+          const existStart = new Date((conflict.start_date || conflict.created_at || '').substring(0, 10) + 'T12:00:00');
+          setDuplicateExpenseModal({ newExpenseData: expenseData, conflict, prevStartDates, canExtend: existStart > newStart });
+          return;
+        }
       }
     }
     await doInsertExpense(expenseData, prevStartDates);
@@ -1893,7 +1897,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
 
       {/* Duplicate expense detection modal */}
       {duplicateExpenseModal && (() => {
-        const { newExpenseData, conflict, prevStartDates } = duplicateExpenseModal;
+        const { newExpenseData, conflict, prevStartDates, canExtend } = duplicateExpenseModal;
         const freqLabel = { mensual: 'mensual', trimestral: 'trimestral', anual: 'anual' }[newExpenseData.frequency] || newExpenseData.frequency;
         const conflictStart = new Date((conflict.start_date || '').substring(0, 10) + 'T12:00:00');
         const conflictStartLabel = conflictStart.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
@@ -1906,16 +1910,27 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                 <button className="modal-close" onClick={() => setDuplicateExpenseModal(null)}>×</button>
               </div>
               <p style={{ color: '#555', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.5 }}>
-                Ya tienes un gasto <strong>{freqLabel}</strong> de la misma categoría que empieza en <strong>{conflictStartLabel}</strong> ({conflict.name}).
+                Ya tienes un gasto <strong>{freqLabel}</strong> de la misma categoría desde <strong>{conflictStartLabel}</strong> ({conflict.name}).
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {canExtend && (
+                  <button
+                    onClick={handleExtendExistingExpense}
+                    style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#333', textAlign: 'left' }}
+                  >
+                    <span style={{ display: 'block', fontWeight: 600 }}>Adelantar el inicio a {newStartLabel}</span>
+                    <span style={{ display: 'block', fontSize: '12px', color: '#888', marginTop: 2 }}>
+                      El gasto existente empieza desde antes, sin duplicados
+                    </span>
+                  </button>
+                )}
                 <button
-                  onClick={handleExtendExistingExpense}
+                  onClick={() => setDuplicateExpenseModal(null)}
                   style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd', background: 'white', fontSize: '15px', cursor: 'pointer', color: '#333', textAlign: 'left' }}
                 >
-                  <span style={{ display: 'block', fontWeight: 600 }}>Adelantar el inicio a {newStartLabel}</span>
+                  <span style={{ display: 'block', fontWeight: 600 }}>Cancelar</span>
                   <span style={{ display: 'block', fontSize: '12px', color: '#888', marginTop: 2 }}>
-                    El gasto existente empieza desde antes, sin duplicados
+                    No añadir el gasto
                   </span>
                 </button>
                 <button
