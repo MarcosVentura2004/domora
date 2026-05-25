@@ -1509,7 +1509,7 @@
     flex-direction: column;
     gap: 12px;
     padding: 8px 16px 40px;
-    background: var(--gray-50);
+    background: linear-gradient(to bottom, #DBEAFE 0%, #EEF2FF 18%, #F4F6FF 40%, #F9FAFB 70%);
   }
 
   /* Hide the 6 content sections on mobile — card nav replaces them */
