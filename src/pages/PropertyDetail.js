@@ -781,7 +781,15 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
 
   const getHistoryMonths = () => {
     const months = [];
-    const start = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
+    // Start from the earliest of: property creation, first payment, first expense
+    const candidateDates = [
+      property.createdAt ? new Date(property.createdAt) : null,
+      ...payments.map(p => new Date(p.year, p.month, 1)),
+      ...expenses.map(e => e.start_date ? new Date(e.start_date.substring(0, 10) + 'T12:00:00') : null).filter(Boolean),
+    ].filter(Boolean);
+    const start = candidateDates.length > 0
+      ? new Date(Math.min(...candidateDates.map(d => d.getTime())))
+      : new Date(now.getFullYear(), now.getMonth(), 1);
     let y = start.getFullYear();
     let m = start.getMonth();
     
@@ -803,7 +811,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
 
       if (property.status === 'por_habitaciones') {
         // Solo pagos por roomId para evitar doble conteo
-        allPaymentsTotal = (property.rooms || []).reduce((sum, room) => {
+        allPaymentsTotal = rooms.reduce((sum, room) => {
           const rp = payments.filter(p => p.year === y && p.month === m && p.roomId === room.id && p.status === 'confirmed');
           return sum + rp.reduce((s, p) => s + (p.amount ?? room.price), 0);
         }, 0);

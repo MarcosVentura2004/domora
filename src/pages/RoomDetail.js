@@ -1274,8 +1274,16 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
         {showPaymentHistory && (() => {
           const roomPayments = payments.filter(p => p.roomId === room.id);
-          const start = property.createdAt ? new Date(property.createdAt) : new Date(now.getFullYear(), now.getMonth(), 1);
           const ownershipMultiplier = (property.ownershipPercentage || 100) / 100;
+          // Start from the earliest of: property creation, first room payment, first expense
+          const candidateDates = [
+            property.createdAt ? new Date(property.createdAt) : null,
+            ...roomPayments.map(p => new Date(p.year, p.month, 1)),
+            ...expenses.map(e => e.start_date ? new Date(e.start_date.substring(0, 10) + 'T12:00:00') : null).filter(Boolean),
+          ].filter(Boolean);
+          const start = candidateDates.length > 0
+            ? new Date(Math.min(...candidateDates.map(d => d.getTime())))
+            : new Date(now.getFullYear(), now.getMonth(), 1);
           const historyMonths = [];
           let y = start.getFullYear();
           let m = start.getMonth();
@@ -1295,6 +1303,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             historyMonths.push({ year: y, month: m, income, expenses: totalExp, net, tenantName: confirmedPayment?.tenantName });
             if (m === 11) { m = 0; y++; } else { m++; }
           }
+          historyMonths.reverse(); // newest first, consistent with PropertyDetail and VacationalDetail
           const accumulated = historyMonths.reduce((sum, h) => sum + h.net, 0);
 
           return (

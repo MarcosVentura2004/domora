@@ -442,7 +442,16 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
 
   const getHistoryMonths = () => {
     const months = [];
-    let y = minYear, m = minMonth;
+    // Start from the earliest of: property creation, first booking, first expense
+    const candidateDates = [
+      property.createdAt ? new Date(property.createdAt) : null,
+      ...bookings.map(b => b.startDate ? new Date(b.startDate) : null).filter(Boolean),
+      ...expenses.map(e => e.start_date ? new Date(e.start_date.substring(0, 10) + 'T12:00:00') : null).filter(Boolean),
+    ].filter(Boolean);
+    const startDate = candidateDates.length > 0
+      ? new Date(Math.min(...candidateDates.map(d => d.getTime())))
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    let y = startDate.getFullYear(), m = startDate.getMonth();
     while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
       const mb = bookings.filter(b => {
         const s = new Date(b.startDate), e = new Date(b.endDate);
