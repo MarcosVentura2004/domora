@@ -404,7 +404,7 @@ function ExpenseMenu({ expenseId, openMenuId, setOpenMenuId, onEdit, onDelete })
 function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = false }) {
   const [expenses, setExpenses] = useState([]);
   const [showExpenses, setShowExpenses] = useState(false);
-  const [expenseView, setExpenseView] = useState('prorrateado'); // 'prorrateado' | 'real'
+  const [expenseView, setExpenseView] = useState(() => localStorage.getItem(`expenseView_${property.id}`) || 'prorrateado'); // 'prorrateado' | 'real'
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [openMenuExpenseId, setOpenMenuExpenseId] = useState(null);
@@ -1504,7 +1504,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
             </button>
             <div style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
               {['prorrateado', 'real'].map(v => (
-                <button key={v} onClick={() => setExpenseView(v)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: 'none', background: expenseView === v ? 'white' : 'transparent', color: expenseView === v ? '#333' : '#999', cursor: 'pointer', fontWeight: expenseView === v ? 600 : 400 }}>
+                <button key={v} onClick={() => { localStorage.setItem(`expenseView_${property.id}`, v); setExpenseView(v); }} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: 'none', background: expenseView === v ? 'white' : 'transparent', color: expenseView === v ? '#333' : '#999', cursor: 'pointer', fontWeight: expenseView === v ? 600 : 400 }}>
                   {v === 'prorrateado' ? 'Prorrat.' : 'Real'}
                 </button>
               ))}

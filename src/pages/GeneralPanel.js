@@ -63,7 +63,7 @@ function getMonthlyExpenses(property, supabaseExpenses, year, month) {
   const ownership = property.ownershipPercentage || 100;
   return active.reduce((sum, e) => {
     const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
-    return sum + getMonthlyEquivalentGP(e) * pct / 100;
+    return sum + (Number(e.amount) || 0) * pct / 100;
   }, 0);
 }
 
@@ -256,7 +256,7 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
         const ownership = p.ownershipPercentage || 100;
         return sum + active.reduce((s, e) => {
           const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
-          return s + getMonthlyEquivalentGP(e) * pct / 100;
+          return s + (Number(e.amount) || 0) * pct / 100;
         }, 0);
       }, 0);
 
