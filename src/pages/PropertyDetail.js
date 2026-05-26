@@ -1251,7 +1251,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
         </div>
         <p className="profitability-label">{isCurrentMonthFuture ? 'Sin datos todavía' : 'Rentabilidad mensual estimada'}</p>
         {!isCurrentMonthFuture && (
-          <p style={{ margin: '-8px 0 0', fontSize: 11, color: '#aaa', textAlign: 'center' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#aaa', textAlign: 'center' }}>
             {expenseView === 'real' ? 'Gastos reales' : 'Gastos prorrateados'}
           </p>
         )}
@@ -1573,6 +1573,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                 const isPendingVariable = expenseView !== 'real' && isExpensePendingVariable(expense, currentYear, currentMonth);
                 const monthly = isPendingVariable ? 0 : getAmountForView(expense, expenseView);
                 const isPaying = expenseView === 'real' || isPaymentMonth(expense, currentYear, currentMonth);
+                const showPendingInput = isPendingVariable && isPaymentMonth(expense, currentYear, currentMonth);
                 const expPct = expense.expense_percentage != null ? expense.expense_percentage : ownershipPct;
                 const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', manual: 'Manual', custom: `Cada ${expense.custom_frequency_months}m`, mensual: null }[expense.frequency] || null;
                 const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[expense.type] || null;
@@ -1617,7 +1618,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
                         )}
                         {expense.active === false && <span style={{ fontSize: 10, color: '#aaa' }}>Pausado</span>}
                       </div>
-                      {isPendingVariable && (
+                      {showPendingInput && (
                         <PendingVariableInput expenseId={expense.id} onSave={handleUpdateVariableAmount} />
                       )}
                     </div>
@@ -2300,10 +2301,9 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
             )}
           </div>
           <div className="form-group">
-            <label>% de titularidad (opcional)</label>
+            <label>% de titularidad</label>
             <input type="number" placeholder={`${defaultExpensePct ?? 100}`} value={expensePct}
               onChange={e => setExpensePct(e.target.value)} step="0.01" min="0" max="100" />
-            <p className="payment-range-note" style={{ marginTop: 6 }}>Déjalo en blanco para usar el % de la propiedad ({defaultExpensePct ?? 100}%)</p>
           </div>
           <div className="form-group">
             <label>Descripción (opcional)</label>

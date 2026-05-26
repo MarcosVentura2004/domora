@@ -1207,6 +1207,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
               const isPendingVariable = expenseView !== 'real' && isExpensePendingVariable(exp, currentYear, currentMonth);
               const monthly = isPendingVariable ? 0 : getAmountForView(exp, expenseView);
               const isPaying = expenseView === 'real' || isPaymentMonth(exp, currentYear, currentMonth);
+              const showPendingInput = isPendingVariable && isPaymentMonth(exp, currentYear, currentMonth);
               const freqLabel = { trimestral: 'Trimestral', anual: 'Anual', unico: 'Único', manual: 'Manual', custom: `Cada ${exp.custom_frequency_months}m`, mensual: null }[exp.frequency] || null;
               const typeLabel = { recurrente_fijo: 'Fijo', recurrente_variable: 'Variable', recurrente_temporal: 'Temporal', puntual: 'Único' }[exp.type] || null;
               return (
@@ -1234,7 +1235,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                       {exp.active === false && <span style={{ fontSize: 10, color: '#aaa' }}>Pausado</span>}
                       {exp.expense_percentage != null && <span style={{ fontSize: 10, color: '#aaa' }}>{exp.expense_percentage}%</span>}
                     </div>
-                    {isPendingVariable && (
+                    {showPendingInput && (
                       <PendingVariableInput expenseId={exp.id} onSave={handleUpdateVariableAmount} />
                     )}
                   </div>
@@ -1649,10 +1650,9 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required />
           </div>
           <div className="form-group">
-            <label>% de titularidad (opcional)</label>
+            <label>% de titularidad</label>
             <input type="number" placeholder={`${defaultExpensePct ?? 100}`} value={expensePct}
               onChange={e => setExpensePct(e.target.value)} step="0.01" min="0" max="100" />
-            <p className="payment-range-note" style={{ marginTop: 6 }}>Déjalo en blanco para usar el % de la propiedad ({defaultExpensePct ?? 100}%)</p>
           </div>
           <div className="form-group">
             <label>Descripción (opcional)</label>
