@@ -7,6 +7,7 @@ import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
 import { InvestmentForm } from '../components/InvestmentForm';
 import MonthNavigator from '../components/MonthNavigator';
+import { calcRetroactiveStartDate, calcRetroMonths } from '../utils/expenseRetroactive';
 
 function isFutureMonth(year, month) {
   const now = new Date();
@@ -1804,6 +1805,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
           propertyId={property.id}
           defaultDate={`${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`}
           isPastMonth={isPastMonth}
+          existingExpenses={expenses}
         />
       )}
       {showAddTenant && <AddTenantModal onClose={() => setShowAddTenant(false)} onAdd={handleAddTenant} isFirstTenant={tenants.length === 0} />}
@@ -2067,7 +2069,7 @@ const EXPENSE_CATEGORIES = [
 ];
 
 
-function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, defaultValues, landlordEmail, propertyId, defaultDate, isPastMonth }) {
+function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialExpense, defaultValues, landlordEmail, propertyId, defaultDate, isPastMonth, existingExpenses }) {
   const today = new Date().toISOString().split('T')[0];
   const isEditing = !!initialExpense;
   const [category, setCategory] = useState(isEditing ? (initialExpense.category || '') : (defaultValues?.category || ''));
@@ -2094,6 +2096,7 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
   const [selectedMonths, setSelectedMonths] = useState(() => new Set());
   const [prevPickerYear, setPrevPickerYear] = useState(maxPrevYear);
   const [applyToPrev, setApplyToPrev] = useState(false);
+  const [applyToPrevRecurring, setApplyToPrevRecurring] = useState(false);
 
   const handleCategoryChange = (val) => { setCategory(val); setSubcategory(''); };
 
@@ -2111,6 +2114,20 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
       ? (durationType === 'pagos' ? 'recurrente_temporal' : 'recurrente_fijo')
       : 'recurrente_variable';
 
+  const hasExistingRecurring = !isEditing && repeats && category
+    ? (existingExpenses || []).some(e =>
+        e.active !== false &&
+        e.category === category &&
+        e.frequency === frequency &&
+        (frequency !== 'custom' || (e.custom_frequency_months || 1) === (parseInt(customFreqMonths) || 1))
+      )
+    : false;
+  const retroDate = (!isEditing && repeats && !hasExistingRecurring && category)
+    ? calcRetroactiveStartDate(startDate, frequency, customFreqMonths)
+    : null;
+  const retroMonths = retroDate
+    ? calcRetroMonths(retroDate, startDate, frequency, customFreqMonths)
+    : [];
   const freqStep = frequency === 'trimestral' ? 3 : frequency === 'anual' ? 12 : frequency === 'custom' ? (parseInt(customFreqMonths) || 1) : 1;
   const freqLabel = frequency === 'trimestral' ? 'trimestre' : frequency === 'anual' ? 'año' : frequency === 'custom' ? `${customFreqMonths || '?'} meses` : 'mes';
   const monthlyEquiv = amount && repeats && frequency !== 'mensual' ? (parseFloat(amount) / freqStep).toFixed(2) : null;
@@ -2164,7 +2181,10 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
       onUpdate(initialExpense.id, expenseData);
     } else {
       const prevDates = applyToPrev ? Array.from(selectedMonths).sort().map(ym => `${ym}-01`) : [];
-      onAdd(expenseData, prevDates.length > 0 ? prevDates : undefined);
+      const finalData = (repeats && applyToPrevRecurring && retroDate)
+        ? { ...expenseData, start_date: retroDate }
+        : expenseData;
+      onAdd(finalData, prevDates.length > 0 ? prevDates : undefined);
     }
   };
 
@@ -2243,6 +2263,24 @@ function AddExpenseModal({ onClose, onAdd, onUpdate, defaultExpensePct, initialE
                 )}
               </div>
             </>
+          )}
+          {retroDate && !isEditing && (
+            <div className="form-group">
+              <label>¿Aplicar a meses anteriores?</label>
+              <div className="frequency-options">
+                <button type="button"
+                  className={`frequency-option ${!applyToPrevRecurring ? 'selected' : ''}`}
+                  onClick={() => setApplyToPrevRecurring(false)}>No</button>
+                <button type="button"
+                  className={`frequency-option ${applyToPrevRecurring ? 'selected' : ''}`}
+                  onClick={() => setApplyToPrevRecurring(true)}>Sí</button>
+              </div>
+              {applyToPrevRecurring && retroMonths.length > 0 && (
+                <p style={{ fontSize: 13, color: '#555', marginTop: 8 }}>
+                  Se añadirá también en: {retroMonths.join(', ')}
+                </p>
+              )}
+            </div>
           )}
           <div className="form-group">
             <label>Importe por {!repeats ? 'pago' : freqLabel} (€){repeats ? ' — opcional si varía' : ''}</label>
