@@ -1303,7 +1303,6 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
             historyMonths.push({ year: y, month: m, income, expenses: totalExp, net, tenantName: confirmedPayment?.tenantName });
             if (m === 11) { m = 0; y++; } else { m++; }
           }
-          historyMonths.reverse(); // newest first, consistent with PropertyDetail and VacationalDetail
           const accumulated = historyMonths.reduce((sum, h) => sum + h.net, 0);
 
           return (

@@ -471,7 +471,7 @@ function VacationalDetail({ property, onBack, onUpdate, landlordEmail, readOnly 
       months.push({ year: y, month: m, income, expenses: exp, net: income - exp, bookings: mb.length });
       if (m === 11) { m = 0; y++; } else m++;
     }
-    return months.reverse();
+    return months;
   };
 
   // Calendario

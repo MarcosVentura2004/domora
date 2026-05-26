@@ -835,7 +835,7 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
       months.push({ year: y, month: m, income, expenses: myExpenses, net });
       if (m === 11) { m = 0; y++; } else { m++; }
     }
-    return months.reverse();
+    return months;
   };
 
   const doInsertExpense = async (expenseData, prevStartDates) => {
