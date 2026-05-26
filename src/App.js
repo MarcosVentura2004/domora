@@ -12,6 +12,7 @@ import Planes from './pages/Planes';
 import ResetPassword from './pages/ResetPassword';
 import GestorInvite from './pages/GestorInvite';
 import GestorInviteLandlord from './pages/GestorInviteLandlord';
+import Calendario from './pages/Calendario';
 import './App.css';
 
 function App() {
@@ -285,6 +286,14 @@ function App() {
           userEmail={userEmail}
           onLogout={handleLogout}
           onSwitchRole={handleSwitchRole}
+          onNavigate={(page) => setPage(page)}
+        />
+      )}
+
+      {currentPage === 'calendario' && (
+        <Calendario
+          userEmail={userEmail}
+          onBack={() => setPage('dashboard')}
         />
       )}
 
