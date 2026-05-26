@@ -999,7 +999,7 @@ input[type="number"] {
 
 .history-table-header {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
   padding: 8px 0;
   font-size: 12px;
   font-weight: 600;
@@ -1010,9 +1010,15 @@ input[type="number"] {
   margin-bottom: 4px;
 }
 
+.history-table-header span:nth-child(3),
+.history-table-header span:nth-child(4),
+.history-table-header span:nth-child(5) {
+  text-align: right;
+}
+
 .history-row {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
   padding: 12px 0;
   font-size: 14px;
   border-bottom: 1px solid #f5f5f5;
@@ -1040,11 +1046,17 @@ input[type="number"] {
 .history-income {
   color: #4CAF50;
   font-weight: 500;
+  text-align: right;
 }
 
 .history-expenses {
   color: #F44336;
   font-weight: 500;
+  text-align: right;
+}
+
+.history-net {
+  text-align: right;
 }
 
 .history-net.positive {
