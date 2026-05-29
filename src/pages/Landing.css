@@ -131,9 +131,13 @@
   animation: shineSweep 3.5s ease-in-out infinite 1.2s;
 }
 .btn-primary:hover {
-  transform: translateY(-3px);
   box-shadow: 0 14px 40px rgba(37, 99, 235, 0.58);
   animation-play-state: paused;
+}
+@media (hover: hover) {
+  .btn-primary:hover {
+    transform: translateY(-3px);
+  }
 }
 .btn-primary:hover::after {
   animation-play-state: paused;
@@ -288,7 +292,11 @@
 }
 .l-nav__cta:hover {
   background: #222;
-  transform: translateY(-1px);
+}
+@media (hover: hover) {
+  .l-nav__cta:hover {
+    transform: translateY(-1px);
+  }
 }
 
 /* ─── Hero ────────────────────────────────────────────────────────────────── */
@@ -547,9 +555,11 @@
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Hover lift on the image */
-.phone-mockup:hover .phone-mockup__screen {
-  transform: translateY(-6px);
+/* Hover lift on the image — desktop only */
+@media (hover: hover) {
+  .phone-mockup:hover .phone-mockup__screen {
+    transform: translateY(-6px);
+  }
 }
 
 /* ─── Spreadsheet ─────────────────────────────────────────────────────────── */
@@ -755,8 +765,12 @@
 }
 .l-feat-card:hover {
   box-shadow: 0 16px 48px rgba(37, 99, 235, 0.1), 0 4px 16px rgba(0,0,0,0.06);
-  transform: translateY(-6px) scale(1.015);
   border-color: rgba(37, 99, 235, 0.18);
+}
+@media (hover: hover) {
+  .l-feat-card:hover {
+    transform: translateY(-6px) scale(1.015);
+  }
 }
 .l-feat-icon {
   width: 44px;
@@ -795,7 +809,11 @@
 }
 .l-step-card:hover {
   box-shadow: 0 16px 48px rgba(37, 99, 235, 0.12), 0 4px 16px rgba(0,0,0,0.05);
-  transform: translateY(-6px);
+}
+@media (hover: hover) {
+  .l-step-card:hover {
+    transform: translateY(-6px);
+  }
 }
 .l-step-num {
   font-size: 40px;
@@ -872,7 +890,11 @@
 }
 .l-type-card:hover {
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.1);
-  transform: translateY(-6px);
+}
+@media (hover: hover) {
+  .l-type-card:hover {
+    transform: translateY(-6px);
+  }
 }
 .l-type-icon {
   width: 40px;
@@ -1080,7 +1102,11 @@
 }
 .l-plan:hover {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-  transform: translateY(-3px);
+}
+@media (hover: hover) {
+  .l-plan:hover {
+    transform: translateY(-3px);
+  }
 }
 .l-plan--featured {
   border-color: var(--blue);
@@ -1157,7 +1183,6 @@
 .l-plan__btn--outline:hover {
   background: var(--gray-50);
   border-color: var(--gray-300);
-  transform: translateY(-1px);
 }
 .l-plan__btn--blue {
   background: var(--blue);
@@ -1165,8 +1190,15 @@
 }
 .l-plan__btn--blue:hover {
   background: var(--blue-dark);
-  transform: translateY(-1px);
   box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35);
+}
+@media (hover: hover) {
+  .l-plan__btn--outline:hover {
+    transform: translateY(-1px);
+  }
+  .l-plan__btn--blue:hover {
+    transform: translateY(-1px);
+  }
 }
 .l-pricing-note {
   font-size: 13px;
