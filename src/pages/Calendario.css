@@ -61,6 +61,9 @@
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #f0f0f0;
+  position: sticky;
+  top: 52px;
+  z-index: 99;
 }
 
 .cal-nav-btn {
@@ -196,7 +199,7 @@
 /* ── Day cell ────────────────────────────────────────────────────────────── */
 .cal-day {
   background: white;
-  min-height: 80px;
+  height: 80px;
   padding: 6px 4px 4px 4px;
   cursor: pointer;
   display: flex;
@@ -204,6 +207,7 @@
   gap: 2px;
   transition: background 0.1s;
   outline: none;
+  overflow: hidden;
 }
 
 .cal-day:hover,
@@ -657,7 +661,7 @@
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 360px) {
   .cal-day {
-    min-height: 62px;
+    height: 62px;
     padding: 4px 2px 2px 2px;
   }
   .cal-day-num {
@@ -674,7 +678,7 @@
 
 @media (min-width: 600px) {
   .cal-day {
-    min-height: 100px;
+    height: 100px;
     padding: 8px 6px 6px 6px;
   }
   .cal-chip {

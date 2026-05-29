@@ -1254,7 +1254,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
         {/* Calendario */}
         <button onClick={() => onNavigate && onNavigate('calendario')} style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-          background: 'none', border: 'none', cursor: 'pointer', padding: '8px 20px',
+          background: 'none', border: 'none', cursor: 'pointer', padding: '8px 16px',
           color: '#aaa',
         }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
