@@ -455,18 +455,6 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
                 <span style={{ fontWeight: 600, fontSize: '17px', color: '#111' }}>Propiedades</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <button
-                    onClick={() => onNavigate && onNavigate('calendario')}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
-                    aria-label="Calendario"
-                    title="Calendario"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
-                      <path d="M3 9h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                      <path d="M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                  </button>
-                  <button
                     onClick={handleAddProperty}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', color: '#555' }}
                   >
@@ -1261,6 +1249,20 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
             <path d="M9 21V12h6v9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
           <span style={{ fontSize: '10px', fontWeight: activeTab === 'properties' ? 600 : 400 }}>Propiedades</span>
+        </button>
+
+        {/* Calendario */}
+        <button onClick={() => onNavigate && onNavigate('calendario')} style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+          background: 'none', border: 'none', cursor: 'pointer', padding: '8px 20px',
+          color: '#aaa',
+        }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+            <path d="M3 9h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M8 2v4M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          <span style={{ fontSize: '10px', fontWeight: 400 }}>Calendario</span>
         </button>
 
         {/* Chat */}
