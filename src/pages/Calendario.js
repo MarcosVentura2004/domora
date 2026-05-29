@@ -13,51 +13,33 @@ const MONTH_NAMES_ES = [
 
 const DAY_NAMES_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-// Colors for derived (read-only) event types
-const EVENT_COLORS = {
-  payment:  '#16A34A', // green
-  expense:  '#EA580C', // orange
-  incident: '#DC2626', // red
-  contract: '#2563EB', // blue
-};
-
-// Palette offered in the manual-event color picker
-const COLOR_PALETTE = [
-  '#7C3AED', '#2563EB', '#0891B2',
-  '#059669', '#D97706', '#DC2626',
-];
-
-const DERIVED_TYPE_LABELS = {
-  payment:  'Pago',
-  expense:  'Gasto',
-  incident: 'Incidencia',
-  contract: 'Fin de contrato',
+// Colors per event type
+const C = {
+  realizados: '#16A34A',  // dark green
+  pendientes: '#22c55e',  // lighter green (same family)
+  incidencia: '#DC2626',  // red
+  recordatorio: '#D97706', // amber
 };
 
 // ---------------------------------------------------------------------------
-// Pure helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Returns an array of Date objects covering the full Mon–Sun weeks that
- * contain the first and last days of the given year/month (0-indexed).
- */
+/** Returns Mon-aligned grid days for the given year/month (0-indexed). */
 function getCalendarDays(year, month) {
   const firstDay = new Date(year, month, 1);
   const lastDay  = new Date(year, month + 1, 0);
 
-  // Offset to the Monday of the week containing the 1st
-  const firstDow = firstDay.getDay(); // 0 = Sun
-  const startOffset = firstDow === 0 ? 6 : firstDow - 1;
-  const start = new Date(year, month, 1 - startOffset);
+  const firstDow  = firstDay.getDay(); // 0=Sun
+  const startOff  = firstDow === 0 ? 6 : firstDow - 1;
+  const start     = new Date(year, month, 1 - startOff);
 
-  // Offset to the Sunday of the week containing the last day
   const lastDow = lastDay.getDay();
-  const endOffset = lastDow === 0 ? 0 : 7 - lastDow;
-  const end = new Date(year, month + 1, endOffset);
+  const endOff  = lastDow === 0 ? 0 : 7 - lastDow;
+  const end     = new Date(year, month + 1, endOff);
 
   const days = [];
-  const cur = new Date(start);
+  const cur  = new Date(start);
   while (cur <= end) {
     days.push(new Date(cur));
     cur.setDate(cur.getDate() + 1);
@@ -65,77 +47,15 @@ function getCalendarDays(year, month) {
   return days;
 }
 
-/**
- * Returns all Date objects within (year, month) when a recurring expense fires.
- * Handles one-time and recurring types; respects skipped_months and duration_payments.
- *
- * Assumptions:
- *  - expense.frequency: 'mensual' | 'trimestral' | 'anual' | 'custom' | 'unico' | 'manual'
- *  - expense.type:      'puntual' | 'recurrente' | 'recurrente_temporal'
- *  - expense.skipped_months: array of 'YYYY-MM' strings
- *  - expense.custom_frequency_months: number of months for 'custom' frequency
- *  - expense.duration_payments: max number of occurrences for 'recurrente_temporal'
- */
-function getExpenseDatesInMonth(expense, year, month) {
-  if (!expense.start_date) return [];
-  if (expense.active === false) return [];
-
-  const startDate = new Date(expense.start_date + 'T00:00:00');
-  const monthStart = new Date(year, month, 1);
-  const monthEnd   = new Date(year, month + 1, 0);
-
-  const freq = expense.frequency || 'mensual';
-  const type = expense.type || 'recurrente';
-
-  // One-time: only fires on start_date
-  if (type === 'puntual' || freq === 'unico' || freq === 'manual') {
-    if (startDate >= monthStart && startDate <= monthEnd) return [startDate];
-    return [];
-  }
-
-  // Determine step in months
-  let step = 1;
-  if (freq === 'trimestral') step = 3;
-  else if (freq === 'anual')  step = 12;
-  else if (freq === 'custom') step = parseInt(expense.custom_frequency_months) || 1;
-
-  const skipped = expense.skipped_months || [];
-
-  // Max occurrences limit for recurrente_temporal
-  const maxOccurrences =
-    type === 'recurrente_temporal' && expense.duration_payments
-      ? parseInt(expense.duration_payments)
-      : Infinity;
-
-  let cur = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-  let occurrenceCount = 1;
-
-  // Advance to the first occurrence >= monthStart
-  while (cur < monthStart) {
-    cur = new Date(cur.getFullYear(), cur.getMonth() + step, cur.getDate());
-    occurrenceCount++;
-    if (occurrenceCount > maxOccurrences) return [];
-  }
-
-  const dates = [];
-  while (cur <= monthEnd) {
-    if (occurrenceCount > maxOccurrences) break;
-    const ym = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`;
-    if (!skipped.includes(ym)) {
-      dates.push(new Date(cur));
-    }
-    cur = new Date(cur.getFullYear(), cur.getMonth() + step, cur.getDate());
-    occurrenceCount++;
-  }
-  return dates;
+/** Local YYYY-MM-DD string from a Date (no UTC shift). */
+function toLocalDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Format a Date as YYYY-MM-DD in local time */
-function toLocalDateStr(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+/** Format a number as Spanish currency string (e.g. "1.250 €"). */
+function formatEur(amount) {
+  if (amount == null || isNaN(amount)) return '';
+  return Number(amount).toLocaleString('es-ES', { maximumFractionDigits: 0 }) + ' €';
 }
 
 // ---------------------------------------------------------------------------
@@ -145,80 +65,77 @@ function toLocalDateStr(date) {
 export default function Calendario({ userEmail, onBack }) {
   const today = new Date();
 
-  // ── Navigation state ──────────────────────────────────────────────────────
+  // ── Month navigation ──────────────────────────────────────────────────────
   const [viewYear,  setViewYear]  = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
 
-  // ── Auth / landlord ───────────────────────────────────────────────────────
-  // landlordId stores auth.uid() which is used as landlord_id in calendar_events
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const [landlordId, setLandlordId] = useState(null);
 
-  // ── Data loading ──────────────────────────────────────────────────────────
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
-
-  // Derived (read-only) event lists
-  const [paymentEvents,  setPaymentEvents]  = useState([]);
-  const [expenseEvents,  setExpenseEvents]  = useState([]);
-  const [incidentEvents, setIncidentEvents] = useState([]);
-  const [contractEvents, setContractEvents] = useState([]);
-
-  // Manual events (calendar_events table)
-  const [manualEvents, setManualEvents] = useState([]);
-
-  // Properties list (for contract-end chips + modal selector)
-  const [properties, setProperties] = useState([]);
-
-  // ── Modal state ───────────────────────────────────────────────────────────
-  // modal: null | { mode: 'create', date: Date } | { mode: 'edit', event: {} }
-  const [modal,  setModal]  = useState(null);
-  const [form,   setForm]   = useState({ title: '', description: '', property_id: '', color: COLOR_PALETTE[0] });
-  const [saving, setSaving] = useState(false);
-
-  // ── Tooltip for derived events ────────────────────────────────────────────
-  // tooltip: null | { event: {} }
-  const [tooltip, setTooltip] = useState(null);
-
-  // ── Get auth user id ──────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setLandlordId(user.id);
     });
   }, []);
 
-  // ── Fetch derived events (payments, expenses, incidents, contracts) ────────
-  const fetchDerivedEvents = useCallback(async () => {
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const [filters, setFilters] = useState({
+    cobros: true,
+    realizados: true,
+    pendientes: true,
+    incidencias: true,
+    recordatorios: true,
+  });
+
+  const toggleFilter = (key) =>
+    setFilters(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
+  const [properties,     setProperties]     = useState([]);
+  // Aggregated payment events keyed by dateString
+  // Each entry: { type:'cobros_realizados'|'cobros_pendientes', date, count, total, payments:[] }
+  const [paymentEvents,  setPaymentEvents]  = useState([]);
+  // Individual incident events
+  const [incidentEvents, setIncidentEvents] = useState([]);
+  // Recordatorios from calendar_events table
+  const [recordatorios,  setRecordatorios]  = useState([]);
+
+  // ── UI state ──────────────────────────────────────────────────────────────
+  // selectedDay: shows day-detail bottom sheet
+  const [selectedDay, setSelectedDay] = useState(null);
+  // modal: null | { mode:'create', date:Date } | { mode:'edit', event:{} }
+  const [modal,  setModal]  = useState(null);
+  const [form,   setForm]   = useState({ title: '', description: '', property_id: '' });
+  const [saving, setSaving] = useState(false);
+
+  // ── Fetch derived data (payments + incidents) ─────────────────────────────
+  const fetchDerived = useCallback(async () => {
     if (!userEmail) return;
     setLoading(true);
     setError(null);
 
-    const monthStartStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
-    // Start of next month for open-ended filters
-    const nextMonthDate  = new Date(viewYear, viewMonth + 1, 1);
-    const nextMonthStr   = toLocalDateStr(nextMonthDate);
+    const monthStart    = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
+    const nextMonthDate = new Date(viewYear, viewMonth + 1, 1);
+    const nextMonthStr  = toLocalDate(nextMonthDate);
 
     try {
       const [
-        { data: propertiesData, error: propErr },
-        { data: payments,       error: payErr },
-        { data: inquilinos,     error: inqErr },
-        { data: expenses,       error: expErr },
-        { data: incidents,      error: incErr },
+        { data: propsData,    error: e1 },
+        { data: payments,     error: e2 },
+        { data: inquilinos,   error: e3 },
+        { data: incidents,    error: e4 },
       ] = await Promise.all([
-        // Properties (for contract-end dates + modal selector)
-        supabase
-          .from('properties')
-          .select('id, data')
-          .eq('landlord_email', userEmail),
+        supabase.from('properties').select('id, data').eq('landlord_email', userEmail),
 
-        // Payments for the current month
-        // Note: 'year' and 'month' columns store numeric values (e.g. 2026, 5)
+        // Fetch payments for this billing month
         supabase
           .from('payments')
-          .select('id, year, month, status, tenant_id, room_id, tenant_name, property_id, amount')
+          .select('id, year, month, status, tenant_id, room_id, tenant_name, property_id, amount, partial_amount, pending_amount, confirmed_at')
           .eq('landlord_email', userEmail)
           .eq('year',  viewYear)
-          .eq('month', viewMonth + 1), // month is 1-indexed in DB
+          .eq('month', viewMonth + 1),
 
         // Inquilinos to resolve payment_config.endDay per tenant
         supabase
@@ -226,176 +143,169 @@ export default function Calendario({ userEmail, onBack }) {
           .select('tenant_id, room_id, payment_config, tenant_name, property_name')
           .eq('landlord_email', userEmail),
 
-        // All expenses (date filtering done client-side for frequency logic)
-        supabase
-          .from('expenses')
-          .select('id, type, frequency, start_date, amount, description, active, property_id, custom_frequency_months, skipped_months, duration_payments')
-          .eq('landlord_email', userEmail),
-
-        // Incidents created this month
-        // Assumption: created_at is used as the incident date (no separate incident_date column found)
+        // Incidents created/updated this month
+        // Assumption: using created_at as the incident date (no separate incident_date column found)
         supabase
           .from('incidents')
           .select('id, description, status, created_at, property_id')
           .eq('landlord_email', userEmail)
-          .gte('created_at', monthStartStr)
+          .gte('created_at', monthStart)
           .lt('created_at',  nextMonthStr),
       ]);
 
-      if (propErr || payErr || inqErr || expErr || incErr) {
-        throw new Error('Error en una o más consultas');
-      }
+      if (e1 || e2 || e3 || e4) throw new Error('Error en una o más consultas');
 
-      // ── Properties (contract-end chips + modal) ──────────────────────────
-      const props = (propertiesData || []).map(r => r.data);
+      // ── Properties map ──────────────────────────────────────────────────
+      const props = (propsData || []).map(r => r.data);
       setProperties(props);
+      const propNameMap = {};
+      props.forEach(p => { if (p?.id) propNameMap[p.id] = p.name || ''; });
 
-      // ── Payments ─────────────────────────────────────────────────────────
-      // Build a lookup: tenant key → payment_config.endDay
-      // Key: room_id ? 'room_{room_id}' : 'tenant_{tenant_id}'
+      // ── Payments → aggregated per day ────────────────────────────────────
+      // Build inquilino lookup: key → payment_config
       const inqMap = {};
       (inquilinos || []).forEach(i => {
-        const key = i.room_id ? `room_${i.room_id}` : `tenant_${i.tenant_id}`;
-        inqMap[key] = i;
+        const k = i.room_id ? `room_${i.room_id}` : `tenant_${i.tenant_id}`;
+        inqMap[k] = i;
       });
 
       const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
-      const pEvents = (payments || []).map(p => {
-        const key = p.room_id ? `room_${p.room_id}` : `tenant_${p.tenant_id}`;
-        const inq  = inqMap[key];
-        // Use payment deadline day from payment_config; fallback to 5
+      // Group payments by (type, date)
+      const confirmedByDay = {}; // dateStr → [payment]
+      const pendingByDay   = {}; // dateStr → [payment]
+
+      (payments || []).forEach(p => {
+        if (p.status === 'rejected') return; // skip rejected
+
+        const inqKey = p.room_id ? `room_${p.room_id}` : `tenant_${p.tenant_id}`;
+        const inq    = inqMap[inqKey];
+        // Use payment deadline (endDay) as the display date for all payments.
+        // This groups all a month's cobros on the same deadline day,
+        // making it easy to see at a glance who has and hasn't paid.
         const endDay = Math.min(inq?.payment_config?.endDay || 5, daysInMonth);
-        const statusLabel =
-          p.status === 'confirmed' ? 'Confirmado' :
-          p.status === 'pending'   ? 'Pendiente' :
-          p.status === 'partial'   ? 'Parcial' :
-          p.status === 'rejected'  ? 'Rechazado' : p.status;
-        const name = p.tenant_name || inq?.tenant_name || '';
-        return {
-          id:     `payment_${p.id}`,
-          type:   'payment',
-          date:   new Date(viewYear, viewMonth, endDay),
-          label:  `Pago · ${name}`,
-          detail: `${statusLabel}${name ? ' · ' + name : ''}${inq?.property_name ? ' · ' + inq.property_name : ''}`,
-          color:  EVENT_COLORS.payment,
+        const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+
+        const enriched = {
+          ...p,
+          displayDate: dateStr,
+          tenant_name:  p.tenant_name || inq?.tenant_name || '',
+          propertyName: propNameMap[p.property_id] || inq?.property_name || '',
         };
+
+        if (p.status === 'confirmed') {
+          if (!confirmedByDay[dateStr]) confirmedByDay[dateStr] = [];
+          confirmedByDay[dateStr].push(enriched);
+        } else {
+          // pending or partial → goes into cobros_pendientes
+          if (!pendingByDay[dateStr]) pendingByDay[dateStr] = [];
+          pendingByDay[dateStr].push(enriched);
+        }
+      });
+
+      const pEvents = [];
+      Object.entries(confirmedByDay).forEach(([dateStr, list]) => {
+        const total = list.reduce((s, p) => s + (p.amount || 0), 0);
+        pEvents.push({
+          id:       `cobros_realizados_${dateStr}`,
+          type:     'cobros_realizados',
+          date:     new Date(dateStr + 'T00:00:00'),
+          count:    list.length,
+          total,
+          label:    `${list.length} ${list.length === 1 ? 'cobro' : 'cobros'} · ${formatEur(total)}`,
+          payments: list,
+        });
+      });
+      Object.entries(pendingByDay).forEach(([dateStr, list]) => {
+        // For pending/partial, use pending_amount if available, else amount
+        const total = list.reduce((s, p) => {
+          const due = p.status === 'partial' ? (p.pending_amount ?? p.amount ?? 0) : (p.amount ?? 0);
+          return s + due;
+        }, 0);
+        pEvents.push({
+          id:       `cobros_pendientes_${dateStr}`,
+          type:     'cobros_pendientes',
+          date:     new Date(dateStr + 'T00:00:00'),
+          count:    list.length,
+          total,
+          label:    `${list.length} pendiente${list.length > 1 ? 's' : ''} · ${formatEur(total)}`,
+          payments: list,
+        });
       });
       setPaymentEvents(pEvents);
 
-      // ── Expenses ──────────────────────────────────────────────────────────
-      const eEvents = [];
-      (expenses || []).forEach(exp => {
-        const dates = getExpenseDatesInMonth(exp, viewYear, viewMonth);
-        dates.forEach(d => {
-          eEvents.push({
-            id:     `expense_${exp.id}_${d.getTime()}`,
-            type:   'expense',
-            date:   d,
-            label:  exp.description || `Gasto ${exp.frequency || ''}`.trim(),
-            detail: `${exp.description || 'Gasto'}${exp.amount != null ? ' · ' + exp.amount + ' €' : ''}`,
-            color:  EVENT_COLORS.expense,
-          });
-        });
-      });
-      setExpenseEvents(eEvents);
-
       // ── Incidents ─────────────────────────────────────────────────────────
       const iEvents = (incidents || []).map(inc => ({
-        id:     `incident_${inc.id}`,
-        type:   'incident',
-        date:   new Date(inc.created_at),
-        label:  inc.description ? inc.description.substring(0, 28) : 'Incidencia',
-        detail: `${inc.description || 'Incidencia'} · ${inc.status === 'open' ? 'Abierta' : 'Resuelta'}`,
-        color:  EVENT_COLORS.incident,
+        id:          `incidencia_${inc.id}`,
+        type:        'incidencia',
+        date:        new Date(inc.created_at),
+        label:       (inc.description || 'Incidencia').substring(0, 35),
+        description: inc.description || '',
+        status:      inc.status || 'open',
+        property_id: inc.property_id,
+        propertyName: propNameMap[inc.property_id] || '',
       }));
       setIncidentEvents(iEvents);
-
-      // ── Contract ends ─────────────────────────────────────────────────────
-      // contractEnd is stored in the property's JSON data column
-      // Only 'alquilado' properties are checked (por_habitaciones rooms don't
-      // expose a room-level contractEnd in the current schema)
-      const cEvents = [];
-      props.forEach(prop => {
-        if (!prop.contractEnd) return;
-        const d = new Date(prop.contractEnd + 'T00:00:00');
-        if (d.getFullYear() === viewYear && d.getMonth() === viewMonth) {
-          cEvents.push({
-            id:     `contract_${prop.id}`,
-            type:   'contract',
-            date:   d,
-            label:  `Fin contrato · ${prop.name || ''}`,
-            detail: `Fin de contrato de ${prop.name || 'propiedad'} el ${d.toLocaleDateString('es-ES')}`,
-            color:  EVENT_COLORS.contract,
-          });
-        }
-      });
-      setContractEvents(cEvents);
 
     } catch (err) {
       console.error('[Calendario] Error cargando datos:', err);
       setError('No se pudieron cargar los datos del calendario.');
     }
-
     setLoading(false);
   }, [userEmail, viewYear, viewMonth]);
 
-  // ── Fetch manual events (calendar_events table) ───────────────────────────
-  const fetchManualEvents = useCallback(async () => {
+  // ── Fetch recordatorios (calendar_events table) ───────────────────────────
+  const fetchRecordatorios = useCallback(async () => {
     if (!landlordId) return;
-    const monthStartStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
-    const monthEndStr   = toLocalDateStr(new Date(viewYear, viewMonth + 1, 0));
+    const monthStart = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`;
+    const monthEnd   = toLocalDate(new Date(viewYear, viewMonth + 1, 0));
 
     const { data, error: err } = await supabase
       .from('calendar_events')
       .select('*')
       .eq('landlord_id', landlordId)
-      .gte('event_date', monthStartStr)
-      .lte('event_date', monthEndStr);
+      .gte('event_date', monthStart)
+      .lte('event_date', monthEnd);
 
     if (err) {
-      console.error('[Calendario] Error cargando eventos manuales:', err);
+      console.error('[Calendario] Error cargando recordatorios:', err);
       return;
     }
 
-    setManualEvents(
+    const propNameMap = {};
+    properties.forEach(p => { if (p?.id) propNameMap[p.id] = p.name || ''; });
+
+    setRecordatorios(
       (data || []).map(e => ({
         ...e,
-        type:   'manual',
-        date:   new Date(e.event_date + 'T00:00:00'),
-        label:  e.title,
-        detail: e.description || '',
-        color:  e.color || COLOR_PALETTE[0],
+        type:        'recordatorio',
+        date:        new Date(e.event_date + 'T00:00:00'),
+        label:       e.title,
+        propertyName: propNameMap[e.property_id] || '',
       }))
     );
-  }, [landlordId, viewYear, viewMonth]);
+  }, [landlordId, viewYear, viewMonth, properties]);
 
-  useEffect(() => { fetchDerivedEvents(); }, [fetchDerivedEvents]);
-  useEffect(() => { fetchManualEvents();  }, [fetchManualEvents]);
+  useEffect(() => { fetchDerived(); },        [fetchDerived]);
+  useEffect(() => { fetchRecordatorios(); },  [fetchRecordatorios]);
 
-  // ── Month navigation ──────────────────────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────────────────────
   const prevMonth = () => {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
     else setViewMonth(m => m - 1);
   };
-
   const nextMonth = () => {
     if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
     else setViewMonth(m => m + 1);
   };
+  const goToday = () => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); };
 
-  const goToday = () => {
-    setViewYear(today.getFullYear());
-    setViewMonth(today.getMonth());
-  };
-
-  // ── Build event map keyed by day ──────────────────────────────────────────
+  // ── Build events-by-day map (filtered) ───────────────────────────────────
   const allEvents = [
-    ...paymentEvents,
-    ...expenseEvents,
-    ...incidentEvents,
-    ...contractEvents,
-    ...manualEvents,
+    ...(filters.cobros && filters.realizados ? paymentEvents.filter(e => e.type === 'cobros_realizados') : []),
+    ...(filters.cobros && filters.pendientes ? paymentEvents.filter(e => e.type === 'cobros_pendientes') : []),
+    ...(filters.incidencias ? incidentEvents : []),
+    ...(filters.recordatorios ? recordatorios : []),
   ];
 
   const eventsByDay = {};
@@ -407,25 +317,29 @@ export default function Calendario({ userEmail, onBack }) {
 
   const calDays = getCalendarDays(viewYear, viewMonth);
 
-  // ── Modal helpers ─────────────────────────────────────────────────────────
-  const openCreateModal = (date) => {
-    setForm({ title: '', description: '', property_id: '', color: COLOR_PALETTE[0] });
-    setModal({ mode: 'create', date });
-    setTooltip(null);
+  // ── Day detail helpers ────────────────────────────────────────────────────
+  const openDayDetail = (day) => {
+    setSelectedDay(day);
   };
 
-  const openEditModal = (event) => {
+  // ── Recordatorio modal helpers ────────────────────────────────────────────
+  const openCreateReminder = (day) => {
+    setSelectedDay(null);
+    setForm({ title: '', description: '', property_id: '' });
+    setModal({ mode: 'create', date: day });
+  };
+
+  const openEditReminder = (event) => {
+    setSelectedDay(null);
     setForm({
-      title:       event.title  || event.label || '',
+      title:       event.title || event.label || '',
       description: event.description || '',
-      property_id: event.property_id  || '',
-      color:       event.color || COLOR_PALETTE[0],
+      property_id: event.property_id || '',
     });
     setModal({ mode: 'edit', event });
-    setTooltip(null);
   };
 
-  const handleSaveEvent = async () => {
+  const handleSave = async () => {
     if (!form.title.trim() || !landlordId) return;
     setSaving(true);
 
@@ -435,12 +349,12 @@ export default function Calendario({ userEmail, onBack }) {
         property_id:  form.property_id || null,
         title:        form.title.trim(),
         description:  form.description.trim() || null,
-        event_date:   toLocalDateStr(modal.date),
-        event_type:   'manual',
-        color:        form.color,
+        event_date:   toLocalDate(modal.date),
+        event_type:   'recordatorio',
+        color:        C.recordatorio,
       });
-      if (err) console.error('[Calendario] Error al crear evento:', err);
-      else { await fetchManualEvents(); setModal(null); }
+      if (err) console.error('[Calendario] Error al crear recordatorio:', err);
+      else { await fetchRecordatorios(); setModal(null); }
     } else if (modal.mode === 'edit') {
       const { error: err } = await supabase
         .from('calendar_events')
@@ -448,33 +362,41 @@ export default function Calendario({ userEmail, onBack }) {
           title:       form.title.trim(),
           description: form.description.trim() || null,
           property_id: form.property_id || null,
-          color:       form.color,
         })
         .eq('id', modal.event.id);
-      if (err) console.error('[Calendario] Error al editar evento:', err);
-      else { await fetchManualEvents(); setModal(null); }
+      if (err) console.error('[Calendario] Error al editar recordatorio:', err);
+      else { await fetchRecordatorios(); setModal(null); }
     }
-
     setSaving(false);
   };
 
-  const handleDeleteEvent = async () => {
+  const handleDelete = async () => {
     if (!modal?.event?.id) return;
-    if (!window.confirm('¿Eliminar este evento?')) return;
-    const { error: err } = await supabase
-      .from('calendar_events')
-      .delete()
-      .eq('id', modal.event.id);
-    if (err) console.error('[Calendario] Error al eliminar evento:', err);
-    else { await fetchManualEvents(); setModal(null); }
+    if (!window.confirm('¿Eliminar este recordatorio?')) return;
+    await supabase.from('calendar_events').delete().eq('id', modal.event.id);
+    await fetchRecordatorios();
+    setModal(null);
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  const monthTitle = (() => {
-    const name = MONTH_NAMES_ES[viewMonth];
-    return `${name.charAt(0).toUpperCase() + name.slice(1)} ${viewYear}`;
-  })();
+  // ── Chip ordering within a day cell ──────────────────────────────────────
+  // Priority: incidencias > recordatorios > cobros pendientes > cobros realizados
+  function sortedChips(events) {
+    const order = { incidencia: 0, recordatorio: 1, cobros_pendientes: 2, cobros_realizados: 3 };
+    return [...events].sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9));
+  }
 
+  // ── Month title ───────────────────────────────────────────────────────────
+  const monthTitle = `${MONTH_NAMES_ES[viewMonth]} ${viewYear}`;
+
+  // ── Day detail events (expanded, individual payments) ─────────────────────
+  const dayDetailEvents = selectedDay ? (eventsByDay[selectedDay.toDateString()] || []) : [];
+  const detailIncidencias    = dayDetailEvents.filter(e => e.type === 'incidencia');
+  const detailRecordatorios  = dayDetailEvents.filter(e => e.type === 'recordatorio');
+  const detailRealizados     = dayDetailEvents.find(e => e.type === 'cobros_realizados');
+  const detailPendientes     = dayDetailEvents.find(e => e.type === 'cobros_pendientes');
+  const totalDayEvents       = dayDetailEvents.length;
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="cal-container">
 
@@ -507,24 +429,52 @@ export default function Calendario({ userEmail, onBack }) {
         </button>
       </div>
 
-      {/* ── Leyenda de colores ────────────────────────────────────────────── */}
-      <div className="cal-legend">
-        <span className="cal-legend-item">
-          <span className="cal-legend-dot" style={{ background: EVENT_COLORS.payment }} />
-          Pagos
-        </span>
-        <span className="cal-legend-item">
-          <span className="cal-legend-dot" style={{ background: EVENT_COLORS.expense }} />
-          Gastos
-        </span>
-        <span className="cal-legend-item">
-          <span className="cal-legend-dot" style={{ background: EVENT_COLORS.incident }} />
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="cal-filters">
+        {/* Cobros master toggle */}
+        <button
+          className={`cal-filter-pill ${filters.cobros ? 'cal-filter-pill--cobros-active' : ''}`}
+          onClick={() => toggleFilter('cobros')}
+        >
+          <span className="cal-filter-dot" style={{ background: C.realizados }} />
+          Cobros
+        </button>
+
+        {/* Sub-filters: only visible when cobros is active */}
+        {filters.cobros && (
+          <>
+            <button
+              className={`cal-filter-pill cal-filter-pill--sub ${filters.realizados ? 'cal-filter-pill--realizados-active' : ''}`}
+              onClick={() => toggleFilter('realizados')}
+            >
+              Realizados
+            </button>
+            <button
+              className={`cal-filter-pill cal-filter-pill--sub ${filters.pendientes ? 'cal-filter-pill--pendientes-active' : ''}`}
+              onClick={() => toggleFilter('pendientes')}
+            >
+              Pendientes
+            </button>
+          </>
+        )}
+
+        <div className="cal-filter-sep" />
+
+        <button
+          className={`cal-filter-pill ${filters.incidencias ? 'cal-filter-pill--incidencias-active' : ''}`}
+          onClick={() => toggleFilter('incidencias')}
+        >
+          <span className="cal-filter-dot" style={{ background: C.incidencia }} />
           Incidencias
-        </span>
-        <span className="cal-legend-item">
-          <span className="cal-legend-dot" style={{ background: EVENT_COLORS.contract }} />
-          Contratos
-        </span>
+        </button>
+
+        <button
+          className={`cal-filter-pill ${filters.recordatorios ? 'cal-filter-pill--recordatorios-active' : ''}`}
+          onClick={() => toggleFilter('recordatorios')}
+        >
+          <span className="cal-filter-dot" style={{ background: C.recordatorio }} />
+          Recordatorios
+        </button>
       </div>
 
       {/* ── Weekday headers ───────────────────────────────────────────────── */}
@@ -534,7 +484,7 @@ export default function Calendario({ userEmail, onBack }) {
         ))}
       </div>
 
-      {/* ── Calendar grid ────────────────────────────────────────────────── */}
+      {/* ── Calendar grid ─────────────────────────────────────────────────── */}
       {loading ? (
         <div className="cal-status">Cargando...</div>
       ) : error ? (
@@ -544,10 +494,10 @@ export default function Calendario({ userEmail, onBack }) {
           {calDays.map(day => {
             const isCurrentMonth = day.getMonth() === viewMonth;
             const isToday        = day.toDateString() === today.toDateString();
-            const dayEvents      = eventsByDay[day.toDateString()] || [];
-            // Show max 3 chips; "+N" for the rest
-            const visibleEvents  = dayEvents.slice(0, 3);
-            const overflow       = dayEvents.length - visibleEvents.length;
+            const dayEvts        = sortedChips(eventsByDay[day.toDateString()] || []);
+            const MAX_CHIPS      = 3;
+            const visible        = dayEvts.slice(0, MAX_CHIPS);
+            const overflow       = dayEvts.length - visible.length;
 
             return (
               <div
@@ -555,30 +505,32 @@ export default function Calendario({ userEmail, onBack }) {
                 className={[
                   'cal-day',
                   isCurrentMonth ? '' : 'cal-day--other',
-                  isToday        ? 'cal-day--today' : '',
+                  isToday ? 'cal-day--today' : '',
                 ].join(' ').trim()}
-                onClick={() => isCurrentMonth && openCreateModal(day)}
-                role="button"
+                onClick={() => isCurrentMonth && openDayDetail(day)}
+                role={isCurrentMonth ? 'button' : undefined}
                 tabIndex={isCurrentMonth ? 0 : -1}
-                onKeyDown={e => e.key === 'Enter' && isCurrentMonth && openCreateModal(day)}
-                aria-label={`${day.getDate()} ${MONTH_NAMES_ES[day.getMonth()]} ${day.getFullYear()}`}
+                onKeyDown={e => e.key === 'Enter' && isCurrentMonth && openDayDetail(day)}
+                aria-label={
+                  isCurrentMonth
+                    ? `${day.getDate()} de ${MONTH_NAMES_ES[day.getMonth()]}${dayEvts.length > 0 ? ', ' + dayEvts.length + ' eventos' : ''}`
+                    : undefined
+                }
               >
                 <span className="cal-day-num">{day.getDate()}</span>
                 <div className="cal-day-events">
-                  {visibleEvents.map(ev => (
-                    <button
+                  {visible.map(ev => (
+                    <div
                       key={ev.id}
                       className="cal-chip"
-                      style={{ background: ev.color }}
-                      onClick={e => {
-                        e.stopPropagation();
-                        if (ev.type === 'manual') openEditModal(ev);
-                        else setTooltip(prev => prev?.event?.id === ev.id ? null : { event: ev });
-                      }}
-                      title={ev.label}
+                      style={
+                        ev.type === 'cobros_pendientes'
+                          ? { background: '#dcfce7', color: '#166534' }
+                          : { background: ev.type === 'cobros_realizados' ? C.realizados : ev.type === 'incidencia' ? C.incidencia : C.recordatorio, color: 'white' }
+                      }
                     >
                       {ev.label}
-                    </button>
+                    </div>
                   ))}
                   {overflow > 0 && (
                     <span className="cal-chip-overflow">+{overflow} más</span>
@@ -590,55 +542,185 @@ export default function Calendario({ userEmail, onBack }) {
         </div>
       )}
 
-      {/* ── Tooltip for derived (read-only) events ────────────────────────── */}
-      {tooltip && (
+      {/* ── Day detail panel ──────────────────────────────────────────────── */}
+      {selectedDay && (
         <div
           className="cal-overlay"
-          onClick={() => setTooltip(null)}
+          onClick={() => setSelectedDay(null)}
           role="dialog"
           aria-modal="true"
-          aria-label="Detalle del evento"
         >
-          <div className="cal-tooltip" onClick={e => e.stopPropagation()}>
-            <div
-              className="cal-tooltip-header"
-              style={{ borderLeft: `4px solid ${tooltip.event.color}` }}
-            >
-              <span className="cal-tooltip-type">
-                {DERIVED_TYPE_LABELS[tooltip.event.type] || tooltip.event.type}
-              </span>
-              <button
-                className="cal-tooltip-close"
-                onClick={() => setTooltip(null)}
-                aria-label="Cerrar"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2"
-                    strokeLinecap="round"/>
-                </svg>
-              </button>
+          <div className="cal-panel" onClick={e => e.stopPropagation()}>
+            {/* Panel header */}
+            <div className="cal-panel-header">
+              <div className="cal-panel-header-left">
+                <span className="cal-panel-date">
+                  {selectedDay.toLocaleDateString('es-ES', {
+                    weekday: 'long', day: 'numeric', month: 'long',
+                  })}
+                </span>
+              </div>
+              <div className="cal-panel-header-right">
+                <button
+                  className="cal-panel-add-btn"
+                  onClick={() => openCreateReminder(selectedDay)}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5"
+                      strokeLinecap="round"/>
+                  </svg>
+                  Recordatorio
+                </button>
+                <button
+                  className="cal-panel-close"
+                  onClick={() => setSelectedDay(null)}
+                  aria-label="Cerrar"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2"
+                      strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <p className="cal-tooltip-label">{tooltip.event.label}</p>
-            {tooltip.event.detail && (
-              <p className="cal-tooltip-detail">{tooltip.event.detail}</p>
-            )}
+
+            {/* Panel body */}
+            <div className="cal-panel-body">
+              {totalDayEvents === 0 && (
+                <p className="cal-panel-empty">Sin eventos este día</p>
+              )}
+
+              {/* Incidencias */}
+              {detailIncidencias.length > 0 && (
+                <div className="cal-panel-section">
+                  <span className="cal-panel-section-label" style={{ color: C.incidencia }}>
+                    Incidencias
+                  </span>
+                  {detailIncidencias.map(ev => (
+                    <div key={ev.id} className="cal-detail-row">
+                      <span className="cal-detail-dot" style={{ background: C.incidencia }} />
+                      <div className="cal-detail-info">
+                        <span className="cal-detail-title">{ev.description || 'Incidencia'}</span>
+                        {ev.propertyName && (
+                          <span className="cal-detail-sub">{ev.propertyName}</span>
+                        )}
+                        <span
+                          className="cal-detail-badge"
+                          style={{
+                            background: ev.status === 'open' ? '#fef2f2' : '#f0fdf4',
+                            color: ev.status === 'open' ? '#DC2626' : '#16A34A',
+                          }}
+                        >
+                          {ev.status === 'open' ? 'Abierta' : 'Resuelta'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recordatorios */}
+              {detailRecordatorios.length > 0 && (
+                <div className="cal-panel-section">
+                  <span className="cal-panel-section-label" style={{ color: C.recordatorio }}>
+                    Recordatorios
+                  </span>
+                  {detailRecordatorios.map(ev => (
+                    <button
+                      key={ev.id}
+                      className="cal-detail-row cal-detail-row--clickable"
+                      onClick={() => openEditReminder(ev)}
+                    >
+                      <span className="cal-detail-dot" style={{ background: C.recordatorio }} />
+                      <div className="cal-detail-info">
+                        <span className="cal-detail-title">{ev.title || ev.label}</span>
+                        {ev.propertyName && (
+                          <span className="cal-detail-sub">{ev.propertyName}</span>
+                        )}
+                        {ev.description && (
+                          <span className="cal-detail-sub">{ev.description}</span>
+                        )}
+                      </div>
+                      <svg className="cal-detail-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2"
+                          strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Cobros realizados */}
+              {detailRealizados && (
+                <div className="cal-panel-section">
+                  <span className="cal-panel-section-label" style={{ color: C.realizados }}>
+                    Cobros realizados · {formatEur(detailRealizados.total)}
+                  </span>
+                  {detailRealizados.payments.map(p => (
+                    <div key={p.id} className="cal-detail-row">
+                      <span className="cal-detail-dot" style={{ background: C.realizados }} />
+                      <div className="cal-detail-info">
+                        <span className="cal-detail-title">
+                          Cobro recibido · {p.tenant_name} · {formatEur(p.amount)}
+                        </span>
+                        {p.propertyName && (
+                          <span className="cal-detail-sub">{p.propertyName}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Cobros pendientes */}
+              {detailPendientes && (
+                <div className="cal-panel-section">
+                  <span className="cal-panel-section-label" style={{ color: '#166534' }}>
+                    Cobros pendientes · {formatEur(detailPendientes.total)}
+                  </span>
+                  {detailPendientes.payments.map(p => {
+                    const due = p.status === 'partial'
+                      ? (p.pending_amount ?? p.amount ?? 0)
+                      : (p.amount ?? 0);
+                    return (
+                      <div key={p.id} className="cal-detail-row">
+                        <span className="cal-detail-dot" style={{ background: C.pendientes }} />
+                        <div className="cal-detail-info">
+                          <span className="cal-detail-title">
+                            {p.status === 'partial' ? 'Pago parcial' : 'Cobro pendiente'} · {p.tenant_name} · {formatEur(due)}
+                          </span>
+                          {p.propertyName && (
+                            <span className="cal-detail-sub">{p.propertyName}</span>
+                          )}
+                          {p.status === 'partial' && p.partial_amount != null && (
+                            <span className="cal-detail-sub">
+                              Recibido: {formatEur(p.partial_amount)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal: crear / editar evento manual ──────────────────────────── */}
-      {modal && (modal.mode === 'create' || modal.mode === 'edit') && (
+      {/* ── Modal: crear / editar recordatorio ───────────────────────────── */}
+      {modal && (
         <div
           className="cal-overlay"
           onClick={() => setModal(null)}
           role="dialog"
           aria-modal="true"
-          aria-label={modal.mode === 'create' ? 'Nuevo evento' : 'Editar evento'}
+          aria-label={modal.mode === 'create' ? 'Nuevo recordatorio' : 'Editar recordatorio'}
         >
           <div className="cal-modal" onClick={e => e.stopPropagation()}>
             <div className="cal-modal-header">
               <h3 className="cal-modal-title">
-                {modal.mode === 'create' ? 'Nuevo evento' : 'Editar evento'}
+                {modal.mode === 'create' ? 'Nuevo recordatorio' : 'Editar recordatorio'}
               </h3>
               <button
                 className="cal-modal-close"
@@ -665,7 +747,7 @@ export default function Calendario({ userEmail, onBack }) {
               <input
                 className="cal-input"
                 type="text"
-                placeholder="Nombre del evento"
+                placeholder="¿Qué hay que recordar?"
                 value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 autoFocus
@@ -677,7 +759,7 @@ export default function Calendario({ userEmail, onBack }) {
               <label className="cal-label">Descripción</label>
               <textarea
                 className="cal-textarea"
-                placeholder="Notas opcionales..."
+                placeholder="Notas adicionales..."
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 rows={3}
@@ -692,48 +774,26 @@ export default function Calendario({ userEmail, onBack }) {
                 value={form.property_id}
                 onChange={e => setForm(f => ({ ...f, property_id: e.target.value }))}
               >
-                <option value="">Todas las propiedades</option>
+                <option value="">Sin propiedad asociada</option>
                 {properties.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
 
-            <div className="cal-form-group">
-              <label className="cal-label">Color</label>
-              <div className="cal-color-picker">
-                {COLOR_PALETTE.map(c => (
-                  <button
-                    key={c}
-                    type="button"
-                    className={`cal-swatch ${form.color === c ? 'cal-swatch--active' : ''}`}
-                    style={{ background: c }}
-                    onClick={() => setForm(f => ({ ...f, color: c }))}
-                    aria-label={`Color ${c}`}
-                  />
-                ))}
-              </div>
-            </div>
-
             <div className="cal-modal-actions">
               {modal.mode === 'edit' && (
-                <button
-                  className="cal-btn cal-btn--delete"
-                  onClick={handleDeleteEvent}
-                >
+                <button className="cal-btn cal-btn--delete" onClick={handleDelete}>
                   Eliminar
                 </button>
               )}
               <div className="cal-modal-actions-right">
-                <button
-                  className="cal-btn cal-btn--secondary"
-                  onClick={() => setModal(null)}
-                >
+                <button className="cal-btn cal-btn--secondary" onClick={() => setModal(null)}>
                   Cancelar
                 </button>
                 <button
                   className="cal-btn cal-btn--primary"
-                  onClick={handleSaveEvent}
+                  onClick={handleSave}
                   disabled={!form.title.trim() || saving}
                 >
                   {saving ? 'Guardando...' : 'Guardar'}
