@@ -43,6 +43,7 @@ export default function GestorInviteLandlord({ onAccepted }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -130,11 +131,35 @@ export default function GestorInviteLandlord({ onAccepted }) {
     setAuthLoading(false);
     if (signUpError) { setError(signUpError.message); return; }
     if (!data.session) {
-      setError('Revisa tu correo para confirmar la cuenta y luego inicia sesion aqui.');
-      setAuthMode('login'); setPassword(''); setConfirmPassword('');
+      setOtp('');
+      setAuthMode('verify-email');
       return;
     }
     await afterAuth(data.user, gestor);
+  };
+
+  const handleVerifyEmail = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true); setError('');
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: 'email',
+    });
+    setAuthLoading(false);
+    if (verifyError) {
+      setError('Código incorrecto o expirado. Inténtalo de nuevo.');
+      return;
+    }
+    await afterAuth(data.user, gestor);
+  };
+
+  const handleResendOtp = async () => {
+    setError('');
+    const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+    if (resendError) {
+      setError(`No se pudo reenviar el código: ${resendError.message}`);
+    }
   };
 
   const handleConfirmAccess = async () => {
@@ -343,24 +368,26 @@ export default function GestorInviteLandlord({ onAccepted }) {
 
         {error && <p className="auth-error">{error}</p>}
 
-        <div className="register-tabs" style={{ marginBottom: 24 }}>
-          <button
-            type="button"
-            className={`register-tab${authMode === 'login' ? ' active' : ''}`}
-            onClick={() => { setError(''); setAuthMode('login'); }}
-          >
-            Iniciar sesion
-          </button>
-          <button
-            type="button"
-            className={`register-tab${authMode === 'register' ? ' active' : ''}`}
-            onClick={() => { setError(''); setAuthMode('register'); }}
-          >
-            Crear cuenta
-          </button>
-        </div>
+        {authMode !== 'verify-email' && (
+          <div className="register-tabs" style={{ marginBottom: 24 }}>
+            <button
+              type="button"
+              className={`register-tab${authMode === 'login' ? ' active' : ''}`}
+              onClick={() => { setError(''); setAuthMode('login'); }}
+            >
+              Iniciar sesion
+            </button>
+            <button
+              type="button"
+              className={`register-tab${authMode === 'register' ? ' active' : ''}`}
+              onClick={() => { setError(''); setAuthMode('register'); }}
+            >
+              Crear cuenta
+            </button>
+          </div>
+        )}
 
-        {authMode === 'login' ? (
+        {authMode === 'login' && (
           <form onSubmit={handleLogin}>
             <input type="email" className="auth-input" placeholder="correo@ejemplo.com"
               value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
@@ -370,7 +397,9 @@ export default function GestorInviteLandlord({ onAccepted }) {
               {authLoading ? 'Entrando…' : 'Iniciar sesion'}
             </button>
           </form>
-        ) : (
+        )}
+
+        {authMode === 'register' && (
           <form onSubmit={handleRegister}>
             <input type="email" className="auth-input" placeholder="correo@ejemplo.com"
               value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
@@ -382,6 +411,34 @@ export default function GestorInviteLandlord({ onAccepted }) {
               {authLoading ? 'Creando cuenta…' : 'Crear cuenta'}
             </button>
           </form>
+        )}
+
+        {authMode === 'verify-email' && (
+          <>
+            <h2>Verifica tu correo</h2>
+            <p className="auth-subtitle">
+              Hemos enviado un código de 6 dígitos a <strong>{email}</strong>
+            </p>
+            <form onSubmit={handleVerifyEmail}>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="auth-input verification-input"
+                placeholder="123456"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength="6"
+                required
+                autoFocus
+              />
+              <button type="submit" className="continue-button" disabled={authLoading || otp.length < 6}>
+                {authLoading ? 'Verificando…' : 'Verificar y continuar'}
+              </button>
+            </form>
+            <button className="resend-button" onClick={handleResendOtp}>
+              Reenviar código
+            </button>
+          </>
         )}
       </div>
     </div></div>

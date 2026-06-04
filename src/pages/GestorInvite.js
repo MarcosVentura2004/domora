@@ -14,6 +14,7 @@ function GestorInvite({ onAccepted }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -103,14 +104,36 @@ function GestorInvite({ onAccepted }) {
     setLoading(false);
     if (signUpError) { setError(signUpError.message); return; }
     if (!data.session) {
-      // Supabase requiere confirmación de email antes de tener sesión
-      setError('Revisa tu correo para confirmar la cuenta y luego inicia sesion aqui para aceptar la invitacion.');
-      setAuthMode('login');
-      setPassword('');
-      setConfirmPassword('');
+      setOtp('');
+      setAuthMode('verify-email');
       return;
     }
     await acceptInvite(data.user);
+  };
+
+  const handleVerifyEmail = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: 'email',
+    });
+    setLoading(false);
+    if (verifyError) {
+      setError('Código incorrecto o expirado. Inténtalo de nuevo.');
+      return;
+    }
+    await acceptInvite(data.user);
+  };
+
+  const handleResendOtp = async () => {
+    setError('');
+    const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+    if (resendError) {
+      setError(`No se pudo reenviar el código: ${resendError.message}`);
+    }
   };
 
   // ── Pantallas de estado ──
@@ -276,25 +299,27 @@ function GestorInvite({ onAccepted }) {
             </>
           ) : (
             <>
-              {/* Tabs login / registro */}
-              <div className="register-tabs" style={{ marginBottom: 24 }}>
-                <button
-                  type="button"
-                  className={`register-tab${authMode === 'login' ? ' active' : ''}`}
-                  onClick={() => { setError(''); setAuthMode('login'); }}
-                >
-                  Iniciar sesion
-                </button>
-                <button
-                  type="button"
-                  className={`register-tab${authMode === 'register' ? ' active' : ''}`}
-                  onClick={() => { setError(''); setAuthMode('register'); }}
-                >
-                  Crear cuenta
-                </button>
-              </div>
+              {/* Tabs login / registro — ocultos durante verificación */}
+              {authMode !== 'verify-email' && (
+                <div className="register-tabs" style={{ marginBottom: 24 }}>
+                  <button
+                    type="button"
+                    className={`register-tab${authMode === 'login' ? ' active' : ''}`}
+                    onClick={() => { setError(''); setAuthMode('login'); }}
+                  >
+                    Iniciar sesion
+                  </button>
+                  <button
+                    type="button"
+                    className={`register-tab${authMode === 'register' ? ' active' : ''}`}
+                    onClick={() => { setError(''); setAuthMode('register'); }}
+                  >
+                    Crear cuenta
+                  </button>
+                </div>
+              )}
 
-              {authMode === 'login' ? (
+              {authMode === 'login' && (
                 <form onSubmit={handleLogin}>
                   <input
                     type="email"
@@ -317,7 +342,9 @@ function GestorInvite({ onAccepted }) {
                     {loading ? 'Entrando…' : 'Iniciar sesion y aceptar'}
                   </button>
                 </form>
-              ) : (
+              )}
+
+              {authMode === 'register' && (
                 <form onSubmit={handleRegister}>
                   <input
                     type="email"
@@ -350,6 +377,34 @@ function GestorInvite({ onAccepted }) {
                     {loading ? 'Creando cuenta…' : 'Crear cuenta y aceptar'}
                   </button>
                 </form>
+              )}
+
+              {authMode === 'verify-email' && (
+                <>
+                  <h2>Verifica tu correo</h2>
+                  <p className="auth-subtitle">
+                    Hemos enviado un código de 6 dígitos a <strong>{email}</strong>
+                  </p>
+                  <form onSubmit={handleVerifyEmail}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="auth-input verification-input"
+                      placeholder="123456"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      maxLength="6"
+                      required
+                      autoFocus
+                    />
+                    <button type="submit" className="continue-button" disabled={loading || otp.length < 6}>
+                      {loading ? 'Verificando…' : 'Verificar y aceptar invitacion'}
+                    </button>
+                  </form>
+                  <button className="resend-button" onClick={handleResendOtp}>
+                    Reenviar código
+                  </button>
+                </>
               )}
             </>
           )}

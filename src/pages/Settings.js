@@ -208,7 +208,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         setInviteLink('');
         setInviteLinkCopied(false);
         loadGestores();
-      }, 1800);
+      }, 3500);
     } catch (err) {
       setInviteError('Error al enviar la invitacion. Intentalo de nuevo.');
     } finally {
