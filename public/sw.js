@@ -1,9 +1,9 @@
-const CACHE_NAME = 'domio-shell-v1';
+const CACHE_NAME = 'domio-shell-v2';
 const OFFLINE_URL = '/offline.html';
 
-// App shell files to cache on install
+// Do NOT cache '/' (index.html) — it must always be fetched fresh so new
+// deployments are picked up immediately.
 const SHELL_ASSETS = [
-  '/',
   '/offline.html',
   '/manifest.json',
   '/favicon.ico',

@@ -173,7 +173,7 @@ function getGestorTenants(properties, accessMap) {
 }
 
 // ── Componente principal ───────────────────────────────────────────────────
-export default function GestorDashboard({ userEmail, onLogout }) {
+export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
   const [gestorName, setGestorName] = useState('');
   const [accessMap, setAccessMap] = useState({}); // { [property_id]: { permisos, landlordEmail, canMessage } }
   const [properties, setProperties] = useState([]);
@@ -554,7 +554,7 @@ export default function GestorDashboard({ userEmail, onLogout }) {
           overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch',
         }}>
           <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} hideHeader={true} chatHideAvatar={true} />
+            <Dashboard userEmail={userEmail} onLogout={onLogout} onSwitchRole={() => {}} hideHeader={true} chatHideAvatar={true} onNavigate={onNavigate} />
           </div>
         </div>
       </div>

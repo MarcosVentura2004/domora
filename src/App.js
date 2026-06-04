@@ -301,6 +301,7 @@ function App() {
         <GestorDashboard
           userEmail={userEmail}
           onLogout={handleLogout}
+          onNavigate={(page) => setPage(page)}
         />
       )}
 
