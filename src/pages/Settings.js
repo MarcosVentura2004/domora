@@ -75,6 +75,13 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [configLoading, setConfigLoading] = useState(false);
   const [configError, setConfigError] = useState('');
 
+  // ── Clientes (solo gestor) ────────────────────────────────
+  const [clientes, setClientes] = useState([]);
+  const [removingClientEmail, setRemovingClientEmail] = useState(null);
+  const [showRemoveClientModal, setShowRemoveClientModal] = useState(false);
+  const [removeClientTarget, setRemoveClientTarget] = useState(null);
+  const [removeClientError, setRemoveClientError] = useState('');
+
   // ── Carga gestores ────────────────────────────────────────
   const loadGestores = async () => {
     const { data: propsData } = await supabase
@@ -209,6 +216,31 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     }
   };
 
+  const loadClientes = async () => {
+    const { data: accessRows, error } = await supabase
+      .from('property_access')
+      .select('landlord_email, property_id')
+      .eq('gestor_email', userEmail);
+
+    if (error || !accessRows || accessRows.length === 0) {
+      setClientes([]);
+      return;
+    }
+
+    const emails = [...new Set(accessRows.map(r => r.landlord_email))];
+    const { data: landlordRows } = await supabase
+      .from('landlords')
+      .select('email, name')
+      .in('email', emails);
+    const nameMap = Object.fromEntries((landlordRows || []).map(l => [l.email, l.name]));
+
+    setClientes(emails.map(email => ({
+      email,
+      name: nameMap[email] || email,
+      propertyCount: accessRows.filter(r => r.landlord_email === email).length,
+    })));
+  };
+
   const handleRevoke = async (gestorEmail) => {
     setRevokingEmail(gestorEmail);
     await supabase
@@ -218,6 +250,28 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       .eq('landlord_email', userEmail);
     setRevokingEmail(null);
     loadGestores();
+  };
+
+  const handleRemoveCliente = async () => {
+    if (!removeClientTarget) return;
+    setRemovingClientEmail(removeClientTarget.email);
+    setRemoveClientError('');
+    try {
+      const { error } = await supabase
+        .from('property_access')
+        .delete()
+        .eq('gestor_email', userEmail)
+        .eq('landlord_email', removeClientTarget.email);
+      if (error) {
+        setRemoveClientError('No se pudo eliminar el cliente. Inténtalo de nuevo.');
+        return;
+      }
+      setShowRemoveClientModal(false);
+      setRemoveClientTarget(null);
+      loadClientes();
+    } finally {
+      setRemovingClientEmail(null);
+    }
   };
 
   const handleConfirmPending = async () => {
@@ -288,6 +342,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   // ── Carga inicial ─────────────────────────────────────────
   useEffect(() => {
     if (role === 'landlord') loadGestores();
+    if (role === 'gestor') loadClientes();
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.user_metadata) {
@@ -780,6 +835,67 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               </svg>
             </button>
+          </div>
+        </div>}
+
+        {/* ════════════════════════════════════════
+            SECCION 2c — Clientes (solo gestor)
+        ════════════════════════════════════════ */}
+        {role === 'gestor' && <div>
+          <p className="settings-section-label">Clientes</p>
+          <div className="settings-card">
+            {clientes.length === 0 ? (
+              <div className="settings-card-row" style={{ opacity: 0.5, pointerEvents: 'none' }}>
+                <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#aaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="12" cy="7" r="4" stroke="#aaa" strokeWidth="2"/>
+                  </svg>
+                </div>
+                <div className="settings-row-content">
+                  <p className="settings-row-title" style={{ color: '#aaa' }}>Sin clientes</p>
+                  <p className="settings-row-subtitle">Los propietarios aparecen aquí cuando aceptan tu invitación</p>
+                </div>
+              </div>
+            ) : (
+              clientes.map((c, idx) => (
+                <div key={c.email}>
+                  <div className="settings-card-row" style={{ alignItems: 'flex-start' }}>
+                    <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <circle cx="12" cy="7" r="4" stroke="#555" strokeWidth="2"/>
+                      </svg>
+                    </div>
+                    <div className="settings-row-content" style={{ flex: 1 }}>
+                      <p className="settings-row-title">{c.name}</p>
+                      <p className="settings-row-subtitle">{c.email}</p>
+                      <p className="settings-row-subtitle" style={{ marginTop: 2 }}>
+                        {c.propertyCount} {c.propertyCount === 1 ? 'propiedad' : 'propiedades'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setRemoveClientTarget(c);
+                        setShowRemoveClientModal(true);
+                      }}
+                      disabled={removingClientEmail === c.email}
+                      style={{
+                        background: 'none', border: '1px solid #ffcdd2', borderRadius: '8px',
+                        color: '#c0392b', fontSize: '12px', fontWeight: 600, padding: '5px 10px',
+                        cursor: removingClientEmail === c.email ? 'default' : 'pointer', flexShrink: 0, marginTop: 2,
+                        opacity: removingClientEmail === c.email ? 0.5 : 1,
+                      }}
+                    >
+                      {removingClientEmail === c.email ? 'Eliminando…' : 'Eliminar'}
+                    </button>
+                  </div>
+                  {idx < clientes.length - 1 && (
+                    <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>}
 
@@ -1454,6 +1570,45 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                   </button>
                 )}
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          MODAL — Eliminar cliente (gestor)
+      ════════════════════════════════════════ */}
+      {showRemoveClientModal && removeClientTarget && (
+        <div className="settings-modal-overlay" onClick={() => { if (!removingClientEmail) { setShowRemoveClientModal(false); setRemoveClientTarget(null); setRemoveClientError(''); } }}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()}>
+            <p className="settings-modal-title">Eliminar cliente</p>
+            <p className="settings-modal-desc">
+              Dejarás de gestionar a <strong>{removeClientTarget.name}</strong> y perderás acceso
+              a {removeClientTarget.propertyCount === 1 ? 'su propiedad' : `sus ${removeClientTarget.propertyCount} propiedades`}.
+              El propietario y sus datos no se verán afectados.
+            </p>
+            {removeClientError && (
+              <p style={{ color: '#c0392b', fontSize: 13, margin: '0 0 12px', textAlign: 'center' }}>{removeClientError}</p>
+            )}
+            <button
+              className="settings-modal-btn-primary danger"
+              onClick={handleRemoveCliente}
+              disabled={!!removingClientEmail}
+            >
+              {removingClientEmail ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <div className="settings-spinner" />
+                  Eliminando…
+                </span>
+              ) : 'Confirmar eliminación'}
+            </button>
+            {!removingClientEmail && (
+              <button
+                className="settings-modal-btn-cancel"
+                onClick={() => { setShowRemoveClientModal(false); setRemoveClientTarget(null); setRemoveClientError(''); }}
+              >
+                Cancelar
+              </button>
             )}
           </div>
         </div>
