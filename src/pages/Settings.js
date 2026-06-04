@@ -98,23 +98,37 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     if (!accessRows || accessRows.length === 0) {
       setGestores([]);
     } else {
-      const emails = [...new Set(accessRows.map(r => r.gestor_email))];
-      const { data: gestorRows } = await supabase
-        .from('gestores')
-        .select('email, nombre')
-        .in('email', emails);
-      const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.nombre]));
-      const grouped = emails.map(email => {
-        const firstRow = accessRows.find(r => r.gestor_email === email);
-        return {
-          email,
-          name: nameMap[email] || email,
-          permisos: firstRow?.permisos || 'lectura',
-          canMessage: firstRow?.can_message !== false,
-          propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
-        };
-      });
-      setGestores(grouped);
+      const allEmails = [...new Set(accessRows.map(r => r.gestor_email))];
+
+      // Exclude gestores whose invite is still pending (not yet accepted)
+      const { data: pendingInvites } = await supabase
+        .from('gestor_invites')
+        .select('gestor_email')
+        .eq('landlord_email', userEmail)
+        .eq('status', 'pending');
+      const pendingEmails = new Set((pendingInvites || []).map(r => r.gestor_email));
+      const emails = allEmails.filter(e => !pendingEmails.has(e));
+
+      if (emails.length === 0) {
+        setGestores([]);
+      } else {
+        const { data: gestorRows } = await supabase
+          .from('gestores')
+          .select('email, nombre')
+          .in('email', emails);
+        const nameMap = Object.fromEntries((gestorRows || []).map(g => [g.email, g.nombre]));
+        const grouped = emails.map(email => {
+          const firstRow = accessRows.find(r => r.gestor_email === email);
+          return {
+            email,
+            name: nameMap[email] || email,
+            permisos: firstRow?.permisos || 'lectura',
+            canMessage: firstRow?.can_message !== false,
+            propertyIds: accessRows.filter(r => r.gestor_email === email).map(r => r.property_id),
+          };
+        });
+        setGestores(grouped);
+      }
     }
 
     // Solicitudes pendientes de gestores que compartieron enlace
