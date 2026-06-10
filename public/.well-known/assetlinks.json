@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.trydomio.app",
+    "sha256_cert_fingerprints": ["23:3E:A3:78:E5:DA:0B:AB:3F:5E:36:38:66:7A:A1:08:99:CC:5D:A2:F7:C6:29:8C:20:45:1E:8E:57:43:72:BD"]
+  }
+}]
