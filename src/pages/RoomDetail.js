@@ -945,7 +945,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       </div>
 
       {/* Pago del alquiler */}
-      {(room.tenant || confirmedPayments.length > 0 || currentPayment) && (
+      {(room.tenant || confirmedPayments.length > 0 || currentPayment || canEdit) && (
         <div className="info-card payment-card">
           <div className="card-header">
             <h3>Pago del alquiler</h3>
@@ -1120,6 +1120,49 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                 );
               })()}
 
+              {/* Sin inquilino — confirmar pago manualmente */}
+              {!room.tenant && canEdit && confirmedPayments.length === 0 && !supabaseRoomPayment && (
+                <div className="tenant-payment-actions">
+                  <button className="payment-btn confirm small full-width" onClick={handleMarkAsPending}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <polyline points="20 6 9 17 4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Confirmar pago
+                  </button>
+                </div>
+              )}
+
+              {/* Sin inquilino — pago ya confirmado */}
+              {!room.tenant && confirmedPayments.length > 0 && confirmedPayments.map((p, i) => (
+                <div key={i} className="tenant-payment-card">
+                  <div className="tenant-payment-header">
+                    <div className="tenant-payment-info">
+                      <p className="tenant-payment-amount" style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#111' }}>{p.amount ?? room.price} €</p>
+                    </div>
+                    <span className="payment-status-badge green small">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 6L9 17l-5-5" stroke="#4CAF50" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </span>
+                  </div>
+                  <div className="tenant-payment-actions">
+                    <p className="payment-confirmed-text">
+                      ✓ {p.amount ?? room.price} € · {new Date(p.confirmedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                    </p>
+                    {canEdit && (
+                      <button className="payment-cancel-link" onClick={async () => {
+                        const { error } = await supabase.from('payments').delete()
+                          .eq('property_id', String(property.id)).eq('room_id', String(room.id))
+                          .eq('year', p.year).eq('month', p.month);
+                        if (error) { alert('Error al cancelar el pago.'); return; }
+                        setSupabaseRoomPayment(null);
+                        onUpdate({ ...property, payments: payments.filter(x => !(x.year === p.year && x.month === p.month && x.roomId === p.roomId && x.confirmedAt === p.confirmedAt)) });
+                      }}>Cancelar</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
               {/* Rango de días de pago */}
               {(room.paymentConfig || property.paymentConfig) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px', paddingLeft: '2px' }}>
@@ -1136,8 +1179,8 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
               )}
 
               {/* Pagos de ex-inquilinos */}
-              {confirmedPayments
-                .filter(p => !room.tenant || p.tenantName !== room.tenant.name)
+              {room.tenant && confirmedPayments
+                .filter(p => p.tenantName !== room.tenant.name)
                 .map((p, i) => (
                   <div key={i} className="tenant-payment-card" style={{ marginTop: '8px' }}>
                     <div className="tenant-payment-header">
@@ -1179,24 +1222,26 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
       {/* Gastos */}
       <div className="info-card expenses-card">
-        <div className="card-header clickable" onClick={() => setShowExpenses(!showExpenses)}>
-          <h3>Gastos de esta habitación</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="card-header clickable" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }} onClick={() => setShowExpenses(!showExpenses)}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0 }}>Gastos de esta habitación</h3>
+            <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>{totalExpenses.toFixed(2)} {expenseView === 'real' ? '€' : '€/mes'}</span>
+              <span className="arrow">{showExpenses ? '▼' : '›'}</span>
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} onClick={e => e.stopPropagation()}>
             <button type="button" onClick={e => { e.stopPropagation(); setShowExpenseSummary(true); }}
               style={{ fontSize: 11, padding: '3px 9px', borderRadius: 8, border: '1px solid #ddd', background: 'white', color: '#666', cursor: 'pointer' }}>
               Resumen
             </button>
-            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
+            <div style={{ display: 'flex', background: '#f0f0f0', borderRadius: 6, padding: 2, gap: 1 }}>
               {['prorrateado', 'real'].map(v => (
                 <button key={v} onClick={() => setExpenseView(v)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: 'none', background: expenseView === v ? 'white' : 'transparent', color: expenseView === v ? '#333' : '#999', cursor: 'pointer', fontWeight: expenseView === v ? 600 : 400 }}>
                   {v === 'prorrateado' ? 'Prorrat.' : 'Real'}
                 </button>
               ))}
             </div>
-            <span className="expenses-total" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>{totalExpenses.toFixed(2)} {expenseView === 'real' ? '€' : '€/mes'}</span>
-              <span className="arrow">{showExpenses ? '▼' : '›'}</span>
-            </span>
           </div>
         </div>
         {showExpenses && (
