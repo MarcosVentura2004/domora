@@ -44,6 +44,10 @@ function getExpensesForMonth(expenses, year, month) {
       const paymentIndex = monthsDiff / step;
       if (paymentIndex >= (e.duration_payments || 0)) return false;
     }
+    if (e.skipped_months && Array.isArray(e.skipped_months)) {
+      const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+      if (e.skipped_months.includes(monthStr)) return false;
+    }
     return true;
   });
 }
@@ -952,7 +956,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
       const active = getExpensesForMonth(propertyExpenses, selectedYear, m);
       const expenses = active.reduce((sum, e) => {
         const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
-        return sum + getMonthlyEquivalentGP(e) * pct / 100;
+        return sum + (Number(e.amount) || 0) * pct / 100;
       }, 0);
 
       monthsData.push({ month: m, cobrado, pendiente, expenses });
@@ -967,7 +971,7 @@ function ReportModal({ properties, supabaseExpenses, onClose }) {
           const active = getExpensesForMonth([e], selectedYear, m);
           if (active.length > 0) {
             const pct = e.expense_percentage != null ? e.expense_percentage : ownership;
-            annualTotal += getMonthlyEquivalentGP(e) * pct / 100;
+            annualTotal += (Number(e.amount) || 0) * pct / 100;
           }
         }
         if (annualTotal === 0) return null;
