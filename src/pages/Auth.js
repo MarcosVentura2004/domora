@@ -185,8 +185,8 @@ function Auth({ onLogin, onBack, initialStep }) {
 
               <p className="terms">
                 Al continuar aceptas nuestros{' '}
-                <a href="#terms">Términos de servicio</a> y{' '}
-                <a href="#privacy">Política de privacidad</a>
+                <a href="/terminos-de-servicio" target="_blank" rel="noreferrer">Términos de servicio</a> y{' '}
+                <a href="/politica-de-privacidad" target="_blank" rel="noreferrer">Política de privacidad</a>
               </p>
             </>
           )}
