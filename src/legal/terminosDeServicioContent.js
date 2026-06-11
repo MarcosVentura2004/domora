@@ -1,4 +1,4 @@
-# Términos y Condiciones de Uso
+const content = `# Términos y Condiciones de Uso
 
 **Última actualización: mayo de 2026**
 
@@ -231,4 +231,6 @@ Para cualquier consulta, sugerencia o reclamación relacionada con estos Términ
 **NIF:** 20923802N
 **Domicilio:** Carrer Quatre Vents, 16 - 12560 Benicàssim (Castellón), España
 **Correo electrónico:** mventurae04@gmail.com
-**Web:** https://trydomio.com
+**Web:** https://trydomio.com`;
+
+export default content;

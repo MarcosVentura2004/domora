@@ -1,6 +1,7 @@
 import React from 'react';
 import LegalPage from './LegalPage';
+import content from '../legal/terminosDeServicioContent';
 
 export default function TerminosDeServicio() {
-  return <LegalPage mdPath="/legal/terminos-de-servicio.md" />;
+  return <LegalPage content={content} />;
 }

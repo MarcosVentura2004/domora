@@ -1,6 +1,7 @@
 import React from 'react';
 import LegalPage from './LegalPage';
+import content from '../legal/avisoLegalContent';
 
 export default function AvisoLegal() {
-  return <LegalPage mdPath="/legal/aviso-legal.md" />;
+  return <LegalPage content={content} />;
 }

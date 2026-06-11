@@ -1,4 +1,4 @@
-# Política de Privacidad
+const content = `# Política de Privacidad
 
 **Última actualización: mayo de 2026**
 
@@ -202,4 +202,6 @@ Para cualquier consulta, sugerencia o reclamación relacionada con esta Polític
 **NIF:** 20923802N
 **Domicilio:** Carrer Quatre Vents, 16 - 12560 Benicàssim (Castellón), España
 **Correo electrónico:** mventurae04@gmail.com
-**Web:** https://trydomio.com
+**Web:** https://trydomio.com`;
+
+export default content;

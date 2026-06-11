@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -25,16 +25,7 @@ const markdownComponents = {
   hr: () => <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '32px 0' }} />,
 };
 
-export default function LegalPage({ mdPath }) {
-  const [content, setContent] = useState('');
-
-  useEffect(() => {
-    fetch(mdPath)
-      .then(r => r.text())
-      .then(setContent)
-      .catch(() => setContent('No se pudo cargar el contenido.'));
-  }, [mdPath]);
-
+export default function LegalPage({ content }) {
   return (
     <div style={styles.page}>
       <header style={styles.header}>
