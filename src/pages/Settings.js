@@ -1639,6 +1639,14 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
               Esta accion es <strong>irreversible</strong>. Se eliminaran todas tus propiedades,
               inquilinos, pagos e incidencias. Para confirmar, escribe <strong>ELIMINAR</strong> a continuacion.
             </p>
+            <a
+              href="/eliminar-cuenta"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: '12px', color: '#8e8e93', textDecoration: 'none', display: 'block', marginBottom: 14, marginTop: -6 }}
+            >
+              Mas informacion sobre que datos se eliminan
+            </a>
             <input
               className="settings-modal-input delete-input"
               type="text"
