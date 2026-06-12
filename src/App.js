@@ -87,34 +87,43 @@ function App() {
         setUserType('gestor');
         localStorage.setItem('userType', 'gestor');
         setPage('gestor-dashboard');
-      } else {
-        setUserType('propietario');
-        localStorage.setItem('userType', 'propietario');
-        setPage('dashboard');
-      }
 
-      // Verificar si el usuario ya aceptó los términos (tabla distinta según tipo)
-      let termsAcceptedAt = null;
-      if (isGestor) {
         const { data: gestorData } = await supabase
           .from('gestores')
           .select('terms_accepted_at')
           .eq('email', user.email)
           .maybeSingle();
-        termsAcceptedAt = gestorData?.terms_accepted_at;
+        if (!gestorData?.terms_accepted_at) {
+          pendingUserRef.current = user;
+          pendingUserTypeRef.current = 'gestor';
+          setShowTermsModal(true);
+        }
       } else {
+        // Si no existe fila en landlords, la cuenta fue eliminada: redirigir a welcome
         const { data: landlordData } = await supabase
           .from('landlords')
-          .select('terms_accepted_at')
+          .select('id, terms_accepted_at')
           .eq('user_id', user.id)
           .maybeSingle();
-        termsAcceptedAt = landlordData?.terms_accepted_at;
-      }
 
-      if (!termsAcceptedAt) {
-        pendingUserRef.current = user;
-        pendingUserTypeRef.current = isGestor ? 'gestor' : 'propietario';
-        setShowTermsModal(true);
+        if (!landlordData) {
+          await supabase.auth.signOut();
+          localStorage.removeItem('userType');
+          setUserType(null);
+          setUserEmail(null);
+          setPage('welcome');
+          return;
+        }
+
+        setUserType('propietario');
+        localStorage.setItem('userType', 'propietario');
+        setPage('dashboard');
+
+        if (!landlordData.terms_accepted_at) {
+          pendingUserRef.current = user;
+          pendingUserTypeRef.current = 'propietario';
+          setShowTermsModal(true);
+        }
       }
     };
 
@@ -184,6 +193,22 @@ function App() {
       setUserType('gestor');
       localStorage.setItem('userType', 'gestor');
       setPage('gestor-dashboard');
+      return;
+    }
+
+    // Si no existe fila en landlords, la cuenta fue eliminada: redirigir a welcome
+    const { data: landlordData } = await supabase
+      .from('landlords')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!landlordData) {
+      await supabase.auth.signOut();
+      localStorage.removeItem('userType');
+      setUserType(null);
+      setUserEmail(null);
+      setPage('welcome');
       return;
     }
 
