@@ -16,6 +16,7 @@ import Calendario from './pages/Calendario';
 import PoliticaDePrivacidad from './pages/PoliticaDePrivacidad';
 import TerminosDeServicio from './pages/TerminosDeServicio';
 import AvisoLegal from './pages/AvisoLegal';
+import EliminarCuenta from './pages/EliminarCuenta';
 import './App.css';
 
 function App() {
@@ -33,6 +34,8 @@ function App() {
     ? 'terminos-de-servicio'
     : window.location.pathname === '/aviso-legal'
     ? 'aviso-legal'
+    : window.location.pathname === '/eliminar-cuenta'
+    ? 'eliminar-cuenta'
     : 'landing';
   const [currentPage, rawSetPage] = useState(initialPage);
   const currentPageRef = useRef(initialPage);
@@ -52,7 +55,7 @@ function App() {
 
   // Paginas que gestionan su propia autenticacion — el listener global no debe
   // redirigirlas bajo ninguna circunstancia.
-  const PUBLIC_PAGES = ['planes', 'reset-password', 'gestor-invite', 'gestor-invite-landlord', 'politica-de-privacidad', 'terminos-de-servicio', 'aviso-legal'];
+  const PUBLIC_PAGES = ['planes', 'reset-password', 'gestor-invite', 'gestor-invite-landlord', 'politica-de-privacidad', 'terminos-de-servicio', 'aviso-legal', 'eliminar-cuenta'];
 
   // Restore session on mount
   useEffect(() => {
@@ -347,6 +350,7 @@ function App() {
       {currentPage === 'politica-de-privacidad' && <PoliticaDePrivacidad />}
       {currentPage === 'terminos-de-servicio' && <TerminosDeServicio />}
       {currentPage === 'aviso-legal' && <AvisoLegal />}
+      {currentPage === 'eliminar-cuenta' && <EliminarCuenta />}
 
       {currentPage === 'reset-password' && (
         <ResetPassword onSuccess={() => setPage('welcome')} />

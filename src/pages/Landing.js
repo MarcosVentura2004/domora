@@ -1114,6 +1114,7 @@ function Landing({ onLogin }) {
           <div className="l-footer__bottom-links">
             <a href="/politica-de-privacidad">Política de privacidad</a>
             <a href="/terminos-de-servicio">Términos</a>
+            <a href="/eliminar-cuenta">Eliminar cuenta</a>
             <a href="mailto:domioapp.sl@gmail.com">domioapp.sl@gmail.com</a>
           </div>
           <span className="l-footer__copy">© 2025 Domio</span>

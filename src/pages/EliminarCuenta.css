@@ -1,0 +1,368 @@
+/* ── Layout ──────────────────────────────────────────────── */
+.ec-page {
+  min-height: 100vh;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.ec-header {
+  border-bottom: 1px solid #eee;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ec-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #111;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.ec-logo-img {
+  width: 28px;
+  height: 28px;
+}
+
+/* ── Main ─────────────────────────────────────────────────── */
+.ec-main {
+  flex: 1;
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+/* ── Hero block ───────────────────────────────────────────── */
+.ec-hero {
+  margin-bottom: 48px;
+}
+
+.ec-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #FFF1F2;
+  color: #E11D48;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.ec-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 14px;
+  line-height: 1.3;
+}
+
+.ec-intro {
+  font-size: 15px;
+  color: #555;
+  line-height: 1.75;
+  margin: 0;
+}
+
+/* ── Section ──────────────────────────────────────────────── */
+.ec-section {
+  margin-bottom: 40px;
+  padding-bottom: 40px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.ec-section:last-of-type {
+  border-bottom: none;
+}
+
+.ec-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ec-section-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ec-section-icon--blue  { background: #EFF6FF; color: #2563EB; }
+.ec-section-icon--gray  { background: #F1F5F9; color: #64748B; }
+.ec-section-icon--red   { background: #FFF1F2; color: #E11D48; }
+.ec-section-icon--green { background: #F0FDF4; color: #16A34A; }
+
+.ec-section-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #111;
+  margin: 0;
+}
+
+.ec-section-desc {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+/* ── Steps ────────────────────────────────────────────────── */
+.ec-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ec-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.ec-step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2563EB;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ec-step-text {
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.6;
+  padding-top: 3px;
+}
+
+/* ── Email card ───────────────────────────────────────────── */
+.ec-email-card {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.ec-email-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.ec-email-divider {
+  height: 1px;
+  background: #E2E8F0;
+}
+
+.ec-email-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94A3B8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 90px;
+  padding-top: 1px;
+}
+
+.ec-email-value {
+  font-size: 14px;
+  color: #111;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.ec-email-value:hover {
+  color: #2563EB;
+  text-decoration: underline;
+}
+
+.ec-email-value--mono {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 13px;
+  background: #EFF6FF;
+  color: #2563EB;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+.ec-note {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ── List ─────────────────────────────────────────────────── */
+.ec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ec-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.ec-list-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #E11D48;
+  margin-top: 8px;
+}
+
+.ec-list-dot--green {
+  background: #16A34A;
+}
+
+/* ── Timing grid ──────────────────────────────────────────── */
+.ec-timing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ec-timing-card {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ec-timing-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+  align-self: flex-start;
+}
+
+.ec-timing-badge--instant {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+
+.ec-timing-badge--days {
+  background: #FFF7ED;
+  color: #EA580C;
+}
+
+.ec-timing-method {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Contact ──────────────────────────────────────────────── */
+.ec-contact {
+  margin-top: 40px;
+  padding: 20px;
+  background: #F8FAFC;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.ec-contact p {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0;
+}
+
+.ec-contact-link {
+  color: #2563EB;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.ec-contact-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.ec-footer {
+  border-top: 1px solid #eee;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ec-footer-link {
+  font-size: 13px;
+  color: #64748B;
+  text-decoration: none;
+}
+
+.ec-footer-link:hover {
+  color: #111;
+}
+
+.ec-footer-sep {
+  font-size: 13px;
+  color: #CBD5E1;
+}
+
+.ec-footer-copy {
+  font-size: 13px;
+  color: #CBD5E1;
+}
+
+/* ── Mobile ───────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .ec-main {
+    padding: 32px 16px 60px;
+  }
+
+  .ec-title {
+    font-size: 22px;
+  }
+
+  .ec-timing-grid {
+    grid-template-columns: 1fr;
+  }
+}
