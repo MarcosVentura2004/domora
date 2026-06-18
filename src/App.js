@@ -99,12 +99,21 @@ function App() {
           setShowTermsModal(true);
         }
       } else {
-        // Si no existe fila en landlords, la cuenta fue eliminada: redirigir a welcome
-        const { data: landlordData } = await supabase
+        let { data: landlordData } = await supabase
           .from('landlords')
           .select('id, terms_accepted_at')
           .eq('user_id', user.id)
           .maybeSingle();
+
+        if (!landlordData) {
+          // Row missing (incomplete registration or failed insert) — create it and continue
+          const { data: newRow } = await supabase
+            .from('landlords')
+            .insert({ user_id: user.id, email: user.email })
+            .select('id, terms_accepted_at')
+            .single();
+          landlordData = newRow;
+        }
 
         if (!landlordData) {
           await supabase.auth.signOut();
@@ -196,12 +205,21 @@ function App() {
       return;
     }
 
-    // Si no existe fila en landlords, la cuenta fue eliminada: redirigir a welcome
-    const { data: landlordData } = await supabase
+    let { data: landlordData } = await supabase
       .from('landlords')
       .select('id')
       .eq('user_id', user.id)
       .maybeSingle();
+
+    if (!landlordData) {
+      // Row missing (incomplete registration or failed insert) — create it and continue
+      const { data: newRow } = await supabase
+        .from('landlords')
+        .insert({ user_id: user.id, email: user.email })
+        .select('id')
+        .single();
+      landlordData = newRow;
+    }
 
     if (!landlordData) {
       await supabase.auth.signOut();
