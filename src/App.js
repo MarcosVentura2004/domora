@@ -99,21 +99,7 @@ function App() {
           setShowTermsModal(true);
         }
       } else {
-        let { data: landlordData } = await supabase
-          .from('landlords')
-          .select('id, terms_accepted_at')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (!landlordData) {
-          // Row missing (incomplete registration or failed insert) — create it and continue
-          const { data: newRow } = await supabase
-            .from('landlords')
-            .insert({ user_id: user.id, email: user.email })
-            .select('id, terms_accepted_at')
-            .single();
-          landlordData = newRow;
-        }
+        const landlordData = await resolveLandlord(user);
 
         if (!landlordData) {
           await supabase.auth.signOut();
@@ -189,6 +175,47 @@ function App() {
     }
   };
 
+  // Resolve the landlords row for an authenticated user. The table is keyed by
+  // email across the app, but some rows lack user_id (created via "switch to
+  // landlord", incomplete registration, etc.). Look up by email first, backfill
+  // user_id when missing, fall back to user_id, and only create a row if none
+  // exists. Returns the row, or null only when both lookup and insert fail.
+  const resolveLandlord = async (user) => {
+    // 1. Canonical lookup by email
+    let { data: landlordData } = await supabase
+      .from('landlords')
+      .select('id, user_id, terms_accepted_at')
+      .eq('email', user.email)
+      .maybeSingle();
+
+    if (landlordData) {
+      if (!landlordData.user_id) {
+        await supabase
+          .from('landlords')
+          .update({ user_id: user.id })
+          .eq('id', landlordData.id);
+      }
+      return landlordData;
+    }
+
+    // 2. Fallback: legacy rows without email
+    ({ data: landlordData } = await supabase
+      .from('landlords')
+      .select('id, user_id, terms_accepted_at')
+      .eq('user_id', user.id)
+      .maybeSingle());
+
+    if (landlordData) return landlordData;
+
+    // 3. Genuinely new user — create the row
+    const { data: newRow } = await supabase
+      .from('landlords')
+      .insert({ user_id: user.id, email: user.email })
+      .select('id, user_id, terms_accepted_at')
+      .single();
+    return newRow;
+  };
+
   const handleLogin = async (user) => {
     setUserEmail(user.email);
 
@@ -205,21 +232,7 @@ function App() {
       return;
     }
 
-    let { data: landlordData } = await supabase
-      .from('landlords')
-      .select('id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (!landlordData) {
-      // Row missing (incomplete registration or failed insert) — create it and continue
-      const { data: newRow } = await supabase
-        .from('landlords')
-        .insert({ user_id: user.id, email: user.email })
-        .select('id')
-        .single();
-      landlordData = newRow;
-    }
+    const landlordData = await resolveLandlord(user);
 
     if (!landlordData) {
       await supabase.auth.signOut();

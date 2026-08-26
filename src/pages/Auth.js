@@ -127,6 +127,14 @@ function Auth({ onLogin, onBack, initialStep }) {
 
         <div className="auth-form">
           {error && <p className="auth-error">{error}</p>}
+          {error && step === 'login' && (
+            <p style={{ fontSize: '13px', color: '#888', marginTop: '-8px', marginBottom: '14px' }}>
+              ¿Es la primera vez que usas Domio?{' '}
+              <button type="button" className="auth-link-btn" onClick={() => goTo('register')}>
+                Crea una cuenta
+              </button>
+            </p>
+          )}
 
           {/* INICIAR SESIÓN */}
           {step === 'login' && (
