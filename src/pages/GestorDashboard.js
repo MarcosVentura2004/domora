@@ -864,7 +864,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
             properties={filteredProperties}
             userEmail={userEmail}
             onNavigateToProperties={() => switchTab('properties')}
-            onOpenSettings={onLogout}
+            onOpenSettings={() => setShowSettings(true)}
             avatarUrl={null}
             avatarValid={false}
             onAvatarLoad={() => {}}

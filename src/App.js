@@ -76,13 +76,7 @@ function App() {
 
       setUserEmail(user.email);
 
-      const { data: accessData } = await supabase
-        .from('property_access')
-        .select('id')
-        .eq('gestor_email', user.email)
-        .limit(1);
-
-      const isGestor = accessData && accessData.length > 0;
+      const isGestor = await isGestorAccount(user);
       if (isGestor) {
         setUserType('gestor');
         localStorage.setItem('userType', 'gestor');
@@ -131,7 +125,13 @@ function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Callback must not await Supabase calls directly (auth lock deadlock):
+    // the work is deferred with setTimeout so signOut and queries never hang.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setTimeout(() => handleAuthEvent(event, session), 0);
+    });
+
+    async function handleAuthEvent(event, session) {
       console.log('[onAuthStateChange] event:', event, '| user:', session?.user?.email ?? null, '| currentPage:', currentPageRef.current);
 
       // Si estamos en una página pública, ignorar todos los eventos de auth.
@@ -160,7 +160,7 @@ function App() {
         setUserEmail(null);
         setTenantCodes([]);
       }
-    });
+    }
 
     return () => subscription.unsubscribe();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -216,16 +216,28 @@ function App() {
     return newRow;
   };
 
-  const handleLogin = async (user) => {
-    setUserEmail(user.email);
-
+  // A user is a gestor if they manage at least one property, or if they have a
+  // gestores row but no landlords row (a gestor who removed all their clients
+  // must keep logging in as gestor instead of being treated as a new landlord).
+  const isGestorAccount = async (user) => {
     const { data: accessData } = await supabase
       .from('property_access')
       .select('id')
       .eq('gestor_email', user.email)
       .limit(1);
+    if (accessData && accessData.length > 0) return true;
 
-    if (accessData && accessData.length > 0) {
+    const [{ data: gestorRow }, { data: landlordRow }] = await Promise.all([
+      supabase.from('gestores').select('email').eq('email', user.email).maybeSingle(),
+      supabase.from('landlords').select('id').eq('email', user.email).maybeSingle(),
+    ]);
+    return !!gestorRow && !landlordRow;
+  };
+
+  const handleLogin = async (user) => {
+    setUserEmail(user.email);
+
+    if (await isGestorAccount(user)) {
       setUserType('gestor');
       localStorage.setItem('userType', 'gestor');
       setPage('gestor-dashboard');
@@ -303,9 +315,24 @@ function App() {
   };
 
   const handleLogout = async () => {
-    if (userType === 'propietario' || userType === 'gestor') {
-      await supabase.auth.signOut();
+    // Always end the Supabase session, whatever userType the UI thinks it is
+    // (e.g. a landlord in tenant mode still has a Supabase session).
+    // Local scope + timeout so a slow/failed network call can't block logout.
+    try {
+      await Promise.race([
+        supabase.auth.signOut({ scope: 'local' }),
+        new Promise(resolve => setTimeout(resolve, 3000)),
+      ]);
+    } catch (err) {
+      console.error('[logout] signOut error:', err);
     }
+    // Fallback: remove any persisted Supabase auth token so a reload can't restore it
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch (_) { /* storage unavailable */ }
+
     localStorage.removeItem('userType');
     localStorage.removeItem('inquilino_codes');
     setPage('welcome');
