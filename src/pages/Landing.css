@@ -1632,8 +1632,39 @@
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding-top: 28px;
-    padding-bottom: 56px;
+    overflow-x: hidden;
+    padding: 28px 16px 56px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* No horizontal reveal offsets on mobile: they produced the zigzag layout */
+  .sr.sr-left,
+  .sr.sr-right,
+  .sr.sr-scale { transform: translateY(24px); }
+
+  /* Inside an opened section everything is shown straight, no transforms */
+  .l-section--mob.is-mob-open .sr {
+    opacity: 1;
+    transform: none !important;
+    transition: none;
+  }
+
+  /* Single straight column, same width for all cards */
+  .l-feat-grid,
+  .l-steps-grid,
+  .l-types-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .l-feat-card,
+  .l-step-card,
+  .l-type-card {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+    min-width: 0;
   }
 }
 
