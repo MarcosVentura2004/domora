@@ -244,6 +244,30 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
       });
   }, [userEmail]); // eslint-disable-line
 
+  // Gestores que se han desvinculado del propietario (aviso hasta que lo quite)
+  const [removedGestores, setRemovedGestores] = useState([]);
+  useEffect(() => {
+    if (!userEmail) return;
+    supabase
+      .from('gestor_removals')
+      .select('gestor_email, gestor_name')
+      .eq('landlord_email', userEmail)
+      .then(({ data, error }) => {
+        if (error) { console.error('[gestor_removals] Error cargando avisos:', error); return; }
+        setRemovedGestores((data || []).map(r => ({ email: r.gestor_email, name: r.gestor_name || r.gestor_email })));
+      });
+  }, [userEmail, metaTick]); // eslint-disable-line
+
+  const handleDismissRemovedGestor = async (gestorEmail) => {
+    const { error } = await supabase
+      .from('gestor_removals')
+      .delete()
+      .eq('landlord_email', userEmail)
+      .eq('gestor_email', gestorEmail);
+    if (error) { console.error('[gestor_removals] Error quitando aviso:', error); return; }
+    setRemovedGestores(prev => prev.filter(r => r.email !== gestorEmail));
+  };
+
   // Carga unread counts de mensajes directos con gestores
   useEffect(() => {
     if (!userEmail || gestores.length === 0) return;
@@ -1023,7 +1047,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
               </>
             )}
 
-            {tenants.length === 0 && gestores.length === 0 ? (
+            {tenants.length === 0 && gestores.length === 0 && removedGestores.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '80px 30px', gap: '16px', textAlign: 'center' }}>
                 <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#F0F1F3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
@@ -1039,7 +1063,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
               <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {filteredTenants.length > 0 && (
                   <>
-                    {gestores.length > 0 && (
+                    {(gestores.length > 0 || removedGestores.length > 0) && (
                       <p style={{ margin: '4px 0 2px', fontSize: '12px', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Inquilinos</p>
                     )}
                     {[...filteredTenants]
@@ -1121,9 +1145,52 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
                   </>
                 )}
 
-                {gestores.length > 0 && (
+                {(gestores.length > 0 || removedGestores.length > 0) && (
                   <>
                     <p style={{ margin: filteredTenants.length > 0 ? '12px 0 2px' : '4px 0 2px', fontSize: '12px', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestores</p>
+                    {removedGestores
+                      .filter(r => !gestores.some(g => g.email === r.email))
+                      .map(r => (
+                        <div
+                          key={`removed_${r.email}`}
+                          style={{
+                            width: '100%', background: 'white', borderRadius: '16px',
+                            padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.05)', boxSizing: 'border-box',
+                          }}
+                        >
+                          <div style={{
+                            width: '48px', height: '48px', borderRadius: '50%', flexShrink: 0,
+                            background: '#fdecea', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="#c0392b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <circle cx="9" cy="7" r="4" stroke="#c0392b" strokeWidth="2"/>
+                              <line x1="16" y1="11" x2="22" y2="11" stroke="#c0392b" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ margin: '0 0 3px', fontWeight: 700, fontSize: '15px', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</p>
+                            <span style={{
+                              display: 'inline-block', background: '#fdecea', color: '#c0392b',
+                              fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                              border: '1px solid #ffcdd2',
+                            }}>
+                              Te ha eliminado
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDismissRemovedGestor(r.email)}
+                            style={{
+                              background: 'none', border: '1px solid #e5e5e5', borderRadius: '8px',
+                              color: '#555', fontSize: '12px', fontWeight: 600, padding: '5px 10px',
+                              cursor: 'pointer', flexShrink: 0,
+                            }}
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
                     {gestores
                       .map(g => ({ ...g, ...(gestorMeta[g.email] || { unread: 0, lastTs: '', lastContent: '' }) }))
                       .sort((a, b) => b.lastTs.localeCompare(a.lastTs))

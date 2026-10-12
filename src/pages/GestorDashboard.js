@@ -196,6 +196,8 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
 
   const [gestorAvatarUrl, setGestorAvatarUrl] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  // Bumped when returning from Ajustes so removed clients disappear immediately
+  const [reloadKey, setReloadKey] = useState(0);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareLink, setShareLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
@@ -380,7 +382,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
       setLoading(false);
     }
     load();
-  }, [userEmail]);
+  }, [userEmail, reloadKey]);
 
   // ── Carga unread counts de inquilinos ────────────────────────────────────
   useEffect(() => {
@@ -453,7 +455,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
     return (
       <Settings
         userEmail={userEmail}
-        onBack={() => setShowSettings(false)}
+        onBack={() => { setShowSettings(false); setReloadKey(k => k + 1); }}
         onLogout={onLogout}
         role="gestor"
       />

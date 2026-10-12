@@ -82,8 +82,46 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   const [removeClientTarget, setRemoveClientTarget] = useState(null);
   const [removeClientError, setRemoveClientError] = useState('');
 
+  // ── Gestores que se han desvinculado (solo propietario) ───
+  const [removedGestores, setRemovedGestores] = useState([]);
+  const [dismissingRemovalEmail, setDismissingRemovalEmail] = useState(null);
+
+  const loadRemovedGestores = async () => {
+    const { data, error } = await supabase
+      .from('gestor_removals')
+      .select('gestor_email, gestor_name, removed_at')
+      .eq('landlord_email', userEmail)
+      .order('removed_at', { ascending: false });
+    if (error) {
+      console.error('[gestor_removals] Error cargando avisos:', error);
+      setRemovedGestores([]);
+      return;
+    }
+    setRemovedGestores((data || []).map(r => ({
+      email: r.gestor_email,
+      name: r.gestor_name || r.gestor_email,
+      removedAt: r.removed_at,
+    })));
+  };
+
+  const handleDismissRemoval = async (gestorEmail) => {
+    setDismissingRemovalEmail(gestorEmail);
+    const { error } = await supabase
+      .from('gestor_removals')
+      .delete()
+      .eq('landlord_email', userEmail)
+      .eq('gestor_email', gestorEmail);
+    setDismissingRemovalEmail(null);
+    if (error) {
+      console.error('[gestor_removals] Error quitando aviso:', error);
+      return;
+    }
+    setRemovedGestores(prev => prev.filter(r => r.email !== gestorEmail));
+  };
+
   // ── Carga gestores ────────────────────────────────────────
   const loadGestores = async () => {
+    loadRemovedGestores();
     const { data: propsData } = await supabase
       .from('properties')
       .select('id, data')
@@ -271,11 +309,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     setRemovingClientEmail(removeClientTarget.email);
     setRemoveClientError('');
     try {
-      const { error } = await supabase
-        .from('property_access')
-        .delete()
-        .eq('gestor_email', userEmail)
-        .eq('landlord_email', removeClientTarget.email);
+      // RPC: unlinks all property_access rows for this pair and notifies the landlord
+      const { error } = await supabase.rpc('remove_gestor_client', {
+        p_landlord_email: removeClientTarget.email,
+      });
       if (error) {
         setRemoveClientError('No se pudo eliminar el cliente. Inténtalo de nuevo.');
         return;
@@ -774,7 +811,50 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
               <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />
             )}
 
-            {gestores.length === 0 && pendingRequests.length === 0 ? (
+            {removedGestores.map(r => (
+              <div key={`removed_${r.email}`}>
+                <div className="settings-card-row" style={{ alignItems: 'flex-start' }}>
+                  <div className="settings-row-icon" style={{ background: '#fdecea' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="#c0392b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="9" cy="7" r="4" stroke="#c0392b" strokeWidth="2"/>
+                      <line x1="16" y1="11" x2="22" y2="11" stroke="#c0392b" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <div className="settings-row-content" style={{ flex: 1, minWidth: 0 }}>
+                    <p className="settings-row-title">{r.name}</p>
+                    <p className="settings-row-subtitle">{r.email}</p>
+                    <span style={{
+                      display: 'inline-block', marginTop: 3,
+                      background: '#fdecea', color: '#c0392b',
+                      fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                      border: '1px solid #ffcdd2',
+                    }}>
+                      Te ha eliminado
+                    </span>
+                    <p className="settings-row-subtitle" style={{ marginTop: 4 }}>
+                      Ya no gestiona tus propiedades
+                      {r.removedAt ? ` desde el ${new Date(r.removedAt).toLocaleDateString('es-ES')}` : ''}.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleDismissRemoval(r.email)}
+                    disabled={dismissingRemovalEmail === r.email}
+                    style={{
+                      background: 'none', border: '1px solid #e5e5e5', borderRadius: '8px',
+                      color: '#555', fontSize: '12px', fontWeight: 600, padding: '5px 10px',
+                      cursor: 'pointer', flexShrink: 0, marginTop: 2,
+                      opacity: dismissingRemovalEmail === r.email ? 0.5 : 1,
+                    }}
+                  >
+                    {dismissingRemovalEmail === r.email ? 'Quitando…' : 'Quitar'}
+                  </button>
+                </div>
+                <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />
+              </div>
+            ))}
+
+            {gestores.length === 0 && pendingRequests.length === 0 && removedGestores.length === 0 ? (
               <div className="settings-card-row" style={{ opacity: 0.5, pointerEvents: 'none' }}>
                 <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -1599,7 +1679,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
             <p className="settings-modal-desc">
               Dejarás de gestionar a <strong>{removeClientTarget.name}</strong> y perderás acceso
               a {removeClientTarget.propertyCount === 1 ? 'su propiedad' : `sus ${removeClientTarget.propertyCount} propiedades`}.
-              El propietario y sus datos no se verán afectados.
+              Desaparecerá de tu panel y del chat. El propietario verá un aviso y sus datos no se verán afectados.
             </p>
             {removeClientError && (
               <p style={{ color: '#c0392b', fontSize: 13, margin: '0 0 12px', textAlign: 'center' }}>{removeClientError}</p>
