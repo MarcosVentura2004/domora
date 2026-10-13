@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './PropertyDocuments.css';
 import { supabase } from '../supabaseClient';
+import { saveDownload } from '../utils/downloads';
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
 
@@ -417,10 +418,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
   const handleDownloadFile = async (file, filePath) => {
     const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
     if (error || !blob) { alert('Error descargando el archivo.'); return; }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = file.name; a.click();
-    URL.revokeObjectURL(url);
+    saveDownload(blob, file.name, { source: 'Documento', propertyName: property?.name });
   };
 
   const handleDownloadFolder = async (folder, e) => {
@@ -466,10 +464,7 @@ function PropertyDocuments({ landlordEmail, property, onBack }) {
 
       await addToZip(folder.name, folderStoragePath);
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${folder.name}.zip`; a.click();
-      URL.revokeObjectURL(url);
+      saveDownload(zipBlob, `${folder.name}.zip`, { source: 'Carpeta', propertyName: property?.name });
     } catch (err) {
       console.error('[zip download]', err); alert('Error al comprimir la carpeta.');
     } finally {

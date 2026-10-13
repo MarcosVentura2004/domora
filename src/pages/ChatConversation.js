@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { saveDownload } from '../utils/downloads';
 import { getFile } from '../utils/fileStorage';
 
 // ─── Exported async helper — used by other pages for unread badges ───────────
@@ -45,16 +46,24 @@ function getInitials(nameOrEmail) {
 }
 
 // ─── Attachment renderer ──────────────────────────────────────────────────────
-function AttachmentView({ msg, isMe }) {
+function AttachmentView({ msg, isMe, propertyName }) {
   const isImage = msg.attachment_type?.startsWith('image/');
   const isAudio = msg.attachment_type?.startsWith('audio/');
 
-  const handleDownload = () => {
-    const a = document.createElement('a');
-    a.href = msg.attachment_url;
-    a.download = msg.attachment_name;
-    a.target = '_blank';
-    a.click();
+  const handleDownload = async () => {
+    try {
+      const res = await fetch(msg.attachment_url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      saveDownload(blob, msg.attachment_name || 'adjunto', { source: 'Chat', propertyName });
+    } catch {
+      // Fallback to the previous behaviour (open in a new tab)
+      const a = document.createElement('a');
+      a.href = msg.attachment_url;
+      a.download = msg.attachment_name;
+      a.target = '_blank';
+      a.click();
+    }
   };
 
   if (isAudio) {
@@ -643,7 +652,7 @@ export default function ChatConversation({
                     minWidth: isAudioMsg ? '220px' : undefined,
                   }}>
                     {msg.content && !isAudioMsg && <span>{msg.content}</span>}
-                    {msg.attachment_url && <AttachmentView msg={msg} isMe={mine} />}
+                    {msg.attachment_url && <AttachmentView msg={msg} isMe={mine} propertyName={propertyName} />}
                   </div>
                   <p style={{ margin: '2px 4px 0', fontSize: '10px', color: '#bbb', textAlign: mine ? 'right' : 'left' }}>
                     {msgDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}

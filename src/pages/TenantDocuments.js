@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './PropertyDocuments.css';
 import './TenantDocuments.css';
 import { supabase } from '../supabaseClient';
+import { saveDownload } from '../utils/downloads';
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
 
@@ -407,10 +408,7 @@ export default function TenantDocuments({ rental, onBack }) {
   const handleDownloadFile = async (fileName, filePath) => {
     const { data: blob, error } = await supabase.storage.from('documentos').download(filePath);
     if (error || !blob) { alert('Error descargando el archivo.'); return; }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = fileName; a.click();
-    URL.revokeObjectURL(url);
+    saveDownload(blob, fileName, { source: 'Documento', propertyName: rental.address });
   };
 
   const handleDownloadFolder = async (folder, folderStoragePath, e) => {
@@ -455,10 +453,7 @@ export default function TenantDocuments({ rental, onBack }) {
 
       await addToZip(folder.name, folderStoragePath);
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `${folder.name}.zip`; a.click();
-      URL.revokeObjectURL(url);
+      saveDownload(zipBlob, `${folder.name}.zip`, { source: 'Carpeta', propertyName: rental.address });
     } catch (err) {
       console.error('[zip download]', err); alert('Error al comprimir la carpeta.');
     } finally {

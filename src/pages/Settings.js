@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { saveFile, getFile } from '../utils/fileStorage';
+import { deleteAllDownloads } from '../utils/downloads';
+import Descargas from './Descargas';
 import './Settings.css';
 
 async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount, inviteToken }, supabaseClient) {
@@ -39,6 +41,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
   // ── Seguridad ────────────────────────────────────────────
   const [passwordSending, setPasswordSending] = useState(false);
   const [passwordSent, setPasswordSent] = useState(false);
+
+  // ── Descargas ────────────────────────────────────────────
+  const [showDescargas, setShowDescargas] = useState(false);
 
   // ── Eliminar cuenta ──────────────────────────────────────
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -533,6 +538,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       await supabase.from('payments').delete().eq('landlord_email', userEmail);
       await supabase.from('incidents').delete().eq('landlord_email', userEmail);
       await supabase.from('landlords').delete().eq('email', userEmail);
+      await deleteAllDownloads().catch(err => console.error('Error eliminando descargas:', err));
       await supabase.rpc('delete_user_account').catch(() => null);
     } catch (err) {
       console.error('Error eliminando cuenta:', err);
@@ -540,6 +546,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     await supabase.auth.signOut();
     onLogout();
   };
+
+  if (showDescargas) {
+    return <Descargas onBack={() => setShowDescargas(false)} />;
+  }
 
   // ── Calculo de iniciales para avatar ─────────────────────
   const initials = (profileName || userEmail || '?')
@@ -1028,6 +1038,33 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
             )}
           </div>
         </div>}
+
+        {/* ════════════════════════════════════════
+            SECCION 3c — Descargas
+        ════════════════════════════════════════ */}
+        <div>
+          <p className="settings-section-label">Descargas</p>
+          <div className="settings-card">
+            <button
+              className="settings-card-row"
+              style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+              onClick={() => setShowDescargas(true)}
+            >
+              <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div className="settings-row-content">
+                <p className="settings-row-title">Mis descargas</p>
+                <p className="settings-row-subtitle">Documentos e informes descargados</p>
+              </div>
+              <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
 
         {/* ════════════════════════════════════════
             SECCION 4 — Seguridad

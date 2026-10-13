@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { saveDownload } from '../utils/downloads';
 
 // Devuelve los pagos individuales del año ordenados por fecha, solo los ya pagados (≤ hoy)
 function buildPaymentRows(expenses, year, CATEGORY_LABELS) {
@@ -191,11 +192,7 @@ async function exportToExcel({ catData, getSubcats, totalByMonth, yearTotal, yea
   // Guardar
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `gastos_${propertyName || 'propiedad'}_${year}.xlsx`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  saveDownload(blob, `gastos_${propertyName || 'propiedad'}_${year}.xlsx`, { source: 'Gastos', propertyName });
 }
 
 async function exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year, propertyName, MONTH_NAMES, CATEGORY_LABELS, expenses }) {
@@ -266,7 +263,7 @@ async function exportToPDF({ catData, getSubcats, totalByMonth, yearTotal, year,
     dy += rowH;
   });
 
-  doc.save(`gastos_${propertyName || 'propiedad'}_${year}.pdf`);
+  saveDownload(doc.output('blob'), `gastos_${propertyName || 'propiedad'}_${year}.pdf`, { source: 'Gastos', propertyName });
 }
 
 const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];

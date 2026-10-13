@@ -4,6 +4,7 @@ import PropertyDocuments from './PropertyDocuments';
 import RoomDetail from './RoomDetail';
 import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
+import { saveDownload } from '../utils/downloads';
 import ExpenseSummary from './ExpenseSummary';
 import { InvestmentForm } from '../components/InvestmentForm';
 import MonthNavigator from '../components/MonthNavigator';
@@ -239,11 +240,7 @@ async function exportToExcel(propertyName, historyMonths, accumulated) {
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `historial_${propertyName.replace(/\s+/g, '_')}.xlsx`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  saveDownload(blob, `historial_${propertyName.replace(/\s+/g, '_')}.xlsx`, { source: 'Historial', propertyName: propertyName });
 }
 
 function exportToPDF(propertyName, historyMonths, accumulated) {
@@ -317,7 +314,7 @@ function exportToPDF(propertyName, historyMonths, accumulated) {
       doc.text(`${accumulated.toFixed(0)} €`, colX[4], y);
     }
 
-    doc.save(`historial_${propertyName.replace(/\s+/g, '_')}.pdf`);
+    saveDownload(doc.output('blob'), `historial_${propertyName.replace(/\s+/g, '_')}.pdf`, { source: 'Historial', propertyName: propertyName });
   });
 }
 

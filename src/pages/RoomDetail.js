@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { saveDownload } from '../utils/downloads';
 import './PropertyDetail.css';
 import PropertyDocuments from './PropertyDocuments';
 import ChatConversation from './ChatConversation';
@@ -69,11 +70,7 @@ async function exportRoomToExcel(roomName, historyMonths, accumulated) {
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `historial_${roomName.replace(/\s+/g, '_')}.xlsx`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  saveDownload(blob, `historial_${roomName.replace(/\s+/g, '_')}.xlsx`, { source: 'Historial', propertyName: roomName });
 }
 
 function exportRoomToPDF(roomName, historyMonths, accumulated) {
@@ -121,7 +118,7 @@ function exportRoomToPDF(roomName, historyMonths, accumulated) {
     doc.text('Ganancia neta acumulada', colX[0], y);
     accumulated >= 0 ? doc.setTextColor(76, 175, 80) : doc.setTextColor(244, 67, 54);
     doc.text(`${accumulated >= 0 ? '+' : ''}${accumulated.toFixed(0)} €`, colX[3], y);
-    doc.save(`historial_${roomName.replace(/\s+/g, '_')}.pdf`);
+    saveDownload(doc.output('blob'), `historial_${roomName.replace(/\s+/g, '_')}.pdf`, { source: 'Historial', propertyName: roomName });
   });
 }
 
