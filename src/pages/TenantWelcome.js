@@ -9,13 +9,11 @@ function TenantWelcome({ tenantData, tenantCode, onAccepted }) {
 
   useEffect(() => {
     if (!tenantData?.landlordEmail) return;
+    // Tenants are anon: the landlord's name comes from a narrow RPC, not the table.
     supabase
-      .from('landlords')
-      .select('name')
-      .eq('email', tenantData.landlordEmail)
-      .single()
+      .rpc('get_landlord_names', { p_emails: [tenantData.landlordEmail] })
       .then(({ data }) => {
-        if (data?.name) setLandlordName(data.name);
+        if (data?.[0]?.name) setLandlordName(data[0].name);
       });
   }, [tenantData]);
 

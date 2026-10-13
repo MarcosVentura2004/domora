@@ -224,13 +224,11 @@ export default function ChatConversation({
       if (storageData?.publicUrl) url = storageData.publicUrl + '?t=1';
     }
 
-    const { data: landlordRow } = await supabase
-      .from('landlords')
-      .select('name')
-      .eq('email', email)
-      .maybeSingle();
-    if (landlordRow?.name) {
-      name = landlordRow.name;
+    // Other landlords' rows aren't readable under RLS: names come from a narrow RPC.
+    const { data: landlordRows } = await supabase
+      .rpc('get_landlord_names', { p_emails: [email] });
+    if (landlordRows?.[0]?.name) {
+      name = landlordRows[0].name;
     } else {
       const { data: gestorRow } = await supabase
         .from('gestores')

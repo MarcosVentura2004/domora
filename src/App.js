@@ -97,7 +97,7 @@ function App() {
       } else {
         const landlordData = await resolveLandlord(user);
 
-        if (!landlordData) {
+        if (!landlordData && !(await hasGestorRow(user))) {
           await supabase.auth.signOut();
           localStorage.removeItem('userType');
           setUserType(null);
@@ -110,7 +110,7 @@ function App() {
         localStorage.setItem('userType', 'propietario');
         setPage('dashboard');
 
-        if (!landlordData.terms_accepted_at) {
+        if (landlordData && !landlordData.terms_accepted_at) {
           pendingUserRef.current = user;
           pendingUserTypeRef.current = 'propietario';
           setShowTermsModal(true);
@@ -210,23 +210,31 @@ function App() {
     if (landlordData) return landlordData;
 
     // 3. No landlords row yet (new user, or a former gestor-only account).
-    // Carry over name and terms acceptance from a gestores row if there is one.
+    // Carry over terms acceptance from a gestores row if there is one.
+    // (landlords has no name/phone columns: those live in auth user_metadata.)
     const { data: gestorRow } = await supabase
       .from('gestores')
-      .select('nombre, terms_accepted_at')
+      .select('terms_accepted_at')
       .eq('email', user.email)
       .maybeSingle();
-    const { data: newRow } = await supabase
+    const { data: newRow, error: insertError } = await supabase
       .from('landlords')
       .insert({
         user_id: user.id,
         email: user.email,
-        ...(gestorRow?.nombre ? { name: gestorRow.nombre } : {}),
         ...(gestorRow?.terms_accepted_at ? { terms_accepted_at: gestorRow.terms_accepted_at } : {}),
       })
       .select('id, user_id, terms_accepted_at')
       .single();
+    if (insertError) console.error('[resolveLandlord] No se pudo crear la fila de landlords:', insertError);
     return newRow;
+  };
+
+  // Former gestor-only accounts (gestores row, no landlords row) must still be
+  // able to log in as a landlord even if the landlords row can't be created.
+  const hasGestorRow = async (user) => {
+    const { data } = await supabase.from('gestores').select('email').eq('email', user.email).maybeSingle();
+    return !!data;
   };
 
   // Every account is a landlord. It is shown as gestor only while it has at
@@ -274,7 +282,7 @@ function App() {
 
     const landlordData = await resolveLandlord(user);
 
-    if (!landlordData) {
+    if (!landlordData && !(await hasGestorRow(user))) {
       await supabase.auth.signOut();
       localStorage.removeItem('userType');
       setUserType(null);

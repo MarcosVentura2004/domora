@@ -307,10 +307,9 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate, onSwi
       // ── Construir lista de propietarios unicos con canMessage ───────────
       const uniqueEmails = [...new Set(accessRows.map(r => r.landlord_email))];
 
+      // Other landlords' rows aren't readable under RLS: names come from a narrow RPC.
       const { data: landlordRows } = await supabase
-        .from('landlords')
-        .select('email, name')
-        .in('email', uniqueEmails);
+        .rpc('get_landlord_names', { p_emails: uniqueEmails });
 
       const landlordNameMap = {};
       (landlordRows || []).forEach(l => { landlordNameMap[l.email] = l.name; });

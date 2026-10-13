@@ -34,16 +34,13 @@ export default function ShareGestorProfile({ userEmail, onClose }) {
       let token = gestorRow?.invite_token;
       if (!gestorRow) {
         // Plain landlord sharing their profile for the first time: create the gestores row.
-        const { data: landlordRow } = await supabase
-          .from('landlords')
-          .select('name')
-          .eq('email', userEmail)
-          .maybeSingle();
+        // The name lives in auth user_metadata (landlords has no name column).
+        const { data: { user } } = await supabase.auth.getUser();
         token = crypto.randomUUID();
         const { error: insertError } = await supabase
           .from('gestores')
           .upsert(
-            { email: userEmail, nombre: landlordRow?.name || userEmail, invite_token: token },
+            { email: userEmail, nombre: user?.user_metadata?.name || userEmail, invite_token: token },
             { onConflict: 'email' }
           );
         if (insertError) {

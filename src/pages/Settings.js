@@ -226,8 +226,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
       }));
       await supabase.from('property_access').upsert(rows, { onConflict: 'gestor_email,property_id' });
 
-      const landlordRow = await supabase.from('landlords').select('name').eq('email', userEmail).single();
-      const landlordName = landlordRow?.data?.name || userEmail;
+      const { data: { user: inviter } } = await supabase.auth.getUser();
+      const landlordName = profileName.trim() || inviter?.user_metadata?.name || userEmail;
 
       // Generar token de invitación y guardarlo en gestor_invites
       const inviteToken = crypto.randomUUID();
@@ -287,10 +287,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     }
 
     const emails = [...new Set(accessRows.map(r => r.landlord_email))];
+    // Other landlords' rows aren't readable under RLS: names come from a narrow RPC.
     const { data: landlordRows } = await supabase
-      .from('landlords')
-      .select('email, name')
-      .in('email', emails);
+      .rpc('get_landlord_names', { p_emails: emails });
     const nameMap = Object.fromEntries((landlordRows || []).map(l => [l.email, l.name]));
 
     setClientes(emails.map(email => ({
@@ -387,9 +386,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   const handleCreateLandlordAccount = async () => {
     setCreatingLandlord(true);
+    const { data: { session: createSession } } = await supabase.auth.getSession();
     await supabase.from('landlords').insert({
+      user_id: createSession?.user?.id,
       email: userEmail,
-      name: profileName || userEmail,
       plan: 'free',
     });
     setCreatingLandlord(false);
@@ -416,18 +416,15 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
           .eq('email', userEmail)
           .maybeSingle();
         if (gestor?.nombre) setProfileName(gestor.nombre);
-      } else if (role === 'landlord') {
+      }
+      if (role !== 'tenant') {
+        // landlords only stores plan; name/phone come from user_metadata above.
         const { data: landlord } = await supabase
           .from('landlords')
-          .select('name, phone, plan')
+          .select('plan')
           .eq('email', userEmail)
-          .single();
-
-        if (landlord) {
-          if (landlord.name) setProfileName(landlord.name);
-          if (landlord.phone) setProfilePhone(formatPhone(landlord.phone));
-          setPlan(landlord.plan || 'free');
-        }
+          .maybeSingle();
+        if (landlord) setPlan(landlord.plan || 'free');
       }
 
       const localAvatar = await getFile(`avatar_${userEmail}`).catch(() => null);
@@ -491,11 +488,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     if (emailChanged) updatePayload.email = emailTrimmed;
     await supabase.auth.updateUser(updatePayload);
 
-    // Same person in both tables: keep the name in sync.
-    await supabase.from('landlords').upsert(
-      { email: userEmail, name: profileName.trim(), phone: profilePhone.trim() },
-      { onConflict: 'email' }
-    );
+    // Name and phone live in auth user_metadata (saved above). Keep the gestores
+    // name in sync, since that's what landlords see for their gestor.
     if (role === 'gestor') {
       await supabase.from('gestores').upsert(
         { email: userEmail, nombre: profileName.trim() },
