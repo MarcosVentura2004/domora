@@ -17,9 +17,12 @@ import PoliticaDePrivacidad from './pages/PoliticaDePrivacidad';
 import TerminosDeServicio from './pages/TerminosDeServicio';
 import AvisoLegal from './pages/AvisoLegal';
 import EliminarCuenta from './pages/EliminarCuenta';
+import { isStandalone } from './pwaInstall';
 import './App.css';
 
 function App() {
+  // Installed app (PWA / TWA): the marketing landing is skipped, it opens on Welcome.
+  const isInstalledApp = isStandalone();
   const initialPage = window.location.pathname === '/planes'
     ? 'planes'
     : window.location.pathname === '/reset-password'
@@ -36,7 +39,7 @@ function App() {
     ? 'aviso-legal'
     : window.location.pathname === '/eliminar-cuenta'
     ? 'eliminar-cuenta'
-    : 'landing';
+    : isInstalledApp ? 'welcome' : 'landing';
   const [currentPage, rawSetPage] = useState(initialPage);
   const currentPageRef = useRef(initialPage);
   const setPage = (page) => { currentPageRef.current = page; rawSetPage(page); };
@@ -406,7 +409,7 @@ function App() {
       )}
 
       {currentPage === 'welcome' && (
-        <Welcome onSelectUserType={handleSelectUserType} onBack={() => setPage('landing')} />
+        <Welcome onSelectUserType={handleSelectUserType} onBack={isInstalledApp ? undefined : () => setPage('landing')} />
       )}
 
       {currentPage === 'auth' && (
