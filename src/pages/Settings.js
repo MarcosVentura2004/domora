@@ -399,8 +399,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   // ── Carga inicial ─────────────────────────────────────────
   useEffect(() => {
-    if (role === 'landlord') loadGestores();
-    if (role === 'gestor') loadClientes();
+    // Landlords and gestores are the same kind of account: both can have
+    // gestores for their own properties and clients of their own.
+    if (role !== 'tenant') { loadGestores(); loadClientes(); }
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.user_metadata) {
@@ -490,16 +491,19 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
     if (emailChanged) updatePayload.email = emailTrimmed;
     await supabase.auth.updateUser(updatePayload);
 
+    // Same person in both tables: keep the name in sync.
+    await supabase.from('landlords').upsert(
+      { email: userEmail, name: profileName.trim(), phone: profilePhone.trim() },
+      { onConflict: 'email' }
+    );
     if (role === 'gestor') {
       await supabase.from('gestores').upsert(
         { email: userEmail, nombre: profileName.trim() },
         { onConflict: 'email' }
       );
     } else {
-      await supabase.from('landlords').upsert(
-        { email: userEmail, name: profileName.trim(), phone: profilePhone.trim() },
-        { onConflict: 'email' }
-      );
+      // Only updates if a gestores row exists (no-op otherwise)
+      await supabase.from('gestores').update({ nombre: profileName.trim() }).eq('email', userEmail);
     }
 
     setProfileSaving(false);
@@ -693,8 +697,8 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         <div>
           <p className="settings-section-label">Rol</p>
           <div className="settings-card">
-            {/* Propietario */}
-            {role === 'landlord' ? (
+            {/* Propietario (a gestor is also a landlord) */}
+            {role !== 'tenant' ? (
               <div className="settings-card-row">
                 <div className="settings-row-icon" style={{ background: '#f0f0f0' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -703,8 +707,12 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                   </svg>
                 </div>
                 <div className="settings-row-content">
-                  <p className="settings-row-title">Propietario</p>
-                  <p className="settings-row-subtitle">Rol actual</p>
+                  <p className="settings-row-title">{role === 'gestor' ? 'Propietario y gestor' : 'Propietario'}</p>
+                  <p className="settings-row-subtitle">
+                    {role === 'gestor'
+                      ? `Rol actual · ${clientes.length} ${clientes.length === 1 ? 'cliente' : 'clientes'}`
+                      : 'Rol actual'}
+                  </p>
                 </div>
                 <svg className="settings-row-check" width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M20 6L9 17l-5-5" stroke="#34c759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -774,9 +782,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>
 
         {/* ════════════════════════════════════════
-            SECCION 2b — Gestores (solo propietario)
+            SECCION 2b — Gestores de mis propiedades (propietario y gestor)
         ════════════════════════════════════════ */}
-        {role === 'landlord' && <div>
+        {role !== 'tenant' && <div>
           <p className="settings-section-label">Gestores</p>
           <div className="settings-card">
 
@@ -945,9 +953,9 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>}
 
         {/* ════════════════════════════════════════
-            SECCION 2c — Cartera de clientes (solo gestor)
+            SECCION 2c — Cartera de clientes (propietario y gestor)
         ════════════════════════════════════════ */}
-        {role === 'gestor' && <div>
+        {role !== 'tenant' && <div>
           <p className="settings-section-label">Cartera</p>
           <div className="settings-card">
             {clientes.length === 0 ? (
@@ -960,7 +968,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </div>
                 <div className="settings-row-content">
                   <p className="settings-row-title" style={{ color: '#aaa' }}>Sin clientes</p>
-                  <p className="settings-row-subtitle">Los propietarios aparecen aquí cuando te dan acceso</p>
+                  <p className="settings-row-subtitle">Gestiona propiedades de otros propietarios. Cuando alguien te dé acceso, pasarás a ser gestor.</p>
                 </div>
               </div>
             ) : (

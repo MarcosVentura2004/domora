@@ -174,7 +174,7 @@ function getGestorTenants(properties, accessMap) {
 }
 
 // ── Componente principal ───────────────────────────────────────────────────
-export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
+export default function GestorDashboard({ userEmail, onLogout, onNavigate, onSwitchRole, onNoClients }) {
   const [gestorName, setGestorName] = useState('');
   const [accessMap, setAccessMap] = useState({}); // { [property_id]: { permisos, landlordEmail, canMessage } }
   const [properties, setProperties] = useState([]);
@@ -248,6 +248,11 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
     setTabHeaderHeight(tabHeaderRef.current.offsetHeight);
     return () => observer.disconnect();
   }, [hasOwnProperties, mainTab, loading, landlordsList.length]);
+
+  // No clients left (or never had any): this account is a plain landlord.
+  useEffect(() => {
+    if (!loading && landlordsList.length === 0 && onNoClients) onNoClients();
+  }, [loading, landlordsList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Carga inicial ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -415,6 +420,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
         userEmail={userEmail}
         onBack={() => { setShowSettings(false); setReloadKey(k => k + 1); }}
         onLogout={onLogout}
+        onSwitchRole={onSwitchRole}
         role="gestor"
       />
     );

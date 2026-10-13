@@ -143,7 +143,7 @@ const CATEGORIES = [
   },
 ];
 
-function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvatar, onNavigate }) {
+function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvatar, onNavigate, onSettingsClosed }) {
   const [properties, setProperties] = useState(() => {
     const saved = localStorage.getItem(`properties_${userEmail}`);
     return saved ? JSON.parse(saved) : [];
@@ -387,7 +387,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
     return (
       <Settings
         userEmail={userEmail}
-        onBack={() => setShowSettings(false)}
+        onBack={() => { setShowSettings(false); if (onSettingsClosed) onSettingsClosed(); }}
         onLogout={onLogout}
         onSwitchRole={onSwitchRole}
       />

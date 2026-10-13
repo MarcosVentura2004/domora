@@ -78,16 +78,18 @@ function App() {
 
       const isGestor = await isGestorAccount(user);
       if (isGestor) {
+        // A gestor is also a landlord: make sure the landlords row exists.
+        resolveLandlord(user).catch(() => null);
         setUserType('gestor');
         localStorage.setItem('userType', 'gestor');
         setPage('gestor-dashboard');
 
-        const { data: gestorData } = await supabase
-          .from('gestores')
-          .select('terms_accepted_at')
-          .eq('email', user.email)
-          .maybeSingle();
-        if (!gestorData?.terms_accepted_at) {
+        // Terms accepted either as gestor or as landlord (same person, same account)
+        const [{ data: gestorData }, { data: landlordTerms }] = await Promise.all([
+          supabase.from('gestores').select('terms_accepted_at').eq('email', user.email).maybeSingle(),
+          supabase.from('landlords').select('terms_accepted_at').eq('email', user.email).maybeSingle(),
+        ]);
+        if (!gestorData?.terms_accepted_at && !landlordTerms?.terms_accepted_at) {
           pendingUserRef.current = user;
           pendingUserTypeRef.current = 'gestor';
           setShowTermsModal(true);
@@ -207,37 +209,63 @@ function App() {
 
     if (landlordData) return landlordData;
 
-    // 3. Genuinely new user — create the row
+    // 3. No landlords row yet (new user, or a former gestor-only account).
+    // Carry over name and terms acceptance from a gestores row if there is one.
+    const { data: gestorRow } = await supabase
+      .from('gestores')
+      .select('nombre, terms_accepted_at')
+      .eq('email', user.email)
+      .maybeSingle();
     const { data: newRow } = await supabase
       .from('landlords')
-      .insert({ user_id: user.id, email: user.email })
+      .insert({
+        user_id: user.id,
+        email: user.email,
+        ...(gestorRow?.nombre ? { name: gestorRow.nombre } : {}),
+        ...(gestorRow?.terms_accepted_at ? { terms_accepted_at: gestorRow.terms_accepted_at } : {}),
+      })
       .select('id, user_id, terms_accepted_at')
       .single();
     return newRow;
   };
 
-  // A user is a gestor if they manage at least one property, or if they have a
-  // gestores row but no landlords row (a gestor who removed all their clients
-  // must keep logging in as gestor instead of being treated as a new landlord).
+  // Every account is a landlord. It is shown as gestor only while it has at
+  // least one client (a landlord who granted it access to their properties).
+  // Removing the last client turns it back into a plain landlord.
   const isGestorAccount = async (user) => {
     const { data: accessData } = await supabase
       .from('property_access')
       .select('id')
       .eq('gestor_email', user.email)
       .limit(1);
-    if (accessData && accessData.length > 0) return true;
+    return !!accessData && accessData.length > 0;
+  };
 
-    const [{ data: gestorRow }, { data: landlordRow }] = await Promise.all([
-      supabase.from('gestores').select('email').eq('email', user.email).maybeSingle(),
-      supabase.from('landlords').select('id').eq('email', user.email).maybeSingle(),
-    ]);
-    return !!gestorRow && !landlordRow;
+  // Re-evaluate gestor/landlord after something that can change the client list
+  // (closing Ajustes, removing the last client). Only moves between the two dashboards.
+  const syncRoleWithClients = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
+    const page = currentPageRef.current;
+    if (page !== 'dashboard' && page !== 'gestor-dashboard') return;
+    const isGestor = await isGestorAccount(session.user);
+    if (isGestor && page === 'dashboard') {
+      setUserType('gestor');
+      localStorage.setItem('userType', 'gestor');
+      setPage('gestor-dashboard');
+    } else if (!isGestor && page === 'gestor-dashboard') {
+      await resolveLandlord(session.user);
+      setUserType('propietario');
+      localStorage.setItem('userType', 'propietario');
+      setPage('dashboard');
+    }
   };
 
   const handleLogin = async (user) => {
     setUserEmail(user.email);
 
     if (await isGestorAccount(user)) {
+      resolveLandlord(user).catch(() => null);
       setUserType('gestor');
       localStorage.setItem('userType', 'gestor');
       setPage('gestor-dashboard');
@@ -342,16 +370,21 @@ function App() {
   };
 
   const handleSwitchRole = async () => {
-    const newType = userType === 'propietario' ? 'inquilino' : 'propietario';
-    setUserType(newType);
-    localStorage.setItem('userType', newType);
+    const newType = userType === 'inquilino' ? 'propietario' : 'inquilino';
     if (newType === 'inquilino') {
+      setUserType('inquilino');
+      localStorage.setItem('userType', 'inquilino');
       const saved = JSON.parse(localStorage.getItem('inquilino_codes') || '[]');
       setTenantCodes(saved);
       setPage(saved.length > 0 ? 'inquilino-home' : 'code-entry');
     } else {
       await supabase.auth.updateUser({ data: { userType: 'propietario' } });
-      setPage('dashboard');
+      const { data: { session } } = await supabase.auth.getSession();
+      const isGestor = session?.user ? await isGestorAccount(session.user) : false;
+      const type = isGestor ? 'gestor' : 'propietario';
+      setUserType(type);
+      localStorage.setItem('userType', type);
+      setPage(isGestor ? 'gestor-dashboard' : 'dashboard');
     }
   };
 
@@ -382,13 +415,14 @@ function App() {
           onLogout={handleLogout}
           onSwitchRole={handleSwitchRole}
           onNavigate={(page) => setPage(page)}
+          onSettingsClosed={syncRoleWithClients}
         />
       )}
 
       {currentPage === 'calendario' && (
         <Calendario
           userEmail={userEmail}
-          onBack={() => setPage('dashboard')}
+          onBack={() => setPage(userType === 'gestor' ? 'gestor-dashboard' : 'dashboard')}
         />
       )}
 
@@ -396,7 +430,9 @@ function App() {
         <GestorDashboard
           userEmail={userEmail}
           onLogout={handleLogout}
+          onSwitchRole={handleSwitchRole}
           onNavigate={(page) => setPage(page)}
+          onNoClients={syncRoleWithClients}
         />
       )}
 

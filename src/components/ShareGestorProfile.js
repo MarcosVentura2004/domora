@@ -24,7 +24,7 @@ export default function ShareGestorProfile({ userEmail, onClose }) {
         .from('gestores')
         .select('invite_token')
         .eq('email', userEmail)
-        .single();
+        .maybeSingle();
 
       if (fetchError) {
         if (!cancelled) { setError('No se pudo generar el enlace. Inténtalo de nuevo.'); setLoading(false); }
@@ -32,7 +32,25 @@ export default function ShareGestorProfile({ userEmail, onClose }) {
       }
 
       let token = gestorRow?.invite_token;
-      if (!token) {
+      if (!gestorRow) {
+        // Plain landlord sharing their profile for the first time: create the gestores row.
+        const { data: landlordRow } = await supabase
+          .from('landlords')
+          .select('name')
+          .eq('email', userEmail)
+          .maybeSingle();
+        token = crypto.randomUUID();
+        const { error: insertError } = await supabase
+          .from('gestores')
+          .upsert(
+            { email: userEmail, nombre: landlordRow?.name || userEmail, invite_token: token },
+            { onConflict: 'email' }
+          );
+        if (insertError) {
+          if (!cancelled) { setError('No se pudo generar el enlace. Inténtalo de nuevo.'); setLoading(false); }
+          return;
+        }
+      } else if (!token) {
         token = crypto.randomUUID();
         const { error: updateError } = await supabase
           .from('gestores')
