@@ -7,6 +7,7 @@ import GeneralPanel from './GeneralPanel';
 import ChatConversation from './ChatConversation';
 import Settings from './Settings';
 import Dashboard from './Dashboard';
+import ShareGestorProfile from '../components/ShareGestorProfile';
 import { getFile } from '../utils/fileStorage';
 
 // ── Iconos de estado ───────────────────────────────────────────────────────
@@ -199,10 +200,6 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
   // Bumped when returning from Ajustes so removed clients disappear immediately
   const [reloadKey, setReloadKey] = useState(0);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareLink, setShareLink] = useState('');
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [shareLoading, setShareLoading] = useState(false);
-  const [shareError, setShareError] = useState('');
 
   const tabHeaderRef = useRef(null);
   const [tabHeaderHeight, setTabHeaderHeight] = useState(106);
@@ -242,45 +239,6 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
     setActiveTab('general');
   };
 
-  const handleShareGestor = async () => {
-    if (shareLoading) return;
-    setShareLoading(true);
-
-    const { data: gestorRow, error: fetchError } = await supabase
-      .from('gestores')
-      .select('invite_token')
-      .eq('email', userEmail)
-      .single();
-
-    if (fetchError) {
-      setShareLoading(false);
-      setShareError('No se pudo generar el enlace. Intentalo de nuevo.');
-      setShowShareModal(true);
-      return;
-    }
-
-    let token = gestorRow?.invite_token;
-    if (!token) {
-      token = crypto.randomUUID();
-      const { error: updateError } = await supabase
-        .from('gestores')
-        .update({ invite_token: token })
-        .eq('email', userEmail);
-      if (updateError) {
-        setShareLoading(false);
-        setShareError('No se pudo generar el enlace. Intentalo de nuevo.');
-        setShowShareModal(true);
-        return;
-      }
-    }
-
-    setShareLink(`https://trydomio.com/gestor-invite-landlord?token=${token}`);
-    setLinkCopied(false);
-    setShareError('');
-    setShareLoading(false);
-    setShowShareModal(true);
-  };
-
   useEffect(() => {
     if (!tabHeaderRef.current) return;
     const observer = new ResizeObserver(() => {
@@ -289,7 +247,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
     observer.observe(tabHeaderRef.current);
     setTabHeaderHeight(tabHeaderRef.current.offsetHeight);
     return () => observer.disconnect();
-  }, [hasOwnProperties, mainTab]);
+  }, [hasOwnProperties, mainTab, loading, landlordsList.length]);
 
   // ── Carga inicial ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -504,8 +462,12 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
     );
   }
 
+  // Without clients there is nothing to manage: show only "Mis propiedades", no tabs.
+  // Clients are added from Ajustes > Cartera.
+  const hasClients = landlordsList.length > 0;
+
   // ── Modo "Mis propiedades" ────────────────────────────────────────────────
-  if (mainTab === 'mis_propiedades') {
+  if (mainTab === 'mis_propiedades' || !hasClients) {
     return (
       <div>
         <div
@@ -528,7 +490,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
               <LandlordAvatar email={userEmail} name={gestorName} avatarUrl={gestorAvatarUrl} size={36} />
             </button>
           </div>
-          <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
+          {hasClients && <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
             <button
               onClick={() => switchMainTab('mis_propiedades')}
               style={{
@@ -549,7 +511,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
             >
               Gestion
             </button>
-          </div>
+          </div>}
         </div>
         <div style={{
           position: 'fixed', top: tabHeaderHeight, left: 0, right: 0, bottom: 0,
@@ -621,8 +583,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
             </p>
           </div>
           <button
-            onClick={handleShareGestor}
-            disabled={shareLoading}
+            onClick={() => setShowShareModal(true)}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               background: '#f5f5f5', border: 'none', borderRadius: 8,
@@ -713,95 +674,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate }) {
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
         {showShareModal && (
-          <div
-            style={{
-              position: 'fixed', inset: 0, zIndex: 1200,
-              background: 'rgba(0,0,0,0.45)',
-              display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-            }}
-            onClick={() => { setShowShareModal(false); setShareError(''); setShareLink(''); }}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Compartir perfil"
-              style={{
-                background: 'white', borderRadius: '20px 20px 0 0',
-                padding: '24px 20px 36px', width: '100%', maxWidth: 480,
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-              <p style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#111' }}>
-                Compartir perfil
-              </p>
-              {shareError ? (
-                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#c0392b', textAlign: 'center' }}>{shareError}</p>
-              ) : (
-                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#555', lineHeight: 1.5 }}>
-                  Comparte este enlace con propietarios. Podrán darte acceso a sus propiedades directamente desde el enlace.
-                </p>
-              )}
-              {shareLink && (
-                <>
-                  <div style={{
-                    background: '#f5f5f5', borderRadius: 10, padding: '12px 14px',
-                    fontSize: 13, color: '#333', wordBreak: 'break-all',
-                    marginBottom: 16, border: '1px solid #e5e5e5', lineHeight: 1.5,
-                  }}>
-                    {shareLink}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(shareLink).catch(() => {});
-                      setLinkCopied(true);
-                      setTimeout(() => setLinkCopied(false), 2000);
-                    }}
-                    style={{
-                      width: '100%', padding: '14px', borderRadius: 12,
-                      background: linkCopied ? '#16a34a' : '#111',
-                      color: 'white', border: 'none', fontSize: 15, fontWeight: 600,
-                      cursor: 'pointer', marginBottom: 10, transition: 'background 0.2s',
-                    }}
-                  >
-                    {linkCopied ? 'Enlace copiado' : 'Copiar enlace'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const msg = encodeURIComponent(`Hola, puedes darme acceso a tus propiedades en Domio desde este enlace: ${shareLink}`);
-                      window.open(`https://wa.me/?text=${msg}`, '_blank', 'noopener');
-                    }}
-                    style={{
-                      width: '100%', padding: '14px', borderRadius: 12, marginBottom: 10,
-                      background: '#25D366', color: 'white',
-                      border: 'none', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
-                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.857L.057 23.882a.5.5 0 0 0 .615.612l6.162-1.51A11.94 11.94 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.9 0-3.7-.504-5.25-1.385l-.372-.217-3.865.947.982-3.773-.237-.389A9.961 9.961 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
-                    </svg>
-                    Enviar por WhatsApp
-                  </button>
-                  {typeof navigator.share === 'function' && (
-                    <button
-                      onClick={() => {
-                        navigator.share({ title: 'Gestor en Domio', url: shareLink }).catch(() => {});
-                      }}
-                      style={{
-                        width: '100%', padding: '14px', borderRadius: 12,
-                        background: 'white', color: '#111',
-                        border: '1px solid #e5e5e5',
-                        fontSize: 15, fontWeight: 600, cursor: 'pointer',
-                      }}
-                    >
-                      Compartir
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+          <ShareGestorProfile userEmail={userEmail} onClose={() => setShowShareModal(false)} />
         )}
       </div>
     );

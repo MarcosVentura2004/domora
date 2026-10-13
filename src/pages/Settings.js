@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { saveFile, getFile } from '../utils/fileStorage';
 import { deleteAllDownloads } from '../utils/downloads';
 import Descargas from './Descargas';
+import ShareGestorProfile from '../components/ShareGestorProfile';
 import './Settings.css';
 
 async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount, inviteToken }, supabaseClient) {
@@ -82,6 +83,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
 
   // ── Clientes (solo gestor) ────────────────────────────────
   const [clientes, setClientes] = useState([]);
+  const [showAddClients, setShowAddClients] = useState(false);
   const [removingClientEmail, setRemovingClientEmail] = useState(null);
   const [showRemoveClientModal, setShowRemoveClientModal] = useState(false);
   const [removeClientTarget, setRemoveClientTarget] = useState(null);
@@ -943,10 +945,10 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
         </div>}
 
         {/* ════════════════════════════════════════
-            SECCION 2c — Clientes (solo gestor)
+            SECCION 2c — Cartera de clientes (solo gestor)
         ════════════════════════════════════════ */}
         {role === 'gestor' && <div>
-          <p className="settings-section-label">Clientes</p>
+          <p className="settings-section-label">Cartera</p>
           <div className="settings-card">
             {clientes.length === 0 ? (
               <div className="settings-card-row" style={{ opacity: 0.5, pointerEvents: 'none' }}>
@@ -958,7 +960,7 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </div>
                 <div className="settings-row-content">
                   <p className="settings-row-title" style={{ color: '#aaa' }}>Sin clientes</p>
-                  <p className="settings-row-subtitle">Los propietarios aparecen aquí cuando aceptan tu invitación</p>
+                  <p className="settings-row-subtitle">Los propietarios aparecen aquí cuando te dan acceso</p>
                 </div>
               </div>
             ) : (
@@ -1000,8 +1002,33 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
                 </div>
               ))
             )}
+            <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />
+            <button
+              className="settings-card-row"
+              style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+              onClick={() => setShowAddClients(true)}
+            >
+              <div className="settings-row-icon" style={{ background: '#111' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="9" cy="7" r="4" stroke="white" strokeWidth="2"/>
+                  <path d="M19 8v6M22 11h-6" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div className="settings-row-content">
+                <p className="settings-row-title">Añadir clientes</p>
+                <p className="settings-row-subtitle">Comparte tu perfil con propietarios</p>
+              </div>
+              <svg className="settings-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
           </div>
         </div>}
+
+        {showAddClients && (
+          <ShareGestorProfile userEmail={userEmail} onClose={() => setShowAddClients(false)} />
+        )}
 
         {/* ════════════════════════════════════════
             SECCION 3 — Plan (propietario y gestor)

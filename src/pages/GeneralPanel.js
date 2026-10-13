@@ -311,10 +311,10 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
 
   return (
     <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
-      {/* Header — oculto cuando está embebido dentro de otro componente con su propio header */}
-      {!hideHeader && (
-        <div className="dashboard-header">
-          {!hideAvatar ? (
+      {/* Header — when embedded (hideHeader, e.g. gestor's "Mis propiedades") only the
+          avatar is hidden; the options menu (reporte, rentabilidad, comparar) stays available. */}
+      <div className="dashboard-header">
+          {!hideAvatar && !hideHeader ? (
             <button className="profile-button" onClick={onOpenSettings}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: '#E5E5E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {avatarUrl && (
@@ -355,7 +355,6 @@ function GeneralPanel({ properties, userEmail, onNavigateToProperties, onOpenSet
             )}
           </div>
         </div>
-      )}
 
       {showReportModal && (
         <ReportModal properties={properties} supabaseExpenses={supabaseExpenses} onClose={() => setShowReportModal(false)} />
