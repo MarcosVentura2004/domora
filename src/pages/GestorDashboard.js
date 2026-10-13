@@ -754,7 +754,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate, onSwi
 
       {/* ── Tab: Propiedades ── */}
       {activeTab === 'properties' && (
-        <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
+        <div className="dashboard-container" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
           {selectedCategory === null ? (
             <>
@@ -1020,7 +1020,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate, onSwi
         const directMeta = landlordDirectMeta[selectedLandlord.email] || { unread: 0, lastTs: '', lastContent: '' };
 
         return (
-          <div style={{ minHeight: '100vh', background: '#f7f8fa', paddingBottom: '80px' }}>
+          <div style={{ minHeight: '100vh', background: '#f7f8fa', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
             {/* Header */}
             <div style={{
               background: 'white', padding: '12px 20px',
@@ -1249,7 +1249,7 @@ export default function GestorDashboard({ userEmail, onLogout, onNavigate, onSwi
       {/* ── Bottom navigation ── */}
       {!(activeTab === 'chat' && chatWith) && (
         <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0, height: '64px',
+          position: 'fixed', bottom: 0, left: 0, right: 0, height: 'calc(64px + env(safe-area-inset-bottom))',
           background: 'white', borderTop: '1px solid #EEEEEE',
           display: 'flex', alignItems: 'center', justifyContent: 'space-around',
           zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)',

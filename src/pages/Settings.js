@@ -4,6 +4,7 @@ import { saveFile, getFile } from '../utils/fileStorage';
 import { deleteAllDownloads } from '../utils/downloads';
 import Descargas from './Descargas';
 import ShareGestorProfile from '../components/ShareGestorProfile';
+import InstallAppSection from '../components/InstallAppSection';
 import './Settings.css';
 
 async function sendGestorInviteEmail({ gestorEmail, gestorName, landlordName, propertyCount, inviteToken }, supabaseClient) {
@@ -1094,6 +1095,11 @@ export default function Settings({ userEmail, onLogout, onSwitchRole, onBack, ro
             </button>
           </div>
         </div>
+
+        {/* ════════════════════════════════════════
+            SECCION 3d — Instalar app (solo si se puede instalar)
+        ════════════════════════════════════════ */}
+        <InstallAppSection />
 
         {/* ════════════════════════════════════════
             SECCION 4 — Seguridad

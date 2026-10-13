@@ -4,12 +4,13 @@
   "short_name": "Domio",
   "description": "Gestiona tus propiedades en alquiler de forma sencilla y segura.",
   "lang": "es",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#2563EB",
-  "background_color": "#ffffff",
+  "background_color": "#FFFFFF",
   "icons": [
     {
       "src": "/icon-192.png",

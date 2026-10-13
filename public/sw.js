@@ -1,30 +1,12 @@
-const CACHE_NAME = 'domio-shell-v2';
-const OFFLINE_URL = '/offline.html';
+// Legacy service worker. Replaced by /service-worker.js (built from
+// src/service-worker.js), which the app now registers instead.
+//
+// This file is kept so browsers that still have the old registration and
+// check this URL for updates receive a harmless worker: it has NO fetch
+// handler (every request goes straight to the network), it only deletes the
+// old cache and does not reload any page. Do not delete this file.
 
-// Do NOT cache '/' (index.html) — it must always be fetched fresh so new
-// deployments are picked up immediately.
-const SHELL_ASSETS = [
-  '/offline.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/icon-192.png',
-  '/icon-512.png',
-];
-
-// Supabase domains that must always go to the network (never cache auth/data)
-const BYPASS_ORIGINS = [
-  'supabase.co',
-  'supabase.com',
-];
-
-function isBypass(url) {
-  return BYPASS_ORIGINS.some((origin) => url.hostname.includes(origin));
-}
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
-  );
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
@@ -33,39 +15,9 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
+          .filter((key) => key.startsWith('domio-shell-'))
           .map((key) => caches.delete(key))
       )
     )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Always pass Supabase requests directly to the network
-  if (isBypass(url)) {
-    return;
-  }
-
-  // Only handle GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(event.request).catch(() => {
-        // For navigation requests show the offline page
-        if (event.request.mode === 'navigate') {
-          return caches.match(OFFLINE_URL);
-        }
-      });
-    })
   );
 });

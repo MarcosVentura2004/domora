@@ -446,7 +446,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
 
       {/* Panel Propiedades */}
       {activeTab === 'properties' && (
-        <div className="dashboard-container" style={{ paddingBottom: '80px' }}>
+        <div className="dashboard-container" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
           {selectedCategory === null ? (
             /* ── NIVEL 1: cuadrícula de categorías ── */
@@ -764,7 +764,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
             )
           : tenants;
         return (
-          <div style={{ minHeight: '100vh', background: '#f7f8fa', paddingBottom: '80px' }}>
+          <div style={{ minHeight: '100vh', background: '#f7f8fa', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
             {/* Header moderno */}
             <div style={{
               background: 'white', padding: '16px 20px',
@@ -1285,7 +1285,7 @@ function Dashboard({ userEmail, onLogout, onSwitchRole, hideHeader, chatHideAvat
 
       {/* Barra de navegación */}
       {!(activeTab === 'chat' && chatWith) && <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, height: '64px',
+        position: 'fixed', bottom: 0, left: 0, right: 0, height: 'calc(64px + env(safe-area-inset-bottom))',
         background: 'white', borderTop: '1px solid #EEEEEE',
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         zIndex: 1000, paddingBottom: 'env(safe-area-inset-bottom)',

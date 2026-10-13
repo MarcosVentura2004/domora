@@ -2,7 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
     <!-- PWA theme color -->
     <meta name="theme-color" content="#2563EB" />
@@ -11,7 +11,7 @@
     <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico" />
 
     <!-- Apple Touch Icon (iOS homescreen) -->
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
 
     <!-- Web App Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
@@ -21,8 +21,9 @@
     <!-- Disable iOS call / address detection -->
     <meta name="format-detection" content="telephone=no" />
 
-    <!-- iOS standalone mode status bar style -->
+    <!-- iOS standalone mode. "default" keeps the content below the status bar. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Domio" />
 
@@ -31,15 +32,6 @@
   <body>
     <noscript>Necesitas JavaScript para usar Domio.</noscript>
     <div id="root"></div>
-
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('%PUBLIC_URL%/sw.js').catch(function (err) {
-            console.warn('Service worker registration failed:', err);
-          });
-        });
-      }
-    </script>
+    <!-- The service worker is registered from src/serviceWorkerRegistration.js -->
   </body>
 </html>
