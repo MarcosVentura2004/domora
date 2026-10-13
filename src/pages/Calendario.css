@@ -539,6 +539,14 @@
   .cal-overlay {
     align-items: center;
   }
+  /* Day panel is centered here, not a bottom sheet: round all corners, drop the handle */
+  .cal-panel {
+    border-radius: 20px;
+    margin: 20px;
+    padding-top: 20px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.16);
+  }
+  .cal-panel::before { display: none; }
 }
 
 .cal-modal-header {
