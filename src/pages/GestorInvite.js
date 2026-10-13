@@ -7,7 +7,7 @@ function GestorInvite({ onAccepted }) {
 
   const [loadState, setLoadState] = useState('loading'); // loading | invalid | accepted | wrong-user | ready
   const [invite, setInvite] = useState(null);
-  const [authMode, setAuthMode] = useState('login'); // login | register
+  const [authMode, setAuthMode] = useState('login'); // login | register | verify-email | forgot | forgot-sent
   const [alreadyLoggedIn, setAlreadyLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -134,6 +134,24 @@ function GestorInvite({ onAccepted }) {
     if (resendError) {
       setError(`No se pudo reenviar el código: ${resendError.message}`);
     }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    // After resetting, ResetPassword sends the user back to this invite (via `next`)
+    // so they land already signed in and can accept it with one click.
+    const next = `/gestor-invite?token=${encodeURIComponent(token)}`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password?next=${encodeURIComponent(next)}`,
+    });
+    setLoading(false);
+    if (resetError) {
+      setError('No se pudo enviar el correo. Inténtalo de nuevo en unos minutos.');
+      return;
+    }
+    setAuthMode('forgot-sent');
   };
 
   // ── Pantallas de estado ──
@@ -300,7 +318,7 @@ function GestorInvite({ onAccepted }) {
           ) : (
             <>
               {/* Tabs login / registro — ocultos durante verificación */}
-              {authMode !== 'verify-email' && (
+              {(authMode === 'login' || authMode === 'register') && (
                 <div className="register-tabs" style={{ marginBottom: 24 }}>
                   <button
                     type="button"
@@ -341,7 +359,87 @@ function GestorInvite({ onAccepted }) {
                   <button type="submit" className="continue-button" disabled={loading}>
                     {loading ? 'Entrando…' : 'Iniciar sesion y aceptar'}
                   </button>
+                  <div style={{ textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className="resend-button"
+                      onClick={() => { setError(''); setAuthMode('forgot'); }}
+                    >
+                      ¿Has olvidado tu contraseña?
+                    </button>
+                  </div>
                 </form>
+              )}
+
+              {authMode === 'forgot' && (
+                <>
+                  <h2>Restablecer contraseña</h2>
+                  <p className="auth-subtitle">
+                    Te enviaremos un enlace para crear una nueva contraseña. Después volverás a esta invitación.
+                  </p>
+                  <form onSubmit={handleForgotPassword}>
+                    <input
+                      type="email"
+                      className="auth-input"
+                      placeholder="correo@ejemplo.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                    <button type="submit" className="continue-button" disabled={loading}>
+                      {loading ? 'Enviando…' : 'Enviar enlace'}
+                    </button>
+                  </form>
+                  <div style={{ textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className="resend-button"
+                      onClick={() => { setError(''); setAuthMode('login'); }}
+                    >
+                      Volver a iniciar sesión
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {authMode === 'forgot-sent' && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    width: 56, height: 56, borderRadius: '50%', background: '#f5f5f5',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 16px',
+                  }}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="5" width="18" height="14" rx="2" stroke="#111" strokeWidth="2"/>
+                      <path d="M3 7l9 6 9-6" stroke="#111" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <h2>Revisa tu correo</h2>
+                  <p className="auth-subtitle">
+                    Si existe una cuenta con <strong>{email}</strong>, recibirás un enlace para restablecer tu contraseña.
+                    Al terminar, volverás aquí para aceptar la invitación.
+                  </p>
+                  <p style={{ fontSize: 13, color: '#888', margin: '0 0 8px' }}>
+                    Puedes cerrar esta pestaña. Si no lo ves, revisa la carpeta de spam.
+                  </p>
+                  <button
+                    type="button"
+                    className="resend-button"
+                    onClick={handleForgotPassword}
+                    disabled={loading}
+                  >
+                    {loading ? 'Enviando…' : 'Reenviar enlace'}
+                  </button>
+                  <br/>
+                  <button
+                    type="button"
+                    className="resend-button"
+                    onClick={() => { setError(''); setPassword(''); setAuthMode('login'); }}
+                  >
+                    Volver a iniciar sesión
+                  </button>
+                </div>
               )}
 
               {authMode === 'register' && (

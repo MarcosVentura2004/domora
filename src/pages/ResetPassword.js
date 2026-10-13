@@ -45,7 +45,22 @@ function ResetPassword({ onSuccess }) {
     }
 
     setDone(true);
-    setTimeout(() => onSuccess(), 2000);
+    // Optional return path (e.g. back to a gestor invite). Only same-origin
+    // relative paths are honoured to avoid open redirects.
+    const next = new URLSearchParams(window.location.search).get('next');
+    let safeNext = null;
+    if (next) {
+      try {
+        const u = new URL(next, window.location.origin);
+        if (u.origin === window.location.origin && u.pathname === '/gestor-invite') {
+          safeNext = u.pathname + u.search;
+        }
+      } catch (_) { /* invalid URL: ignore */ }
+    }
+    setTimeout(() => {
+      if (safeNext) window.location.href = safeNext;
+      else onSuccess();
+    }, 2000);
   };
 
   return (
