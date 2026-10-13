@@ -412,6 +412,9 @@ export default function Calendario({ userEmail, onBack }) {
         <button className="cal-today-btn" onClick={goToday}>Hoy</button>
       </div>
 
+      {/* Board wrapper: full-bleed on mobile, centered card on desktop */}
+      <div className="cal-board">
+
       {/* ── Month navigation ─────────────────────────────────────────────── */}
       <div className="cal-month-nav">
         <button className="cal-nav-btn" onClick={prevMonth} aria-label="Mes anterior">
@@ -541,6 +544,7 @@ export default function Calendario({ userEmail, onBack }) {
           })}
         </div>
       )}
+      </div>
 
       {/* ── Day detail panel ──────────────────────────────────────────────── */}
       {selectedDay && (
