@@ -1285,7 +1285,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
           {category && (EXPENSE_CATEGORIES.find(c => c.key === category)?.subcategories?.length > 0) && (
             <div className="form-group">
               <label>Subcategoría</label>
-              <div className="frequency-options" style={{ flexWrap: 'wrap' }}>
+              <div className="frequency-options subcategory-options">
                 {EXPENSE_CATEGORIES.find(c => c.key === category).subcategories.map(s => (
                   <button key={s} type="button"
                     className={`frequency-option ${subcategory === s ? 'selected' : ''}`}

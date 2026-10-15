@@ -540,9 +540,15 @@ export default function ExpenseSummary({ expenses, onBack, propertyName, getMont
 
       {/* Selector de año */}
       <div className="month-navigator">
-        <button className="month-nav-btn" onClick={() => setYear(y => y - 1)} disabled={year <= minYear}>‹</button>
-        <span className="month-label">{year}</span>
-        <button className="month-nav-btn" onClick={() => setYear(y => y + 1)} disabled={year >= now.getFullYear()}>›</button>
+        <div className="month-nav-row">
+          <div className="month-nav-side month-nav-left">
+            <button className="month-nav-btn" onClick={() => setYear(y => y - 1)} disabled={year <= minYear}>‹</button>
+          </div>
+          <span className="month-label">{year}</span>
+          <div className="month-nav-side month-nav-right">
+            <button className="month-nav-btn" onClick={() => setYear(y => y + 1)} disabled={year >= now.getFullYear()}>›</button>
+          </div>
+        </div>
       </div>
 
       {/* 3 métricas */}

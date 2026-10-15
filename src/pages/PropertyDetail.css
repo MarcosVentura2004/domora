@@ -1853,3 +1853,47 @@ input[type="number"] {
   color: #333;
 }
 
+
+/* ===== Modal: vertical scroll only, nothing wider than the sheet ===== */
+.modal-content {
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* iOS Safari gives date inputs an intrinsic width that ignores width: 100% */
+.modal-content input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  text-align: left;
+}
+
+.modal-content input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+.frequency-option {
+  min-width: 0;
+}
+
+/* Subcategory chips wrap onto new lines instead of overflowing */
+.subcategory-options {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.subcategory-options .frequency-option {
+  flex: 1 1 auto;
+  padding: 10px 14px;
+  font-size: 14px;
+}
