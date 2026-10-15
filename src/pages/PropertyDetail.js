@@ -4,6 +4,7 @@ import PropertyDocuments from './PropertyDocuments';
 import RoomDetail from './RoomDetail';
 import ChatConversation from './ChatConversation';
 import { supabase } from '../supabaseClient';
+import BulkPaymentsModal from '../components/BulkPaymentsModal';
 import { saveDownload } from '../utils/downloads';
 import ExpenseSummary from './ExpenseSummary';
 import { InvestmentForm } from '../components/InvestmentForm';
@@ -666,6 +667,43 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
     setConfirmingTenant(null);
   };
 
+  // Mark several past months as fully paid at once (from Historial de pagos)
+  const handleBulkConfirm = async (tenantId, months, existingRows) => {
+    const tenant = tenants.find(t => t.id === tenantId);
+    const rentTotal = tenant?.amount || 0;
+    const confirmedAt = new Date().toISOString();
+    const results = await Promise.all(months.map(async ({ year, month }) => {
+      const existing = existingRows.find(r => r.tenant_id === tenantId && r.year === year && r.month === month);
+      const remaining = rentTotal - (existing?.partial_amount || 0);
+      const { data, error } = await supabase.rpc('confirm_payment_v2', {
+        p_property_id:      String(property.id),
+        p_room_id:          null,
+        p_tenant_id:        tenantId,
+        p_year:             year,
+        p_month:            month,
+        p_confirmed_amount: remaining,
+        p_rent_total:       rentTotal,
+        p_landlord_email:   property.landlord_email || landlordEmail,
+      });
+      return { year, month, ok: !error && data?.success !== false };
+    }));
+
+    const saved = results.filter(r => r.ok);
+    if (saved.length > 0) {
+      let updatedPayments = [...payments];
+      saved.forEach(({ year, month }) => {
+        const idx = updatedPayments.findIndex(p => p.year === year && p.month === month && p.tenantId === tenantId);
+        const entry = { year, month, tenantId, status: 'confirmed', confirmedAt, amount: rentTotal, tenantName: tenant?.name };
+        if (idx >= 0) updatedPayments[idx] = { ...updatedPayments[idx], ...entry };
+        else updatedPayments.push(entry);
+      });
+      setPayments(updatedPayments);
+      onUpdate({ ...property, payments: updatedPayments });
+      fetchPaymentsForMonth(currentYear, currentMonth);
+    }
+    return { saved: saved.length, failed: results.length - saved.length };
+  };
+
   const handleRejectPayment = async (tenantId) => {
     const updatedPayments = payments.filter(p =>
       !(p.year === currentYear && p.month === currentMonth && p.tenantId === tenantId)
@@ -1089,7 +1127,15 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   }
 
   if (showPaymentHistory) {
-    return <PaymentHistory property={property} payments={payments} onBack={() => setShowPaymentHistory(false)} />;
+    return (
+      <PaymentHistory
+        property={property}
+        payments={payments}
+        tenants={tenants}
+        onBulkConfirm={handleBulkConfirm}
+        onBack={() => setShowPaymentHistory(false)}
+      />
+    );
   }
 
   if (chatWithTenant) {
@@ -1971,7 +2017,8 @@ function PropertyDetail({ property, onBack, onUpdate, landlordEmail, readOnly = 
   );
 }
 
-function PaymentHistory({ property, payments, onBack }) {
+function PaymentHistory({ property, payments, tenants = [], onBulkConfirm, onBack }) {
+  const [showBulk, setShowBulk] = useState(false);
   const formatMonthYear = (year, month) => {
     const date = new Date(year, month, 1);
     return date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
@@ -1990,6 +2037,31 @@ function PaymentHistory({ property, payments, onBack }) {
         <h1 className="detail-title">Historial de pagos</h1>
       </div>
 
+      {tenants.length > 0 && onBulkConfirm && (
+        <div style={{ padding: '16px 16px 0' }}>
+          <button className="payment-history-btn" onClick={() => setShowBulk(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <polyline points="9 16 11 18 15 14" />
+            </svg>
+            Registrar meses pagados
+          </button>
+        </div>
+      )}
+
+      {showBulk && (
+        <BulkPaymentsModal
+          propertyId={property.id}
+          tenants={tenants}
+          localPayments={payments}
+          onConfirm={onBulkConfirm}
+          onClose={() => setShowBulk(false)}
+        />
+      )}
+
       <div className="payment-history-list">
         {sortedPayments.length === 0 ? (
           <div className="no-payments">
@@ -2005,10 +2077,18 @@ function PaymentHistory({ property, payments, onBack }) {
                 </span>
               </div>
               <div className="payment-details">
-                <div className="payment-detail-row">
-                  <span className="detail-label">Marcado por inquilino:</span>
-                  <span>{new Date(payment.markedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                </div>
+                {payment.tenantName && (
+                  <div className="payment-detail-row">
+                    <span className="detail-label">Inquilino:</span>
+                    <span>{payment.tenantName}</span>
+                  </div>
+                )}
+                {payment.markedAt && (
+                  <div className="payment-detail-row">
+                    <span className="detail-label">Marcado por inquilino:</span>
+                    <span>{new Date(payment.markedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                  </div>
+                )}
                 {payment.status === 'confirmed' && payment.confirmedAt && (
                   <div className="payment-detail-row">
                     <span className="detail-label">Confirmado:</span>

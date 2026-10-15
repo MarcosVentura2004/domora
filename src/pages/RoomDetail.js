@@ -8,6 +8,7 @@ import { calcRetroMonths, isMonthBefore, buildRetroStartDate, defaultRetroMonth 
 import { calcRemainingPayments, calcLastPaymentLabel } from '../utils/expenseDuration';
 import ExpenseSummary from './ExpenseSummary';
 import MonthNavigator from '../components/MonthNavigator';
+import BulkPaymentsModal from '../components/BulkPaymentsModal';
 
 async function exportRoomToExcel(roomName, historyMonths, accumulated) {
   const ExcelJSMod = await import('exceljs');
@@ -403,6 +404,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [showBulkPayments, setShowBulkPayments] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [supabaseRoomPayment, setSupabaseRoomPayment] = useState(null);
@@ -716,6 +718,45 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
         pending_amount: null,
       }));
     }
+  };
+
+  // Mark several past months as fully paid at once (from Historial)
+  const handleBulkConfirm = async (tenantId, months, existingRows) => {
+    const rentTotal = room.price || 0;
+    const confirmedAt = new Date().toISOString();
+    const results = await Promise.all(months.map(async ({ year, month }) => {
+      const existing = existingRows.find(r => r.year === year && r.month === month);
+      const remaining = rentTotal - (existing?.partial_amount || 0);
+      const { data, error } = await supabase.rpc('confirm_payment_v2', {
+        p_property_id:      String(property.id),
+        p_room_id:          String(room.id),
+        p_tenant_id:        tenantId ? String(tenantId) : null,
+        p_year:             year,
+        p_month:            month,
+        p_confirmed_amount: remaining,
+        p_rent_total:       rentTotal,
+        p_landlord_email:   property.landlord_email || landlordEmail,
+      });
+      return { year, month, ok: !error && data?.success !== false };
+    }));
+
+    const saved = results.filter(r => r.ok);
+    if (saved.length > 0) {
+      const updatedPayments = [...payments];
+      saved.forEach(({ year, month }) => {
+        const idx = updatedPayments.findIndex(p => p.year === year && p.month === month && p.roomId === room.id);
+        const entry = { year, month, roomId: room.id, status: 'confirmed', confirmedAt, amount: rentTotal, tenantName: room.tenant?.name };
+        if (idx >= 0) updatedPayments[idx] = { ...updatedPayments[idx], ...entry };
+        else updatedPayments.push({ ...entry, markedAt: confirmedAt });
+      });
+      onUpdate({ ...property, payments: updatedPayments });
+      if (saved.some(r => r.year === currentYear && r.month === currentMonth)) {
+        setSupabaseRoomPayment(prev => ({
+          ...(prev || {}), status: 'confirmed', partial_amount: null, pending_amount: null, amount: rentTotal, confirmed_at: confirmedAt,
+        }));
+      }
+    }
+    return { saved: saved.length, failed: results.length - saved.length };
   };
 
   const handleConfirmPartialRest = () => {
@@ -1352,6 +1393,18 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
           return (
             <div className="history-detail">
+              {room.tenant && (
+                <button className="payment-history-btn" style={{ marginBottom: 12 }} onClick={() => setShowBulkPayments(true)}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                    <polyline points="9 16 11 18 15 14" />
+                  </svg>
+                  Registrar meses pagados
+                </button>
+              )}
               <div className="export-buttons">
                 <button className="export-btn excel" onClick={() => exportRoomToExcel(room.name, historyMonths, accumulated)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -1396,6 +1449,17 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       </div>
 
       {/* Modals */}
+      {showBulkPayments && room.tenant && (
+        <BulkPaymentsModal
+          propertyId={property.id}
+          roomId={room.id}
+          tenants={[{ id: room.tenant.id || null, name: room.tenant.name, amount: room.price }]}
+          localPayments={payments}
+          onConfirm={handleBulkConfirm}
+          onClose={() => setShowBulkPayments(false)}
+        />
+      )}
+
       {showConfirmModal && (
         <ConfirmPaymentModal
           defaultAmount={confirmModalAmount !== null ? confirmModalAmount : room.price}
