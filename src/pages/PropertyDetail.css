@@ -1897,3 +1897,18 @@ input[type="number"] {
   padding: 10px 14px;
   font-size: 14px;
 }
+
+/* Frequency: 3 equal columns, "Otra" full width underneath */
+.frequency-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.frequency-grid .frequency-option {
+  padding: 12px 4px;
+}
+
+.frequency-grid .frequency-option:last-child {
+  grid-column: 1 / -1;
+}

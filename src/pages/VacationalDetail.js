@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import ExpenseSummary from './ExpenseSummary';
 import MonthNavigator from '../components/MonthNavigator';
 import { calcRetroactiveStartDate, calcRetroMonths } from '../utils/expenseRetroactive';
+import { calcRemainingPayments, calcLastPaymentLabel } from '../utils/expenseDuration';
 
 function isFutureMonth(year, month) {
   const now = new Date();
@@ -1205,6 +1206,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
   const [customFreqMonths, setCustomFreqMonths] = useState('');
   const [durationType, setDurationType] = useState('indefinido');
   const [durationPayments, setDurationPayments] = useState('');
+  const [firstPaymentDate, setFirstPaymentDate] = useState('');
   const [startDate, setStartDate] = useState(defaultDate || today);
   const [expensePct, setExpensePct] = useState(defaultExpensePct != null ? String(defaultExpensePct) : '');
   const viewedYear = defaultDate ? parseInt(defaultDate.substring(0, 4)) : new Date().getFullYear();
@@ -1242,8 +1244,18 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
   const freqLabel = frequency === 'trimestral' ? 'trimestre' : frequency === 'anual' ? 'año' : frequency === 'custom' ? `${customFreqMonths || '?'} meses` : 'mes';
   const monthlyEquiv = amount && repeats && frequency !== 'mensual' ? (parseFloat(amount) / freqStep).toFixed(2) : null;
 
+  // Fixed-duration expenses: if the first payment was earlier (e.g. an old mortgage), only count what's left
+  const effectiveStart = (repeats && applyToPrevRecurring && retroDate) ? retroDate : startDate;
+  const remainingPayments = repeats && durationType === 'pagos' && durationPayments
+    ? calcRemainingPayments(durationPayments, firstPaymentDate, effectiveStart, frequency, customFreqMonths)
+    : null;
+
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (remainingPayments !== null && remainingPayments < 1) {
+      alert('Según la fecha del primer pago, ya se han hecho todos los pagos.');
+      return;
+    }
     const catObj = EXPENSE_CATEGORIES.find(c => c.key === category);
     const parts = [catObj?.label || category];
     if (subcategory) parts.push(subcategory);
@@ -1257,7 +1269,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
       frequency: !repeats ? 'unico' : frequency,
       custom_frequency_months: frequency === 'custom' && repeats ? (parseInt(customFreqMonths) || null) : null,
       amount: hasAmount ? parseFloat(amount) : null,
-      duration_payments: repeats && durationType === 'pagos' && durationPayments ? parseInt(durationPayments) : null,
+      duration_payments: remainingPayments,
       start_date: startDate,
       active: true,
       expense_percentage: expensePct ? parseFloat(expensePct) : null,
@@ -1309,7 +1321,7 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
             <>
               <div className="form-group">
                 <label>Frecuencia</label>
-                <div className="frequency-options">
+                <div className="frequency-options frequency-grid">
                   {['mensual', 'trimestral', 'anual', 'custom'].map(f => (
                     <button key={f} type="button"
                       className={`frequency-option ${frequency === f ? 'selected' : ''}`}
@@ -1339,8 +1351,18 @@ function AddExpenseModal({ onClose, onAdd, defaultExpensePct, defaultDate, isPas
                     <input type="number" min="1" placeholder="Ej: 12" value={durationPayments}
                       onChange={e => setDurationPayments(e.target.value)} required
                       style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} />
-                    {durationPayments && (
-                      <p className="monthly-equivalent">Para en {durationPayments} {frequency === 'trimestral' ? 'trimestres' : frequency === 'anual' ? 'años' : 'meses'}</p>
+                    <label style={{ marginTop: 14 }}>{category === 'hipoteca' ? 'Inicio de la hipoteca (opcional)' : 'Fecha del primer pago (opcional)'}</label>
+                    <input type="date" value={firstPaymentDate} max={effectiveStart}
+                      onChange={e => setFirstPaymentDate(e.target.value)} />
+                    <p style={{ fontSize: 12, color: '#888', marginTop: 6, lineHeight: 1.4 }}>
+                      Si empezaste a pagar antes, indica cuándo y solo se contarán los pagos que quedan.
+                    </p>
+                    {remainingPayments !== null && (
+                      <p className="monthly-equivalent">
+                        {remainingPayments < 1
+                          ? 'Según esta fecha ya se han hecho todos los pagos'
+                          : `${remainingPayments !== parseInt(durationPayments) ? `Quedan ${remainingPayments} de ${durationPayments} pagos · ` : ''}Último pago: ${calcLastPaymentLabel(remainingPayments, effectiveStart, frequency, customFreqMonths)}`}
+                      </p>
                     )}
                   </div>
                 )}

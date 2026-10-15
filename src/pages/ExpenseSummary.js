@@ -420,12 +420,15 @@ function TableContent({ catData, totalByMonth, yearTotal, expanded, toggleExpand
 
 export default function ExpenseSummary({ expenses, onBack, propertyName, getMonthlyIncome }) {
   const now = new Date();
-  const minYear = expenses.length > 0
-    ? Math.min(...expenses.map(e => {
-        const d = e.start_date || e.createdAt || '';
-        return new Date(d.includes('T') ? d : d + 'T12:00:00').getFullYear();
-      }))
-    : now.getFullYear();
+  // Always allow browsing back to 2020, or further if older expenses exist
+  const MIN_BROWSE_YEAR = 2020;
+  const expenseYears = expenses
+    .map(e => {
+      const d = e.start_date || e.createdAt || '';
+      return new Date(d.includes('T') ? d : d + 'T12:00:00').getFullYear();
+    })
+    .filter(y => !isNaN(y));
+  const minYear = Math.min(MIN_BROWSE_YEAR, ...expenseYears);
 
   const [year, setYear] = useState(now.getFullYear());
   const [expanded, setExpanded] = useState(new Set());
