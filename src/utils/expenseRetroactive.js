@@ -45,7 +45,7 @@ export function calcRetroactiveStartDate(startDate, frequency, customFreqMonths)
  * Returns an array of Spanish month labels ("Ene 2026", ...) from retroDate
  * up to (not including) startDate, stepping by frequency.
  */
-export function calcRetroMonths(retroDate, startDate, frequency, customFreqMonths) {
+export function calcRetroMonths(retroDate, startDate, frequency, customFreqMonths, maxPayments) {
   const step = getFreqStep(frequency, customFreqMonths);
   let y = parseInt(retroDate.substring(0, 4));
   let m = parseInt(retroDate.substring(5, 7)) - 1; // 0-indexed
@@ -54,9 +54,38 @@ export function calcRetroMonths(retroDate, startDate, frequency, customFreqMonth
 
   const months = [];
   while (y < endY || (y === endY && m < endM)) {
+    if (maxPayments && months.length >= maxPayments) break;
     months.push(`${MONTH_NAMES_ES[m]} ${y}`);
     m += step;
     while (m >= 12) { m -= 12; y++; }
   }
   return months;
+}
+
+/** True if (year, month0) is a month strictly before startDate's month. */
+export function isMonthBefore(year, month0, startDate) {
+  const sy = parseInt(startDate.substring(0, 4));
+  const sm = parseInt(startDate.substring(5, 7)) - 1;
+  return year < sy || (year === sy && month0 < sm);
+}
+
+/**
+ * Start date (YYYY-MM-DD) for a user-picked "desde" month, keeping the day of
+ * startDate but clamped to the length of the picked month.
+ */
+export function buildRetroStartDate(year, month0, startDate) {
+  const day = parseInt(startDate.substring(8, 10)) || 1;
+  const lastDay = new Date(year, month0 + 1, 0).getDate();
+  return `${year}-${String(month0 + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
+/** Default "desde" month: back to Jan 2026 by frequency, else one step back. */
+export function defaultRetroMonth(startDate, frequency, customFreqMonths) {
+  const auto = calcRetroactiveStartDate(startDate, frequency, customFreqMonths);
+  if (auto) return { year: parseInt(auto.substring(0, 4)), month: parseInt(auto.substring(5, 7)) - 1 };
+  const step = getFreqStep(frequency, customFreqMonths);
+  let y = parseInt(startDate.substring(0, 4));
+  let m = parseInt(startDate.substring(5, 7)) - 1 - step;
+  while (m < 0) { m += 12; y--; }
+  return { year: y, month: m };
 }

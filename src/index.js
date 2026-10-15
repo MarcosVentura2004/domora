@@ -6,6 +6,7 @@ import UpdatePrompt from './components/UpdatePrompt';
 import reportWebVitals from './reportWebVitals';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import './pwaInstall';
+import './visualViewport';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

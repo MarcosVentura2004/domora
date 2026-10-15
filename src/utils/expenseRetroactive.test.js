@@ -55,3 +55,28 @@ describe('calcRetroMonths', () => {
     expect(calcRetroMonths('2026-01-01', '2026-02-01', 'mensual', '')).toEqual(['Ene 2026']);
   });
 });
+
+describe('desde mes elegido', () => {
+  const { isMonthBefore, buildRetroStartDate, defaultRetroMonth, calcRetroMonths: crm } = require('./expenseRetroactive');
+
+  test('isMonthBefore', () => {
+    expect(isMonthBefore(2025, 4, '2026-10-01')).toBe(true);
+    expect(isMonthBefore(2026, 9, '2026-10-01')).toBe(false);
+    expect(isMonthBefore(2026, 10, '2026-10-01')).toBe(false);
+  });
+
+  test('buildRetroStartDate mantiene el día y lo ajusta al mes', () => {
+    expect(buildRetroStartDate(2025, 4, '2026-10-15')).toBe('2025-05-15');
+    expect(buildRetroStartDate(2025, 1, '2026-10-31')).toBe('2025-02-28');
+  });
+
+  test('defaultRetroMonth mensual oct 2026 → ene 2026; anual mayo 2026 → mayo 2025', () => {
+    expect(defaultRetroMonth('2026-10-01', 'mensual', '')).toEqual({ year: 2026, month: 0 });
+    expect(defaultRetroMonth('2026-05-01', 'anual', '')).toEqual({ year: 2025, month: 4 });
+  });
+
+  test('mensual desde mayo 2025 hasta oct 2026 → 17 meses; con 5 pagos → 5', () => {
+    expect(crm('2025-05-01', '2026-10-01', 'mensual', '')).toHaveLength(17);
+    expect(crm('2025-05-01', '2026-10-01', 'mensual', '', 5)).toEqual(['May 2025', 'Jun 2025', 'Jul 2025', 'Ago 2025', 'Sep 2025']);
+  });
+});
