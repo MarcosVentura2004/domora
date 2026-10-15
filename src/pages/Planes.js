@@ -104,7 +104,7 @@ function Planes() {
     <div className="planes-page">
       <header className="planes-header">
         <img
-          src="/images/house-logo.png"
+          src="/images/house-logo.png?v=2"
           alt="Domio"
           className="planes-header-logo"
         />

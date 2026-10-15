@@ -50,7 +50,7 @@ function TenantWelcome({ tenantData, tenantCode, onAccepted }) {
         textAlign: 'center',
       }}>
         <img
-          src="/images/house-logo.png"
+          src="/images/house-logo.png?v=2"
           alt="Domio"
           style={{ width: '60px', height: '60px', objectFit: 'contain', marginBottom: '16px' }}
         />

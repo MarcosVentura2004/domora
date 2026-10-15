@@ -4,9 +4,10 @@ import remarkGfm from 'remark-gfm';
 
 const styles = {
   page: { minHeight: '100vh', background: '#fff', display: 'flex', flexDirection: 'column' },
-  header: { borderBottom: '1px solid #eee', padding: '0 24px', height: '56px', display: 'flex', alignItems: 'center' },
+  header: { borderBottom: '1px solid #eee', padding: '0 16px', height: '56px', display: 'flex', alignItems: 'center', gap: '8px', position: 'sticky', top: 0, background: '#fff', zIndex: 10 },
+  back: { background: 'none', border: 'none', padding: '8px', margin: '0 0 0 -8px', cursor: 'pointer', color: '#111', display: 'flex', alignItems: 'center', borderRadius: '10px' },
   logo: { display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: '#111', fontWeight: '700', fontSize: '17px' },
-  logoImg: { width: '28px', height: '28px' },
+  logoImg: { width: '28px', height: '28px', objectFit: 'contain' },
   content: { flex: 1, maxWidth: '720px', width: '100%', margin: '0 auto', padding: '48px 24px 80px' },
   footer: { borderTop: '1px solid #eee', padding: '20px 24px', textAlign: 'center', color: '#999', fontSize: '13px' },
 };
@@ -25,12 +26,31 @@ const markdownComponents = {
   hr: () => <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '32px 0' }} />,
 };
 
+// Back: return to where the user came from (welcome / auth), else to the home screen
+function goBack() {
+  const cameFromApp = document.referrer && new URL(document.referrer).origin === window.location.origin;
+  if (cameFromApp && window.history.length > 1) {
+    window.history.back();
+  } else if (window.opener) {
+    window.close();
+    setTimeout(() => { window.location.href = '/'; }, 150);
+  } else {
+    window.location.href = '/';
+  }
+}
+
 export default function LegalPage({ content }) {
   return (
     <div style={styles.page}>
       <header style={styles.header}>
+        <button type="button" onClick={goBack} style={styles.back} aria-label="Volver">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
         <a href="/" style={styles.logo}>
-          <img src="/images/house-logo.png" alt="" style={styles.logoImg} />
+          <img src="/images/house-logo.png?v=2" alt="" style={styles.logoImg} />
           Domio
         </a>
       </header>

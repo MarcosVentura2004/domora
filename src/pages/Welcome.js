@@ -34,7 +34,7 @@ function Welcome({ onSelectUserType, onBack }) {
       <div className="welcome-content">
 
         <div className="welcome-logo">
-          <img src="/images/house-logo.png" alt="Domio" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+          <img src="/images/house-logo.png?v=2" alt="Domio" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
         </div>
 
         <h1 className="welcome-app-name">Domio</h1>
@@ -127,17 +127,17 @@ function Welcome({ onSelectUserType, onBack }) {
         <div className="welcome-footer">
           <p className="welcome-footer-note">Puedes cambiar esto más adelante.</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', marginTop: '8px' }}>
-            <a href="/politica-de-privacidad" target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
+            <a href="/politica-de-privacidad" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
               onMouseEnter={e => e.target.style.color = '#666'} onMouseLeave={e => e.target.style.color = '#999'}>
               Política de privacidad
             </a>
             <span style={{ fontSize: '12px', color: '#ccc' }}>·</span>
-            <a href="/terminos-de-servicio" target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
+            <a href="/terminos-de-servicio" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
               onMouseEnter={e => e.target.style.color = '#666'} onMouseLeave={e => e.target.style.color = '#999'}>
               Términos de servicio
             </a>
             <span style={{ fontSize: '12px', color: '#ccc' }}>·</span>
-            <a href="/aviso-legal" target="_blank" rel="noreferrer" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
+            <a href="/aviso-legal" style={{ fontSize: '12px', color: '#999', textDecoration: 'none' }}
               onMouseEnter={e => e.target.style.color = '#666'} onMouseLeave={e => e.target.style.color = '#999'}>
               Aviso legal
             </a>

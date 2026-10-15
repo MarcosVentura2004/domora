@@ -74,7 +74,7 @@ export default function EliminarCuenta() {
     <div className="ec-page">
       <header className="ec-header">
         <a href="/" className="ec-logo">
-          <img src="/images/house-logo.png" alt="" className="ec-logo-img" />
+          <img src="/images/house-logo.png?v=2" alt="" className="ec-logo-img" />
           Domio
         </a>
       </header>

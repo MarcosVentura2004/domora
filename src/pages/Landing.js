@@ -796,7 +796,7 @@ function Landing({ onLogin }) {
       <nav className={`l-nav${scrolled ? ' l-nav--scrolled' : ''}`}>
         <div className="l-nav__inner">
           <button className="l-nav__logo" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <img src="/images/house-logo.png" alt="" className="l-nav__logo-img" aria-hidden="true" />
+            <img src="/images/house-logo.png?v=2" alt="" className="l-nav__logo-img" aria-hidden="true" />
             <span>domio</span>
           </button>
           <div className="l-nav__links">
@@ -1107,7 +1107,7 @@ function Landing({ onLogin }) {
       <footer className="l-footer">
         <div className="l-footer__simple">
           <div className="l-footer__logo">
-            <img src="/images/house-logo.png" alt="domio" className="l-footer__logo-img" />
+            <img src="/images/house-logo.png?v=2" alt="domio" className="l-footer__logo-img" />
             <span>domio</span>
           </div>
           <p className="l-footer__tagline">La app para propietarios en España · Hecha en Madrid</p>
