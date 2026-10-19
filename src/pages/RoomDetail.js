@@ -8,7 +8,7 @@ import { calcRetroMonths, isMonthBefore, buildRetroStartDate, defaultRetroMonth 
 import { calcRemainingPayments, calcLastPaymentLabel } from '../utils/expenseDuration';
 import ExpenseSummary from './ExpenseSummary';
 import MonthNavigator from '../components/MonthNavigator';
-import BulkPaymentsModal from '../components/BulkPaymentsModal';
+import PaymentHistory from '../components/PaymentHistory';
 
 async function exportRoomToExcel(roomName, historyMonths, accumulated) {
   const ExcelJSMod = await import('exceljs');
@@ -404,7 +404,7 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
-  const [showBulkPayments, setShowBulkPayments] = useState(false);
+  const [showPaymentHistoryPage, setShowPaymentHistoryPage] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [supabaseRoomPayment, setSupabaseRoomPayment] = useState(null);
@@ -764,6 +764,20 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
     setConfirmModalAmount(restante);
     setShowConfirmModal(true);
   };
+
+  if (showPaymentHistoryPage) {
+    return (
+      <PaymentHistory
+        propertyId={property.id}
+        roomId={room.id}
+        payments={payments}
+        tenants={room.tenant ? [{ id: room.tenant.id || null, name: room.tenant.name, amount: room.price }] : []}
+        onBulkConfirm={handleBulkConfirm}
+        onSyncPayments={(updated) => onUpdate({ ...property, payments: updated })}
+        onBack={() => setShowPaymentHistoryPage(false)}
+      />
+    );
+  }
 
   if (showDocuments) {
     return <PropertyDocuments property={property} room={room} landlordEmail={landlordEmail} onBack={() => setShowDocuments(false)} onUpdate={onUpdate} />;
@@ -1254,6 +1268,13 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
                 ))
               }
 
+              <button className="payment-history-btn" style={{ marginTop: 12 }} onClick={() => setShowPaymentHistoryPage(true)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <polyline points="23 4 23 10 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Historial de pagos
+              </button>
             </div>
           </div>
         </div>
@@ -1393,18 +1414,6 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
 
           return (
             <div className="history-detail">
-              {room.tenant && (
-                <button className="payment-history-btn" style={{ marginBottom: 12 }} onClick={() => setShowBulkPayments(true)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                    <polyline points="9 16 11 18 15 14" />
-                  </svg>
-                  Registrar meses pagados
-                </button>
-              )}
               <div className="export-buttons">
                 <button className="export-btn excel" onClick={() => exportRoomToExcel(room.name, historyMonths, accumulated)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -1449,17 +1458,6 @@ function RoomDetail({ room, property, onBack, onUpdate, landlordEmail }) {
       </div>
 
       {/* Modals */}
-      {showBulkPayments && room.tenant && (
-        <BulkPaymentsModal
-          propertyId={property.id}
-          roomId={room.id}
-          tenants={[{ id: room.tenant.id || null, name: room.tenant.name, amount: room.price }]}
-          localPayments={payments}
-          onConfirm={handleBulkConfirm}
-          onClose={() => setShowBulkPayments(false)}
-        />
-      )}
-
       {showConfirmModal && (
         <ConfirmPaymentModal
           defaultAmount={confirmModalAmount !== null ? confirmModalAmount : room.price}
