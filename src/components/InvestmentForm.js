@@ -244,7 +244,9 @@ function AddMortgageExpenseModal({ amount, propertyId, landlordEmail, defaultExp
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmail, onExpenseAdded }) {
+// monthlyIncomeOverride / avgIncomeOverride: for property types whose income doesn't come
+// from tenants (vacacional: bookings). avgIncomeOverride null = no recent data.
+export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmail, onExpenseAdded, monthlyIncomeOverride, avgIncomeOverride }) {
   const {
     investmentData, setInvestmentData, saving, saved, setSaved, historyPayments, save,
   } = useInvestmentData(property);
@@ -281,6 +283,7 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
   // Configured income (same logic as gauge)
   const ownership = (property.ownershipPercentage || 100) / 100;
   const monthlyIncome = (() => {
+    if (monthlyIncomeOverride !== undefined) return monthlyIncomeOverride || 0;
     if (property.status === 'por_habitaciones') {
       return (property.rooms || []).reduce((sum, r) => sum + (Number(r.price) || 0), 0) * ownership;
     }
@@ -315,7 +318,9 @@ export function InvestmentForm({ property, expenses = [], onUpdate, landlordEmai
   const monthsWithData = last6.filter(({ year, month }) =>
     historyPayments.some(p => p.year === year && p.month === month)
   );
-  const avgConfirmedIncome = monthsWithData.length > 0
+  const avgConfirmedIncome = avgIncomeOverride !== undefined
+    ? avgIncomeOverride
+    : monthsWithData.length > 0
     ? monthsWithData.reduce((total, { year, month }) =>
         total + historyPayments
           .filter(p => p.year === year && p.month === month)
